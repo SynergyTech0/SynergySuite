@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "@synergy/db";
-import type { PolicyClient, SearchResponse } from "@synergy/compliance";
+import { type ProtectionClient, type SearchResponse, createPolicyClient } from "@synergy/compliance";
 
 // Runs against a real Postgres when TEST_DATABASE_URL is set. It uses a database of its own next
 // to that one ("<name>_compliance"), so it can run alongside drive.test.ts.
@@ -29,7 +29,8 @@ const bytes = (s: string) => new Response(s).body;
 
 const held = new Set<string>();
 let days: number | null = null;
-const fakePolicy: PolicyClient = {
+const fakePolicy: ProtectionClient = {
+  ...createPolicyClient({ app: "drive", url: "" }),
   onHold: async (e) => held.has(e),
   retention: async () => [],
   retentionDays: async () => days,

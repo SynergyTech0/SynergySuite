@@ -28,7 +28,7 @@ const list = (a?: AddressObject | AddressObject[]) => (Array.isArray(a) ? a : a 
 const addrs = (a?: AddressObject | AddressObject[]) => list(a).map((v) => (v.address || "").toLowerCase()).filter(Boolean);
 const names = (a?: AddressObject | AddressObject[]) => list(a).map((v) => `${v.name || ""} ${v.address || ""}`.trim());
 
-const stripHtml = (html: string) => html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")
+export const stripHtml = (html: string) => html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ")
   .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
 export async function describe(raw: Buffer, internalDate?: Date | null): Promise<MailDoc> {
@@ -66,7 +66,8 @@ export function snippet(text: string, p: ParsedQuery): string {
   return (start > 0 ? "…" : "") + cut + (start + 200 < t.length ? "…" : "");
 }
 
-/** Everyone on the message but its owner. */
-export function participants(d: Pick<MailDoc, "from" | "to" | "cc" | "bcc">, owner: string): string[] {
-  return [...new Set([...d.from, ...d.to, ...d.cc, ...d.bcc])].filter((a) => a !== owner);
+/** Everyone on the message but its owner (the owner's addresses, for a person with more than one account). */
+export function participants(d: Pick<MailDoc, "from" | "to" | "cc" | "bcc">, owner: string | string[]): string[] {
+  const self = new Set([owner].flat());
+  return [...new Set([...d.from, ...d.to, ...d.cc, ...d.bcc])].filter((a) => !self.has(a));
 }

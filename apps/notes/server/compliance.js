@@ -4,7 +4,10 @@
 // their rows when the page owner or the comment's author/uploader is on hold (held_deleted_at,
 // hidden everywhere else). Page edits are kept in page_versions; while the page owner or the
 // editor is on hold, edits are never folded into the previous version (see holdsEveryVersion),
-// and search also matches earlier versions. No retention sweep: pages have no permanent delete.
+// and search also matches earlier versions. Comments are part of their page: search matches
+// their current and earlier texts (comment_versions, kept on every edit, held or not) and
+// counts their authors and editors as participants; export lists each comment's edits.
+// No retention sweep: pages have no permanent delete.
 const express = require('express');
 const {
   complianceAuthorized, createPolicyClient, parseQuery, queryToSql,
@@ -61,7 +64,7 @@ const plain = md => String(md || '')
   .replace(/[*_`|]+/g, ' ');
 
 // ~200 characters of plain text around the first match, from the first of `texts` (the
-// current text, then earlier versions) that has one.
+// current text, earlier versions, then comments and their earlier texts) that has one.
 function snippet(texts, parsed) {
   const terms = parsed.groups.flat();
   const all = texts.map(x => plain(x).replace(/\s+/g, ' ').trim());
@@ -77,18 +80,28 @@ function snippet(texts, parsed) {
 }
 
 // Every page, trashed or not. The owner is its creator (pages from before created_by existed
-// fall back to the last editor); participants are everyone else who edited it.
+// fall back to the last editor); participants are everyone else who edited it or wrote or
+// edited a comment on it. Comments include those kept for a hold (held_deleted_at).
 const ROWS = `
   SELECT p.id, p.parent_id, p.space_id, p.title, p.body, p.created_at, p.updated_at, p.updated_by,
          p.created_by, p.deleted_at, p.deleted_by,
          lower(COALESCE(NULLIF(p.created_by, ''), p.updated_by)) AS owner,
          ARRAY(SELECT DISTINCT lower(e) FROM (
                  SELECT edited_by AS e FROM page_versions v WHERE v.page_id = p.id
-                 UNION SELECT p.updated_by) ed
+                 UNION SELECT p.updated_by
+                 UNION SELECT c.author FROM comments c WHERE c.page_id = p.id
+                 UNION SELECT c.edited_by FROM comments c WHERE c.page_id = p.id
+                 UNION SELECT cv.edited_by FROM comment_versions cv
+                         JOIN comments c ON c.id = cv.comment_id WHERE c.page_id = p.id) ed
                 WHERE e LIKE '%@%' AND lower(e) <> lower(COALESCE(NULLIF(p.created_by, ''), p.updated_by))
                 ORDER BY 1) AS participants,
          (SELECT string_agg(v.title || E'\n' || v.body, E'\n' ORDER BY v.version_no)
-            FROM page_versions v WHERE v.page_id = p.id) AS history
+            FROM page_versions v WHERE v.page_id = p.id) AS history,
+         (SELECT string_agg(c.body, E'\n' ORDER BY c.created_at, c.id)
+            FROM comments c WHERE c.page_id = p.id) AS comments,
+         (SELECT string_agg(cv.body, E'\n' ORDER BY cv.comment_id, cv.id)
+            FROM comment_versions cv JOIN comments c ON c.id = cv.comment_id
+           WHERE c.page_id = p.id) AS comment_history
     FROM pages p`;
 
 function hit(r, parsed) {
@@ -99,7 +112,7 @@ function hit(r, parsed) {
     owner: r.owner,
     participants: r.participants,
     date: new Date(r.updated_at).toISOString(),
-    snippet: snippet([r.body, r.history], parsed),
+    snippet: snippet([r.body, r.history, r.comments, r.comment_history], parsed),
     size: Buffer.byteLength(r.body),
     ...(r.deleted_at ? { deleted: true } : {}),
   };
@@ -119,7 +132,7 @@ function createCompliance({ q, mdToHtml }) {
     if (s.kinds.length && !s.kinds.some(k => KINDS.includes(k))) return { app: APP, hits: [], total: 0 };
     const params = [];
     const p = v => `$${params.push(v)}`;
-    const kw = queryToSql(s.query, ['x.title', 'x.body', 'x.history'], 1);
+    const kw = queryToSql(s.query, ['x.title', 'x.body', 'x.history', 'x.comments', 'x.comment_history'], 1);
     params.push(...kw.params);
     const where = [kw.sql];
     if (s.custodians.length) {
@@ -165,8 +178,16 @@ function createCompliance({ q, mdToHtml }) {
     const none = parseQuery('');
     for (const r of rows) {
       const comments = (await q(
-        `SELECT id, parent_id, author, body, resolved, created_at, updated_at, held_deleted_at
+        `SELECT id, parent_id, author, body, resolved, created_at, updated_at, edited_by, edited_at, held_deleted_at
            FROM comments WHERE page_id = $1 ORDER BY created_at`, [r.id])).rows;
+      const edits = new Map();
+      for (const v of (await q(
+        `SELECT cv.comment_id, cv.body, cv.edited_by, cv.edited_at FROM comment_versions cv
+           JOIN comments c ON c.id = cv.comment_id WHERE c.page_id = $1 ORDER BY cv.id`, [r.id])).rows) {
+        const id = String(v.comment_id);
+        if (!edits.has(id)) edits.set(id, []);
+        edits.get(id).push({ body: v.body, editedBy: v.edited_by, editedAt: v.edited_at });
+      }
       const versions = (await q(
         `SELECT version_no, title, body, edited_by, created_at FROM page_versions
           WHERE page_id = $1 ORDER BY version_no`, [r.id])).rows;
@@ -197,6 +218,9 @@ function createCompliance({ q, mdToHtml }) {
           comments: comments.map(c => ({
             id: Number(c.id), parentId: c.parent_id ? Number(c.parent_id) : null, author: c.author, body: c.body,
             resolved: c.resolved, createdAt: c.created_at, updatedAt: c.updated_at, deletedAt: c.held_deleted_at,
+            // Who wrote the current text and when (null if never edited), and every earlier text.
+            editedBy: c.edited_by, editedAt: c.edited_at,
+            edits: edits.get(String(c.id)) || [],
           })),
           attachments: files.map(a => ({ name: a.filename, uploadedBy: a.uploaded_by, createdAt: a.created_at, deletedAt: a.held_deleted_at })),
         },

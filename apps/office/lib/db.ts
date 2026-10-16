@@ -44,6 +44,8 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'priv
 -- company_role: the role the whole org gets when scope='company' (viewer|commenter|editor).
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS company_role TEXT;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT false;
+-- label_id: the document's sensitivity label (an id from the Admin center's list, see lib/labels.ts).
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS label_id TEXT;
 UPDATE documents SET company_role = 'editor' WHERE scope = 'company' AND company_role IS NULL;
 CREATE INDEX IF NOT EXISTS documents_org_idx ON documents(org, updated_at DESC);
 CREATE INDEX IF NOT EXISTS documents_owner_idx ON documents(org, owner_email, updated_at DESC);

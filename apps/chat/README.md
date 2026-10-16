@@ -4,6 +4,10 @@ Team messaging for the Synergy suite. Channels (public/private), DMs, threads,
 reactions, @mentions, unread counts, presence, typing indicators, search — all
 real-time over WebSocket.
 
+Messages (posts, replies, DMs and edits) are checked against the Admin center's data loss
+prevention rules before they're saved (`server/compliance.js`): a block is refused, a warning
+can be sent anyway with a reason, and every match is reported to the Admin center.
+
 - **Server:** Node 22 + Express + ws + Postgres (no ORM), `server/`
 - **Web:** React 18 + Vite, `web/`
 - **Auth:** the suite gateway (Caddy + oauth2-proxy against SynergyAuth) sets the

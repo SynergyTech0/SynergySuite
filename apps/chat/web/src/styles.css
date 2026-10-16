@@ -375,6 +375,9 @@ button { font-family: inherit; }
 .modal-actions .primary { background: var(--green); color: #fff; border-color: var(--green); }
 .modal-actions .primary:disabled { opacity: .5; cursor: default; }
 
+.dlp-matches { margin: 0 0 12px; padding-left: 20px; font-size: 14px; }
+.dlp-outside { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: 10px 20px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.3); z-index: 120; font-weight: 600; }
 
 @media (max-width: 900px) {

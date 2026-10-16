@@ -25,6 +25,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
         meEmail={me.email}
         meName={me.name}
         collabUrl={process.env.NEXT_PUBLIC_COLLAB_URL || ""}
+        initialLabelId={a.doc.label_id}
       />
     </div>
   );

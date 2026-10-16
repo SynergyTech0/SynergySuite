@@ -5,6 +5,8 @@ import { createDb } from "@synergy/db";
  * `searches` and `exports`. `retention_rules` say how long apps may keep content. `roles` holds
  * the people admins made eDiscovery managers. `audit` is append-only: a trigger refuses changes.
  * `policy_state` notes when holds or retention last changed, for the policy feed apps read.
+ * `labels` are the suite's sensitivity labels and `dlp_rules`/`dlp_types` its data loss
+ * prevention rules, both handed to apps in the same feed; apps report matches as `dlp_incidents`.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS roles (
@@ -91,6 +93,89 @@ CREATE TABLE IF NOT EXISTS policy_state (
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO policy_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS labels (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           TEXT NOT NULL,
+  color          TEXT NOT NULL,
+  description    TEXT NOT NULL DEFAULT '',
+  priority       INTEGER NOT NULL,
+  block_external BOOLEAN NOT NULL DEFAULT false,
+  marking        TEXT NOT NULL DEFAULT '',
+  updated_by     TEXT NOT NULL,
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS labels_name_uniq ON labels (lower(name));
+
+-- One row; its first insert seeds the usual four labels (same ids Synergy Sheets has always written).
+CREATE TABLE IF NOT EXISTS label_settings (
+  id               INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  default_label_id UUID,
+  seeded_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO labels (id, name, color, description, priority, block_external, marking, updated_by)
+SELECT v.* FROM (VALUES
+  ('a8b6f1c2-0d3e-4f5a-9b6c-1d2e3f4a5b60'::uuid, 'Public', '#15803d', 'Meant for anyone, inside or outside the company.', 0, false, '', 'setup'),
+  ('b9c7a2d3-1e4f-4a6b-8c7d-2e3f4a5b6c71'::uuid, 'General', '#2563eb', 'Everyday business content that isn''t meant for the public.', 1, false, '', 'setup'),
+  ('c0d8b3e4-2f5a-4b7c-9d8e-3f4a5b6c7d82'::uuid, 'Confidential', '#d97706', 'Sensitive business content: customers, finances, plans.', 2, false, 'CONFIDENTIAL', 'setup'),
+  ('d1e9c4f5-3a6b-4c8d-8e9f-4a5b6c7d8e93'::uuid, 'Highly Confidential', '#b91c1c', 'The most sensitive content. Can''t be shared outside the company.', 3, true, 'HIGHLY CONFIDENTIAL', 'setup')
+) v WHERE NOT EXISTS (SELECT 1 FROM label_settings) ON CONFLICT DO NOTHING;
+INSERT INTO label_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS dlp_types (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  keywords    JSONB NOT NULL DEFAULT '[]',
+  pattern     TEXT NOT NULL DEFAULT '',
+  created_by  TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS dlp_rules (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL,
+  enabled    BOOLEAN NOT NULL DEFAULT true,
+  mode       TEXT NOT NULL DEFAULT 'test',
+  apps       JSONB NOT NULL DEFAULT '[]',
+  types      JSONB NOT NULL DEFAULT '[]',
+  labels     JSONB NOT NULL DEFAULT '[]',
+  scope      TEXT NOT NULL DEFAULT 'external',
+  action     TEXT NOT NULL DEFAULT 'warn',
+  tip        TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS dlp_settings (
+  id               INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  internal_domains JSONB NOT NULL DEFAULT '[]'
+);
+INSERT INTO dlp_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS dlp_incidents (
+  id            BIGSERIAL PRIMARY KEY,
+  at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  app           TEXT NOT NULL,
+  actor         TEXT NOT NULL,
+  title         TEXT NOT NULL DEFAULT '',
+  target        TEXT NOT NULL DEFAULT '',
+  action        TEXT NOT NULL,
+  overridden    BOOLEAN NOT NULL DEFAULT false,
+  justification TEXT NOT NULL DEFAULT '',
+  rules         JSONB NOT NULL DEFAULT '[]',
+  matches       JSONB NOT NULL DEFAULT '[]',
+  recipients    JSONB NOT NULL DEFAULT '[]',
+  label_id      TEXT,
+  status        TEXT NOT NULL DEFAULT 'open',
+  note          TEXT NOT NULL DEFAULT '',
+  resolved_by   TEXT,
+  resolved_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS dlp_incidents_at_idx ON dlp_incidents (at DESC);
+CREATE INDEX IF NOT EXISTS dlp_incidents_status_idx ON dlp_incidents (status, at DESC);
 
 CREATE TABLE IF NOT EXISTS audit (
   id      BIGSERIAL PRIMARY KEY,

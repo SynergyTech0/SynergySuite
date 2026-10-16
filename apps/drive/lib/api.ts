@@ -26,7 +26,7 @@ function sameOrigin(req: Request): boolean {
 }
 
 function fail(err: unknown): Response {
-  if (err instanceof UserError) return NextResponse.json({ error: err.message }, { status: err.status });
+  if (err instanceof UserError) return NextResponse.json({ ...err.data, error: err.message }, { status: err.status });
   const code = (err as { code?: string })?.code;
   if (code === "23505") return NextResponse.json({ error: "Something with that name is already there" }, { status: 409 });
   if (code === "22P02") return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -1,3 +1,5 @@
+import { EMPTY_DLP, evaluateDlp, type DlpContext, type DlpDecision, type DlpIncident, type DlpSettings } from "./dlp";
+import { DEFAULT_LABEL_SETTINGS, type LabelSettings } from "./labels";
 import type { Policy, RetentionRule } from "./protocol";
 
 export interface PolicyClientOptions {
@@ -22,13 +24,28 @@ export interface PolicyClient {
   invalidate(): void;
 }
 
+/** The policy client with the sensitivity labels and DLP rules the same feed carries. */
+export interface ProtectionClient extends PolicyClient {
+  /**
+   * The suite's sensitivity labels. When the Admin center can't be reached, the last list it gave;
+   * without an Admin center (or before it has answered once), the default four labels.
+   */
+  labels(): Promise<LabelSettings>;
+  /** The DLP rules: the last ones the Admin center gave, or none. */
+  dlpSettings(): Promise<DlpSettings>;
+  /** What happens to content about to leave (see evaluateDlp); the app is filled in. */
+  checkDlp(ctx: Omit<DlpContext, "app">): Promise<DlpDecision>;
+  /** Tells the Admin center a rule matched. Never throws: a lost report must not stop the app. */
+  reportDlp(incident: Omit<DlpIncident, "app">): Promise<void>;
+}
+
 type State = { policy: Policy | null; at: number; ok: boolean };
 
 /**
  * Asks the Admin center which people are on hold and how long content may be kept. Without
  * ADMIN_INTERNAL_URL the suite has no Admin center: nobody is on hold and nothing expires.
  */
-export function createPolicyClient(opts: PolicyClientOptions): PolicyClient {
+export function createPolicyClient(opts: PolicyClientOptions): ProtectionClient {
   const url = (opts.url ?? process.env.ADMIN_INTERNAL_URL ?? "").replace(/\/$/, "");
   const token = opts.token ?? process.env.COMPLIANCE_TOKEN ?? "";
   const ttl = opts.ttlMs ?? 60_000;
@@ -76,8 +93,39 @@ export function createPolicyClient(opts: PolicyClientOptions): PolicyClient {
       const rules = (await this.retention()).filter((r) => !r.kind || r.kind === kind);
       return rules.length ? Math.min(...rules.map((r) => r.days)) : null;
     },
+    async labels() {
+      const s = await load();
+      return s.policy?.labels ?? DEFAULT_LABEL_SETTINGS;
+    },
+    async dlpSettings() {
+      const s = await load();
+      const dlp = s.policy?.dlp ?? EMPTY_DLP;
+      // Without an Admin center (or one that lists no domains) the suite's own mail domain is
+      // still inside, so a label that keeps mail inside doesn't stop mail to colleagues.
+      if (dlp.internalDomains.length) return dlp;
+      const own = [process.env.MAIL_DOMAIN, process.env.SUITE_DOMAIN].map((d) => (d ?? "").trim().toLowerCase()).filter(Boolean);
+      return { ...dlp, internalDomains: [...new Set(own)] };
+    },
+    async checkDlp(ctx) {
+      return evaluateDlp(await this.dlpSettings(), { ...ctx, app: opts.app });
+    },
+    async reportDlp(incident) {
+      if (!url) return;
+      try {
+        const res = await doFetch(`${url}/api/svc/dlp/incidents`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ...incident, app: opts.app }),
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+      } catch (err) {
+        console.error(`[${opts.app}] couldn't report a DLP incident:`, (err as Error).message);
+      }
+    },
     invalidate() {
-      state = { policy: null, at: 0, ok: false };
+      // Keep the last policy for labels and DLP while the next one loads.
+      state = { policy: state.policy, at: 0, ok: false };
     },
   };
 }
