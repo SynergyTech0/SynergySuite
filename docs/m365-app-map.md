@@ -22,7 +22,7 @@
 | Viva Engage / M365 Groups | Communities, group mailboxes | workspace `groups` | Prototype |
 | Stream / Clipchamp | Video library, recordings | none (meet recordings only) | **Gap** |
 | Power Automate | Workflows between apps | none (n8n runs separately on your PC) | **Gap** |
-| Power BI | Dashboards, reports | none in suite (opendash exists separately) | **Gap** |
+| Power BI | Dashboards, reports | `apps/insights` (Synergy Insights, on Metabase) | Have |
 | Microsoft Search | One search across mail, files, chats, sites | `apps/search` (fans out to each app's `/api/search` as the signed-in person) + search box in the suite header | Have |
 | Copilot | AI assistant across apps | `apps/search` Ask tab: answers from the person's own search results with citations, on your own model; no in-app drafting or actions | Partial |
 | Dynamics 365 Sales | Accounts, leads, opportunity pipeline | `apps/crm` | Have |
