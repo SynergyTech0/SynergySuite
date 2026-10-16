@@ -195,6 +195,33 @@ ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_filing_status TEXT NOT N
 ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_allowances INT NOT NULL DEFAULT 0 CHECK (state_allowances BETWEEN 0 AND 99);
 ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_extra_withholding_cents BIGINT NOT NULL DEFAULT 0 CHECK (state_extra_withholding_cents >= 0);
 ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_exempt BOOLEAN NOT NULL DEFAULT false;
+
+-- What W-2s and direct deposit need in full. Social Security and bank account numbers are sealed
+-- with HR_DATA_KEY (lib/secret.ts); only their last four digits are readable here.
+CREATE TABLE IF NOT EXISTS pay_private (
+  employee_id     BIGINT PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+  legal_first     TEXT NOT NULL DEFAULT '',
+  legal_middle    TEXT NOT NULL DEFAULT '',
+  legal_last      TEXT NOT NULL DEFAULT '',
+  legal_suffix    TEXT NOT NULL DEFAULT '',
+  address1        TEXT NOT NULL DEFAULT '',
+  address2        TEXT NOT NULL DEFAULT '',
+  city            TEXT NOT NULL DEFAULT '',
+  address_state   TEXT NOT NULL DEFAULT '',
+  zip             TEXT NOT NULL DEFAULT '',
+  ssn_sealed      TEXT NOT NULL DEFAULT '',
+  ssn_last4       TEXT NOT NULL DEFAULT '',
+  bank_routing    TEXT NOT NULL DEFAULT '',
+  bank_account_sealed TEXT NOT NULL DEFAULT '',
+  bank_last4      TEXT NOT NULL DEFAULT '',
+  bank_account_type TEXT NOT NULL DEFAULT 'checking' CHECK (bank_account_type IN ('checking','savings')),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by      TEXT NOT NULL DEFAULT ''
+);
+
+-- The employer as tax forms and the bank know it.
+ALTER TABLE pay_settings ADD COLUMN IF NOT EXISTS employer JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE pay_settings ADD COLUMN IF NOT EXISTS ach_offset_sealed TEXT NOT NULL DEFAULT '';
 `;
 
 type Db = ReturnType<typeof createDb>;

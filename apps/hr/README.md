@@ -23,7 +23,9 @@ What it calculates: salary (prorated for people who start or leave mid-period) a
 
 State withholding uses each state's own annualized formula from its 2026 publication (2025 for Alabama and Kansas, whose tables carry over): standard deduction, personal exemption and allowances, flat rate or brackets by filing status, per-allowance credits, and federal tax subtracted where the state does that. Enter what the employee put on the state's form (DE 4, IT-2104, G-4 and so on) on their Pay tab, or pick "a flat percent" to keep a rate you set yourself. The figures and the publication each comes from live in `lib/payroll/state-tables.ts`, so a new year is a data change. Known gaps, noted in that file: phase-outs and low-income credits some states add (ME, WI, CT, OR, UT, SC, AR, CA, MA), the NY flat rate on very high wages, and local taxes (cities, counties, school districts). Figures for AL, CT, DC, DE, NJ, PA and WI came from secondary summaries; check those against the state's guide before relying on them.
 
-What it does not do yet: local taxes, tax filings and deposits, W-2s, direct deposit files. Only the last four digits of a bank account are kept, and no Social Security numbers.
+Direct deposit: each person's Pay tab has their legal name, address, Social Security number and bank account. The two numbers are encrypted with `HR_DATA_KEY` and only their last four digits are shown again or written to the audit log. Under Payroll, **Company and bank** holds the EIN, address, state account numbers and your bank's ACH details. An approved or paid run then has a **Deposit file**: a NACHA PPD file of every direct-deposit paycheck to upload to your bank. Savings accounts get savings credits, and a balancing debit from the company account is added if your bank wants balanced files. The download is refused while anyone paid by deposit has no bank account on file, so nobody is left out without notice.
+
+What it does not do yet: local taxes, tax filings and tax deposits, W-2s.
 
 **Check before paying real people.** The tax figures are written from the published 2026 IRS tables and tested against hand-worked examples, but nobody has certified them. Compare a run against a payroll provider or Publication 15-T before relying on it.
 
@@ -37,6 +39,7 @@ When `BOOKS_SVC_TOKEN` is set (the same token Books has), paying a run posts one
 |---|---|
 | `DATABASE_URL` | Postgres; the deploy uses the `people` database |
 | `HR_ADMIN_EMAILS`, `PAYROLL_ADMIN_EMAILS` | Comma-separated admins (see above) |
+| `HR_DATA_KEY` | 32 bytes, as 64 hex characters or base64 (`openssl rand -hex 32`). Encrypts Social Security and bank account numbers; without it they can't be saved. Back it up: the numbers can't be read without it |
 | `BOOKS_SVC_TOKEN`, `BOOKS_INTERNAL_URL` | Post paid pay runs to Books |
 | `COMPLIANCE_TOKEN` | Lets the Admin center search and export employees, time off and paychecks |
 
