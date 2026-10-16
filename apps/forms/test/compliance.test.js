@@ -133,7 +133,7 @@ test('forms compliance', { skip: !url && 'TEST_DATABASE_URL not set' }, async t 
     await api('DELETE', `/api/forms/${fb.id}`, { as: bob });
     assert.deepEqual((await api('GET', '/api/forms', { as: alice })).body, []);
     assert.equal((await api('GET', `/api/forms/${fa.id}`, { as: alice })).status, 404);
-    assert.deepEqual((await api('GET', `/api/forms/${fa.id}/submissions`, { as: alice })).body, []);
+    assert.equal((await api('GET', `/api/forms/${fa.id}/submissions`, { as: alice })).status, 404);
     assert.equal((await api('GET', `/f/${fa.slug}`)).status, 404);
     const hits = (await search({})).body.hits;
     assert.deepEqual(hits.map(h => `${h.id}:${h.deleted}`).sort(), [`form:${fa.id}:true`, `response:${subA.id}:true`]);

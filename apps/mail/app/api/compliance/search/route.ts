@@ -6,7 +6,7 @@ import { search } from "@/lib/discovery";
 
 export const dynamic = "force-dynamic";
 
-/** eDiscovery search for the Admin center (Bearer COMPLIANCE_TOKEN), over suite mailboxes and the preserved store. */
+/** eDiscovery search for the Admin center (Bearer COMPLIANCE_TOKEN), over suite mailboxes, outside accounts and the preserved store. */
 export async function POST(req: Request): Promise<Response> {
   if (!complianceAuthorized(req.headers.get("authorization"))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {

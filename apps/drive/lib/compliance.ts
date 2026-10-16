@@ -3,7 +3,7 @@ import {
   MAX_EXPORT_IDS,
   MAX_PAGE,
   type ParsedQuery,
-  type PolicyClient,
+  type ProtectionClient,
   complianceAuthorized,
   createPolicyClient,
   isEmptyQuery,
@@ -16,15 +16,15 @@ import {
  */
 export const APP = "drive";
 
-const g = globalThis as unknown as { __drivePolicy?: PolicyClient };
+const g = globalThis as unknown as { __drivePolicy?: ProtectionClient };
 
 /** Holds and retention from the Admin center, one client per process. */
-export function policy(): PolicyClient {
+export function policy(): ProtectionClient {
   return (g.__drivePolicy ??= createPolicyClient({ app: APP }));
 }
 
 /** Swaps the policy client, for tests. */
-export function setPolicy(p: PolicyClient | undefined): void {
+export function setPolicy(p: ProtectionClient | undefined): void {
   g.__drivePolicy = p;
 }
 

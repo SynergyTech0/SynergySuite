@@ -34,9 +34,10 @@ export type DocRow = {
   company_role: Role | null; // role granted to the whole org when scope='company'
   snapshot: unknown;
   starred: boolean;
+  label_id: string | null; // sensitivity label (lib/labels.ts)
 };
 
-const COLS = "id, org, owner_email, kind, title, snippet, scope, company_role, snapshot, starred";
+const COLS = "id, org, owner_email, kind, title, snippet, scope, company_role, snapshot, starred, label_id";
 
 export type Access = { doc: DocRow; role: Role };
 

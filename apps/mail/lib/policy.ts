@@ -1,9 +1,9 @@
-import { createPolicyClient, type Policy, type PolicyClient } from "@synergy/compliance";
+import { createPolicyClient, type Policy, type ProtectionClient } from "@synergy/compliance";
 
-/** Asks the Admin center about legal holds; one client per server process. */
-const g = globalThis as unknown as { __mailPolicy?: PolicyClient };
+/** Asks the Admin center about legal holds, sensitivity labels and DLP rules; one client per server process. */
+const g = globalThis as unknown as { __mailPolicy?: ProtectionClient };
 
-export function policy(): PolicyClient {
+export function policy(): ProtectionClient {
   g.__mailPolicy ??= createPolicyClient({ app: "mail" });
   return g.__mailPolicy;
 }

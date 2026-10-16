@@ -2,6 +2,7 @@
 import { Archive, Flag, Forward, Image as ImageIcon, MailOpen, Paperclip, Reply, ReplyAll, ShieldAlert, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { bytes, displayName, fullAddress, suiteUrl, type MessageDetail } from "@/lib/client";
+import { LabelChip } from "./LabelChip";
 
 export type ReplyKind = "reply" | "replyAll" | "forward";
 
@@ -38,6 +39,12 @@ export function ReadingPane(props: {
       </div>
       <div className="readbody">
         <h1 className="subject">{m.subject || "(no subject)"}</h1>
+        {m.label && (
+          <div className="labelrow">
+            <LabelChip label={m.label} />
+            {m.label.protection.marking && <span className="muted small">{m.label.protection.marking}</span>}
+          </div>
+        )}
         <div className="sender">
           <div className="avatar">{(displayName(m.from) || "?").slice(0, 1).toUpperCase()}</div>
           <div className="meta">

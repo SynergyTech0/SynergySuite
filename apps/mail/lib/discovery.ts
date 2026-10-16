@@ -3,9 +3,10 @@ import {
   MAX_ATTACHMENT_BYTES, MAX_EXPORT_IDS, type ExportAttachment, type ExportItem, matchesQuery, parseQuery,
   type ParsedQuery, queryToSql, type SearchHit, type SearchRequest, type SearchResponse,
 } from "@synergy/compliance";
-import { UserError, getAccount } from "./accounts";
+import { type Account, UserError, getAccount } from "./accounts";
 import {
-  type Cursor, KIND, type LiveRef, type Ref, dateBounds, decodeCursor, decodeId, encodeCursor, encodeId, imapSearch, inRange,
+  type Cursor, KIND, type LiveRef, type Ref, SUITE, compareAccounts, dateBounds, decodeCursor, decodeId, encodeCursor, encodeId,
+  imapSearch, inRange,
 } from "./compliance";
 import { q } from "./db";
 import { describe, participants, snippet } from "./maildoc";
@@ -14,21 +15,25 @@ import { toDate } from "./preserved";
 import { listMailboxes } from "./provision";
 
 /**
- * eDiscovery for the Admin center: searching and exporting suite mailboxes, live on the mail
- * server (opened with the master login) and in the preserved store. A message found only in the
- * store is one its owner deleted while on hold: it comes back with deleted: true.
+ * eDiscovery for the Admin center: searching and exporting each custodian's suite mailbox (opened
+ * with the master login) and the outside IMAP accounts they connected to Mail (opened with the
+ * password they saved), live and in the preserved store. A message found only in the store is one
+ * its owner deleted while on hold: it comes back with deleted: true. Hits from an outside account
+ * belong to the custodian; the export's metadata names the account.
  *
- * Outside IMAP accounts people connect to Mail are not searched: that mail lives with other
- * providers, and Mail holds only a password the person can revoke.
+ * An outside account that no longer signs in (the person revoked or changed the password) or that
+ * the person removed from Mail is searched in the preserved store only, with a note saying so.
  */
 
-const SCOPE = "Suite mailboxes only; outside IMAP accounts people connected to Mail are not searched.";
+const SCOPE = "Suite mailboxes and the outside IMAP accounts custodians connected to Mail. An outside account that no longer signs in, or that was removed from Mail, is searched only in what was preserved while its owner was on hold.";
 const MAX_MAILBOXES = 1000;
 /** Work one request may do before it hands back a cursor, even with fewer hits than asked for. */
 const MAX_SCAN = 1500;
 const BUDGET_MS = 20_000;
 
 type Response = SearchResponse & { notes: string[] };
+/** One account of one mailbox: who it belongs to, and the addresses that are its owner on a message. */
+type Box = { mailbox: string; account: string; self: string[] };
 type Run = { p: ParsedQuery; bounds: ReturnType<typeof dateBounds>; limit: number; hits: SearchHit[]; scanned: number; deadline: number; notes: string[] };
 
 /**
@@ -57,37 +62,81 @@ export async function search(req: SearchRequest): Promise<Response> {
   return { app: "mail", hits: run.hits, notes };
 }
 
-/** Without custodians: every mailbox the mail server's admin API lists, everyone who has used Mail, and everyone preserved. */
+/** Without custodians: every mailbox the mail server's admin API lists, everyone who has used Mail or connected an account, and everyone preserved. */
 async function everyMailbox(notes: string[]): Promise<string[]> {
   const found = new Set(await listMailboxes(MAX_MAILBOXES) ?? []);
   if (!process.env.MAIL_ADMIN_URL) notes.push("MAIL_ADMIN_URL is not set: searched people who have used Mail and preserved mailboxes.");
   for (const r of await q<{ email: string }>("SELECT email FROM mail_users")) found.add(r.email);
+  for (const r of await q<{ owner_email: string }>("SELECT DISTINCT owner_email FROM accounts")) found.add(r.owner_email);
   for (const r of await q<{ mailbox: string }>("SELECT DISTINCT mailbox FROM preserved_messages")) found.add(r.mailbox);
   const sorted = [...found].sort();
   if (sorted.length > MAX_MAILBOXES) notes.push(`Searched the first ${MAX_MAILBOXES} of ${sorted.length} mailboxes; name custodians to search the rest.`);
   return sorted.slice(0, MAX_MAILBOXES);
 }
 
-/** Searches one mailbox from `resume`; returns where to carry on, or null when the mailbox is done. */
+/** Searches one mailbox, account by account, from `resume`; returns where to carry on, or null when the mailbox is done. */
 async function searchMailbox(mailbox: string, resume: Cursor | null, run: Run): Promise<Cursor | null> {
-  const acct = await getAccount(mailbox, "suite");
-  if (!acct) {
-    if (!run.notes.some((n) => n.startsWith("The suite mail server"))) run.notes.push("The suite mail server isn't configured: searched the preserved store only.");
-    return searchKept(mailbox, resume?.phase === "kept" ? resume.k : 0, null, run);
+  for (const account of (await accountsOf(mailbox)).filter((a) => !resume || compareAccounts(a, resume.a) >= 0)) {
+    const next = await searchAccount(mailbox, account, resume?.a === account ? resume : null, run);
+    if (next) return next;
   }
+  return null;
+}
+
+/** The suite mailbox, the outside accounts connected now, and those removed since with mail preserved. */
+async function accountsOf(mailbox: string): Promise<string[]> {
+  const rows = await q<{ account: string }>(
+    "SELECT id::text AS account FROM accounts WHERE owner_email = $1 UNION SELECT account FROM preserve_accounts WHERE mailbox = $1",
+    [mailbox],
+  );
+  return [...new Set([SUITE, ...rows.map((r) => r.account)])].sort(compareAccounts);
+}
+
+/** An account's address and name, from Mail if it's still connected, else from when its mail was preserved. */
+async function accountInfo(mailbox: string, account: string, acct?: Account | null): Promise<{ id: string; address: string; label: string; removed?: boolean }> {
+  if (account === SUITE) return { id: SUITE, address: mailbox, label: "Suite mailbox" };
+  if (acct) return { id: account, address: acct.address, label: acct.label };
+  const [r] = await q<{ address: string; label: string; connected: boolean }>(
+    `SELECT p.address, p.label, EXISTS (SELECT 1 FROM accounts a WHERE a.id::text = p.account AND a.owner_email = p.mailbox) AS connected
+       FROM preserve_accounts p WHERE p.mailbox = $1 AND p.account = $2`,
+    [mailbox, account],
+  );
+  return { id: account, address: r?.address ?? "", label: r?.label ?? "", ...(r && !r.connected ? { removed: true } : {}) };
+}
+
+/** Searches one account of a mailbox; falls back to the preserved store when it can't be opened. */
+async function searchAccount(mailbox: string, account: string, resume: Cursor | null, run: Run): Promise<Cursor | null> {
+  const from = resume?.phase === "kept" ? resume.k : 0;
+  // A password that can't be decrypted any more is as good as a revoked one.
+  const acct = await getAccount(mailbox, account).catch(() => null);
+  if (!acct) {
+    if (account === SUITE) {
+      if (!run.notes.some((n) => n.startsWith("The suite mail server"))) run.notes.push("The suite mail server isn't configured: searched the preserved store only.");
+      return searchKept({ mailbox, account, self: [mailbox] }, from, null, run);
+    }
+    const info = await accountInfo(mailbox, account);
+    run.notes.push(`The outside account ${info.address || `#${account}`} of ${mailbox} is no longer connected to Mail; searched what was preserved.`);
+    return searchKept({ mailbox, account, self: [mailbox, info.address] }, from, null, run);
+  }
+  const box: Box = { mailbox, account, self: [mailbox, acct.address.toLowerCase()] };
+  let opened = false;
   try {
     return await withImap(acct, async (c) => {
+      opened = true;
       if (resume?.phase !== "kept") {
-        const next = await searchLive(c, mailbox, resume?.phase === "live" ? resume : null, run);
+        const next = await searchLive(c, box, resume?.phase === "live" ? resume : null, run);
         if (next) return next;
       }
-      return searchKept(mailbox, resume?.phase === "kept" ? resume.k : 0, c, run);
+      return searchKept(box, from, c, run);
     });
   } catch (err) {
-    // Not (or no longer) a mailbox on the mail server; whatever was preserved is all there is.
-    if (!authFailed(err)) throw err;
-    run.notes.push(`Couldn't open the mailbox of ${mailbox}; searched what was preserved.`);
-    return searchKept(mailbox, resume?.phase === "kept" ? resume.k : 0, null, run);
+    // Failing part-way is an error (the admin searches again); failing to sign in is not. Outside
+    // servers may also be unreachable or refused: whatever was preserved is then all there is.
+    if (opened || (account === SUITE && !authFailed(err))) throw err;
+    run.notes.push(account === SUITE
+      ? `Couldn't open the mailbox of ${mailbox}; searched what was preserved.`
+      : `Couldn't open ${acct.address}, an outside account of ${mailbox} (${(err as Error).message}); searched what was preserved.`);
+    return searchKept(box, from, null, run);
   }
 }
 
@@ -95,12 +144,13 @@ async function selectable(c: ImapFlow): Promise<string[]> {
   return (await c.list()).filter((b) => !b.flags.has("\\Noselect") && !b.flags.has("\\NonExistent")).map((b) => b.path).sort();
 }
 
-async function searchLive(c: ImapFlow, mailbox: string, resume: { f: string; u: number } | null, run: Run): Promise<Cursor | null> {
+async function searchLive(c: ImapFlow, box: Box, resume: { f: string; u: number } | null, run: Run): Promise<Cursor | null> {
+  const { mailbox, account: a } = box;
   const criteria = imapSearch(run.p, run.bounds, prefilter());
   for (const folder of (await selectable(c)).filter((f) => !resume || f >= resume.f)) {
     // u: hand out UIDs below this one (0: from the newest).
     const below = resume?.f === folder ? resume.u : 0;
-    if (spent(run)) return { m: mailbox, phase: "live", f: folder, u: below };
+    if (spent(run)) return { m: mailbox, a, phase: "live", f: folder, u: below };
     const lock = await c.getMailboxLock(folder, { readOnly: true });
     try {
       if (typeof c.mailbox !== "object" || !c.mailbox.exists) continue;
@@ -117,13 +167,13 @@ async function searchLive(c: ImapFlow, mailbox: string, resume: { f: string; u: 
             const date = d.date ?? new Date(0);
             if (inRange(date, run.bounds) && matchesQuery(d.searchText, run.p)) {
               run.hits.push({
-                id: encodeId({ kind: "live", mailbox, folder, uidValidity, uid: m.uid, hash: d.hash }),
-                kind: KIND, title: d.subject || "(no subject)", owner: mailbox, participants: participants(d, mailbox),
+                id: encodeId({ kind: "live", mailbox, account: a, folder, uidValidity, uid: m.uid, hash: d.hash }),
+                kind: KIND, title: d.subject || "(no subject)", owner: mailbox, participants: participants(d, box.self),
                 date: date.toISOString(), snippet: snippet(d.body, run.p), size: d.size,
               });
             }
           }
-          if (run.hits.length >= run.limit || spent(run)) return { m: mailbox, phase: "live", f: folder, u: m.uid };
+          if (run.hits.length >= run.limit || spent(run)) return { m: mailbox, a, phase: "live", f: folder, u: m.uid };
         }
       }
     } finally {
@@ -139,21 +189,22 @@ type KeptRow = {
   sent_at: Date | null; preserved_at: Date; size: number; search_text: string;
 };
 
-/** The preserved store, by row id, skipping what is still in the live mailbox (already handed out above). */
-async function searchKept(mailbox: string, after: number, c: ImapFlow | null, run: Run): Promise<Cursor | null> {
-  const where = queryToSql(run.p, ["search_text"], 5);
+/** The preserved store, by row id, skipping what is still in the live account (already handed out above). */
+async function searchKept(box: Box, after: number, c: ImapFlow | null, run: Run): Promise<Cursor | null> {
+  const { mailbox, account: a } = box;
+  const where = queryToSql(run.p, ["search_text"], 6);
   const folders = c ? await selectable(c) : [];
   for (;;) {
     const rows = await q<KeptRow>(
       `SELECT id, hash, message_id, folder, uidvalidity, uid, subject, from_addrs, to_addrs, cc_addrs, bcc_addrs,
               sent_at, preserved_at, size, search_text
          FROM preserved_messages
-        WHERE mailbox = $1 AND id > $2
-          AND ($3::timestamptz IS NULL OR coalesce(sent_at, to_timestamp(0)) >= $3)
-          AND ($4::timestamptz IS NULL OR coalesce(sent_at, to_timestamp(0)) <= $4)
+        WHERE mailbox = $1 AND account = $2 AND id > $3
+          AND ($4::timestamptz IS NULL OR coalesce(sent_at, to_timestamp(0)) >= $4)
+          AND ($5::timestamptz IS NULL OR coalesce(sent_at, to_timestamp(0)) <= $5)
           AND ${where.sql}
         ORDER BY id LIMIT 50`,
-      [mailbox, after, run.bounds.from, run.bounds.to, ...where.params],
+      [mailbox, a, after, run.bounds.from, run.bounds.to, ...where.params],
     );
     if (!rows.length) return null;
     const live = c ? await stillLive(c, folders, rows) : new Set<string>();
@@ -163,12 +214,12 @@ async function searchKept(mailbox: string, after: number, c: ImapFlow | null, ru
       if (!live.has(r.id)) {
         const d = { from: r.from_addrs, to: r.to_addrs, cc: r.cc_addrs, bcc: r.bcc_addrs };
         run.hits.push({
-          id: encodeId({ kind: "kept", mailbox, hash: r.hash }),
-          kind: KIND, title: r.subject || "(no subject)", owner: mailbox, participants: participants(d, mailbox),
+          id: encodeId({ kind: "kept", mailbox, account: a, hash: r.hash }),
+          kind: KIND, title: r.subject || "(no subject)", owner: mailbox, participants: participants(d, box.self),
           date: (r.sent_at ?? new Date(0)).toISOString(), snippet: snippet(r.search_text, run.p), size: r.size, deleted: true,
         });
       }
-      if (run.hits.length >= run.limit || spent(run)) return { m: mailbox, phase: "kept", k: after };
+      if (run.hits.length >= run.limit || spent(run)) return { m: mailbox, a, phase: "kept", k: after };
     }
   }
 }
@@ -236,19 +287,27 @@ type Source = {
   raw: Buffer; internalDate: Date | null; deleted: boolean;
   where: Record<string, unknown>;
 };
+type AccountInfo = Awaited<ReturnType<typeof accountInfo>>;
 
 /**
  * Full copies of messages, in the order asked. A live message that has since gone (or changed
- * under the same UID) is taken from the preserved store when it's there; ids found nowhere are left out.
+ * under the same UID), or whose outside account can't be opened any more, is taken from the
+ * preserved store when it's there; ids found nowhere are left out.
  */
 export async function exportItems(refs: Ref[]): Promise<ExportItem[]> {
   const sources = new Map<Ref, Source>();
-  const byMailbox = new Map<string, Ref[]>();
-  for (const r of refs) byMailbox.set(r.mailbox, [...(byMailbox.get(r.mailbox) ?? []), r]);
-  for (const [mailbox, list] of byMailbox) {
+  const accounts = new Map<string, AccountInfo>();
+  const byAccount = new Map<string, Ref[]>();
+  for (const r of refs) {
+    const key = `${r.mailbox}\n${r.account}`;
+    byAccount.set(key, [...(byAccount.get(key) ?? []), r]);
+  }
+  for (const [key, list] of byAccount) {
+    const { mailbox, account } = list[0];
     const live = list.filter((r): r is LiveRef => r.kind === "live");
-    const acct = live.length ? await getAccount(mailbox, "suite") : null;
-    if (acct) {
+    const acct = await getAccount(mailbox, account).catch(() => null);
+    accounts.set(key, await accountInfo(mailbox, account, acct));
+    if (acct && live.length) {
       await withImap(acct, async (c) => {
         for (const r of live) {
           await inFolder(c, r.folder, async () => {
@@ -264,14 +323,15 @@ export async function exportItems(refs: Ref[]): Promise<ExportItem[]> {
           });
         }
       }).catch((err) => {
-        if (!authFailed(err)) throw err;
+        // An outside account that can't be opened (or drops) leaves the preserved store to answer.
+        if (account === SUITE && !authFailed(err)) throw err;
       });
     }
     const missing = list.filter((r) => !sources.has(r));
     if (!missing.length) continue;
     const rows = await q<{ hash: string; raw: Buffer; folder: string; folders: string[]; preserved_at: Date; deleted_at: Date | null }>(
-      "SELECT hash, raw, folder, folders, preserved_at, deleted_at FROM preserved_messages WHERE mailbox = $1 AND hash = ANY($2::text[])",
-      [mailbox, missing.map((r) => r.hash)],
+      "SELECT hash, raw, folder, folders, preserved_at, deleted_at FROM preserved_messages WHERE mailbox = $1 AND account = $2 AND hash = ANY($3::text[])",
+      [mailbox, account, missing.map((r) => r.hash)],
     );
     const byHash = new Map(rows.map((r) => [r.hash, r]));
     for (const r of missing) {
@@ -286,7 +346,7 @@ export async function exportItems(refs: Ref[]): Promise<ExportItem[]> {
   const out: ExportItem[] = [];
   for (const r of refs) {
     const s = sources.get(r);
-    if (s) out.push(await toItem(r, s));
+    if (s) out.push(await toItem(r, s, accounts.get(`${r.mailbox}\n${r.account}`)!));
   }
   return out;
 }
@@ -296,7 +356,7 @@ const attachment = (name: string, type: string, content: Buffer): ExportAttachme
     ? { name, type, size: content.length, skipped: `larger than ${MAX_ATTACHMENT_BYTES} bytes` }
     : { name, type, size: content.length, base64: content.toString("base64") };
 
-async function toItem(ref: Ref, s: Source): Promise<ExportItem> {
+async function toItem(ref: Ref, s: Source, account: AccountInfo): Promise<ExportItem> {
   const d = await describe(s.raw, s.internalDate);
   const p = d.parsed;
   const date = d.date ?? new Date(0);
@@ -308,7 +368,7 @@ async function toItem(ref: Ref, s: Source): Promise<ExportItem> {
     kind: KIND,
     title: d.subject || "(no subject)",
     owner: ref.mailbox,
-    participants: participants(d, ref.mailbox),
+    participants: participants(d, [ref.mailbox, account.address.toLowerCase()]),
     date: date.toISOString(),
     snippet: snippet(d.body, { groups: [], none: [] }),
     size: d.size,
@@ -316,6 +376,8 @@ async function toItem(ref: Ref, s: Source): Promise<ExportItem> {
     metadata: {
       ...s.where,
       mailbox: ref.mailbox,
+      // Which of the custodian's accounts it came from: the suite mailbox or an outside account.
+      account,
       subject: d.subject,
       messageId: d.messageId,
       inReplyTo: p.inReplyTo ?? null,

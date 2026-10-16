@@ -12,7 +12,13 @@
  * An app must not permanently delete content whose owner is on hold (see PolicyClient.onHold),
  * and keeps what a held person deletes, hidden from them but still found by search. Retention
  * policies say how long content may live; an app deletes past it only when the owner is not on hold.
+ *
+ * The same feed carries the sensitivity labels (labels.ts) and data loss prevention rules
+ * (dlp.ts). Apps report DLP matches back:
+ *   POST {ADMIN_INTERNAL_URL}/api/svc/dlp/incidents   DlpIncident
  */
+import type { DlpSettings } from "./dlp";
+import type { LabelSettings } from "./labels";
 
 /** An app's own name for a kind of content, e.g. "message", "file", "ticket". */
 export type Kind = string;
@@ -97,6 +103,10 @@ export interface RetentionRule {
 export interface Policy {
   holds: Hold[];
   retention: RetentionRule[];
+  /** The suite's sensitivity labels; missing from an older Admin center. */
+  labels?: LabelSettings;
+  /** Data loss prevention rules; missing from an older Admin center. */
+  dlp?: DlpSettings;
   /** ISO timestamp of the last change in the Admin center. */
   updatedAt: string;
 }

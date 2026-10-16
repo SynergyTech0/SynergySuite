@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb } from "@synergy/db";
 import type { SearchResults } from "@synergy/search";
+import { createPolicyClient } from "@synergy/compliance";
 
 // Suite search through the app's normal sign-in: the gateway headers, checked by identify().
 // Runs against a real Postgres when TEST_DATABASE_URL is set, in a database of its own
@@ -55,7 +56,7 @@ describe.skipIf(!base)("drive suite search", async () => {
   let plansId = "";
 
   beforeAll(async () => {
-    setPolicy({ onHold: async () => false, retention: async () => [], retentionDays: async () => null, invalidate() {} });
+    setPolicy({ ...createPolicyClient({ app: "drive", url: "" }), onHold: async () => false, retention: async () => [], retentionDays: async () => null, invalidate() {} });
     await q("TRUNCATE items, libraries, activity CASCADE");
     budget = await drive.upload(alice, {}, "Plans/budget.txt", bytes("The quarterly budget for widgets"));
     await drive.upload(alice, {}, "private-budget.txt", bytes("Salaries"));

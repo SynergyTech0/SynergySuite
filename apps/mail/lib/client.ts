@@ -9,9 +9,20 @@ export type MessageSummary = {
   seen: boolean; flagged: boolean; answered: boolean; hasAttachments: boolean; size: number;
 };
 export type Attachment = { index: number; filename: string; contentType: string; size: number; inline: boolean };
+export type Label = {
+  id: string; name: string; color: string; description?: string; priority: number;
+  protection: { blockExternal: boolean; marking?: string };
+};
 export type MessageDetail = MessageSummary & {
   cc: Person[]; replyTo: Person[]; html: string | null; text: string; remoteImages: boolean;
   attachments: Attachment[]; messageId: string | null; references: string[];
+  label: Label | null;
+};
+/** What /api/send answers when data loss prevention stops a message (422 block, 409 warn). */
+export type DlpStop = {
+  action: "warn" | "block"; tip: string;
+  matches: { type: string; name: string; count: number; samples: string[] }[];
+  outside: string[];
 };
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

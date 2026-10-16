@@ -15,6 +15,7 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
   const [error, setError] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
+  const agent = me.role !== null;
 
   const load = useCallback(async () => {
     try {
@@ -26,8 +27,8 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
 
   useEffect(() => {
     void load();
-    void api<string[]>("/api/assignees").then(setAssignees).catch(() => {});
-  }, [load]);
+    if (agent) void api<string[]>("/api/assignees").then(setAssignees).catch(() => {});
+  }, [load, agent]);
 
   useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [t?.messages.length]);
 
@@ -61,11 +62,13 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
             <div className="cname">{t.requesterName || t.requesterEmail}</div>
             {t.requesterName && <div className="csub">{t.requesterEmail}</div>}
           </div>
-          <a className="btn small" href={mailUrl(t.requesterEmail)} target="_blank" rel="noopener" title="Write to the requester in Mail">
-            <Mail size={15} /> Open in Mail
-          </a>
+          {agent && (
+            <a className="btn small" href={mailUrl(t.requesterEmail)} target="_blank" rel="noopener" title="Write to the requester in Mail">
+              <Mail size={15} /> Open in Mail
+            </a>
+          )}
         </div>
-        <div className="props">
+        {agent ? <div className="props">
           <label>
             <span>Status</span>
             <select value={t.status} onChange={(e) => void patch({ status: e.target.value })}>
@@ -85,7 +88,7 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
           {t.assignee !== me.email && (
             <button className="linkbtn assignme" onClick={() => void patch({ assignee: me.email })}>Assign to me</button>
           )}
-        </div>
+        </div> : <p className="muted small">Priority {t.priority}{t.assignee ? ` · with ${t.assignee}` : " · waiting for an agent"}</p>}
       </header>
 
       <div className="thread">
@@ -94,7 +97,7 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
         <div ref={endRef} />
       </div>
 
-      <Composer
+      {agent && <Composer
         key={t.id}
         ticket={t}
         mail={mail}
@@ -106,7 +109,7 @@ export function TicketPane({ id, me, mail, canned, onBack, onChanged, say }: {
           else if (emailed) say(`Reply emailed to ${t.requesterEmail}`);
           else say(`Reply saved, not emailed: ${reason || "email sending isn't set up"}`);
         }}
-      />
+      />}
     </div>
   );
 }

@@ -195,6 +195,12 @@ export default function App() {
   const [directory, setDirectory] = useState([]);
   const [error, setError] = useState('');
   const [showMore, setShowMore] = useState(false);
+  const [dlpPrompt, setDlpPrompt] = useState(null);
+
+  useEffect(() => {
+    askDlp = (error, attempt) => new Promise((resolve, reject) => setDlpPrompt({ error, attempt, resolve, reject }));
+    return () => { askDlp = null; };
+  }, []);
 
   const wsRef = useRef(null);
   const activeIdRef = useRef(null);
@@ -652,7 +658,78 @@ export default function App() {
         />
       )}
 
+      {dlpPrompt && (
+        <DlpDialog
+          prompt={dlpPrompt}
+          onDone={(msg, err) => {
+            setDlpPrompt(null);
+            if (err) dlpPrompt.reject(err); else dlpPrompt.resolve(msg);
+          }}
+        />
+      )}
+
       {error && <div className="toast">{error}</div>}
+    </div>
+  );
+}
+
+// ---------- data loss prevention ----------
+// The server refuses a message that matches the organization's DLP rules: a block can't be
+// sent at all, a warning can be sent anyway with a reason. sendGuarded runs a send or an edit
+// (attempt takes the override) and, when it's refused, asks through the dialog App renders.
+// It resolves with the saved message, or null when the person gives up.
+let askDlp = null;
+
+async function sendGuarded(attempt) {
+  try {
+    return await attempt();
+  } catch (e) {
+    if (!e.dlp || !askDlp) throw e;
+    return askDlp(e, attempt);
+  }
+}
+
+function DlpDialog({ prompt, onDone }) {
+  const [refusal, setRefusal] = useState(prompt.error);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const d = refusal.dlp;
+  const warn = d.action === 'warn';
+
+  async function sendAnyway() {
+    setBusy(true);
+    try {
+      onDone(await prompt.attempt({ justification: reason.trim() }));
+    } catch (e) {
+      if (e.dlp) { setRefusal(e); setBusy(false); } else onDone(null, e);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => onDone(null)}>
+      <div className="modal dlp-modal" role="alertdialog" aria-labelledby="dlp-title" onClick={e => e.stopPropagation()}>
+        <h3 id="dlp-title">{warn ? 'Check before sending' : 'This message can’t be sent'}</h3>
+        <p className="modal-sub">{refusal.message}</p>
+        {d.matches?.length > 0 && (
+          <ul className="dlp-matches">
+            {d.matches.map(m => <li key={m.type}>{m.name}{m.count > 1 ? ` (${m.count})` : ''}</li>)}
+          </ul>
+        )}
+        {d.outside?.length > 0 && (
+          <p className="dlp-outside">Outside your organization: {d.outside.join(', ')}</p>
+        )}
+        {warn && (
+          <label>Reason for sending anyway
+            <input autoFocus value={reason} onChange={e => setReason(e.target.value)} maxLength={500}
+              placeholder="e.g. The customer asked for this"
+              onKeyDown={e => { if (e.key === 'Enter' && reason.trim() && !busy) sendAnyway(); }} />
+          </label>
+        )}
+        <div className="modal-actions">
+          <button onClick={() => onDone(null)}>{warn ? 'Cancel' : 'OK'}</button>
+          {warn && <button className="primary" disabled={!reason.trim() || busy} onClick={sendAnyway}>Send anyway</button>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -842,7 +919,7 @@ function ChannelView({ channel, label, online, me, users, directory, usersById, 
           onAttach={() => fileRef.current?.click()}
           onStartCall={startCall}
           onSend={async body => {
-            try { await api.send(chId, body); } catch (e) { flashError(e); }
+            try { return !!await sendGuarded(o => api.send(chId, body, undefined, o)); } catch (e) { flashError(e); return false; }
           }}
         />
       </div>
@@ -889,7 +966,7 @@ function MessageList({ messages, me, users, usersById, onOpenThread, flashError,
                 initial={m.body}
                 onCancel={() => setEditing(null)}
                 onSave={async body => {
-                  try { await api.edit(m.id, body); setEditing(null); } catch (e) { flashError(e); }
+                  try { if (await sendGuarded(o => api.edit(m.id, body, o))) setEditing(null); } catch (e) { flashError(e); }
                 }}
               />
             ) : (
@@ -967,7 +1044,7 @@ function ThreadPanel({ thread, channel, label, me, users, usersById, onClose, fl
           users={users}
           onTyping={() => {}}
           onSend={async body => {
-            try { await api.send(thread.channelId, body, thread.rootId); } catch (e) { flashError(e); }
+            try { return !!await sendGuarded(o => api.send(thread.channelId, body, thread.rootId, o)); } catch (e) { flashError(e); return false; }
           }}
         />
       </div>
@@ -1038,7 +1115,9 @@ function Composer({ placeholder, users, onSend, onTyping, onAttach, onStartCall 
     if (!body) return;
     setVal('');
     setMentionQ(null);
-    onSend(body);
+    // Put the text back when it wasn't sent (refused, or the person cancelled), unless they've
+    // started typing something else.
+    Promise.resolve(onSend(body)).then(sent => { if (sent === false) setVal(v => v || body); });
   }
 
   const tools = [

@@ -7,7 +7,8 @@ import { AccountingMethod, EntityType } from '../organization/dto/organization.d
 /**
  * Maps a suite identity to a Books user. Self-hosted Books keeps one company by default:
  * the first person to open Books creates it and becomes its admin, and everyone after
- * joins it as a user. Admins can change roles and deactivate people in Books.
+ * joins it as a user. Admins can add more companies and give people access to them
+ * (see CompaniesService); a person works in one company at a time.
  */
 @Injectable()
 export class AuthService {
@@ -35,7 +36,7 @@ export class AuthService {
       });
       this.logger.log(`Created organization ${org.id} for the first Books user`);
     }
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         email,
         // Sign-in is handled by SynergyAuth; Books never stores or checks a password.
@@ -46,5 +47,9 @@ export class AuthService {
         role: firstUser ? 'ADMIN' : 'USER',
       },
     });
+    await this.prisma.organizationUser.create({
+      data: { organizationId: org.id, userId: user.id, role: user.role, permissions: [] },
+    });
+    return user;
   }
 }

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { setPendingImport } from "@/lib/slides/pending-import";
 import NotificationBell from "./NotificationBell";
+import { labelTooltip } from "./SheetSensitivity";
+import type { LabelList } from "@/lib/labels";
 
 export type Kind = "doc" | "sheet" | "slide";
 export type Scope = "private" | "company";
@@ -16,6 +18,7 @@ export type Doc = {
   scope: Scope;
   shared: boolean; // shared with me personally (a grant exists)
   updated_at: string;
+  label_id?: string | null; // sensitivity label
 };
 
 function ago(iso: string): string {
@@ -38,7 +41,8 @@ const NEW_ITEMS: { kind: Kind; label: string }[] = [
   { kind: "slide", label: "Presentation" },
 ];
 
-export default function DocList({ docs, me }: { docs: Doc[]; me: string }) {
+export default function DocList({ docs, me, labels = null }: { docs: Doc[]; me: string; labels?: LabelList | null }) {
+  const labelOf = (id: string | null | undefined) => (id ? labels?.labels.find((l) => l.id.toLowerCase() === id.toLowerCase()) : undefined);
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -204,6 +208,15 @@ export default function DocList({ docs, me }: { docs: Doc[]; me: string }) {
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${k.chip}`}>{k.label}</span>
                   {d.scope === "company" && <span className="text-[11px] font-medium rounded-full px-2 py-0.5 bg-emerald-50 text-emerald-700">🏢 Company</span>}
+                  {(() => {
+                    const l = labelOf(d.label_id);
+                    return l ? (
+                      <span className="text-[11px] font-medium rounded-full px-2 py-0.5 border border-slate-200 text-slate-600 inline-flex items-center gap-1" title={labelTooltip(l, labels)} data-testid="doclist-label">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: l.color }} />
+                        {l.name}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 <h3 className="font-semibold text-slate-900 line-clamp-2">{d.title || "Untitled"}</h3>
                 <p className="text-[13px] text-slate-500 mt-1 line-clamp-2 flex-1">{d.snippet || "Empty"}</p>

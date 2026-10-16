@@ -4,6 +4,7 @@ Build a form, publish it at a public link, and collect responses. Fields can be 
 
 - **Server:** Node 22 + Express + Postgres, `server/index.js` (port 3110)
 - **Web:** React 18 + Vite, `web/` (the form builder and responses)
+- **Sharing:** a form belongs to whoever made it. The owner can share it with people (or with everyone in the organization) as editors, who can change it and read its responses, or viewers, who can only read them. Everyone else can't find it, in Forms or in suite search. Forms made before sharing existed start shared with everyone as editors.
 - **Public pages:** `GET /f/:slug` renders a published form as plain HTML and `POST /f/:slug` stores a response. The gateway lets `/f/` through without a sign-in, and a hidden honeypot field turns away simple bots. Sites embeds these pages with its form block.
 
 ## Run it locally
