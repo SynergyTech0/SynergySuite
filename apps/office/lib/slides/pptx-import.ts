@@ -80,6 +80,7 @@ import {
   type SlotKind,
   SLOT_KINDS,
 } from "./model";
+import { fileLabelOf, type FileLabel } from "../labels";
 
 export type ImportedDeck = {
   w: number;
@@ -95,6 +96,8 @@ export type ImportedDeck = {
   /** Set Up Slide Show settings and custom shows (slide ids are the imported slides') */
   show?: ShowSettings;
   shows?: CustomShow[];
+  /** the sensitivity label the file carries (MSIP custom properties) */
+  label?: FileLabel;
   slides: Slide[];
   warnings: string[];
 };
@@ -2212,6 +2215,7 @@ export async function importPptx(data: ArrayBuffer | Uint8Array | Blob): Promise
     ...(Object.keys(masters).length ? { masters } : {}),
     ...(comments.length ? { comments } : {}),
     ...showInfo,
+    ...(fileLabelOf(props) ? { label: fileLabelOf(props)! } : {}),
     slides,
     warnings: [...deck.warnings],
   };

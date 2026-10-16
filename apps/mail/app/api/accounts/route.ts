@@ -28,7 +28,7 @@ export const POST = route(async ({ user }, req) => {
     smtpHost, smtpPort: Number(b.smtpPort) || 465, smtpSecure: b.smtpSecure !== false,
   };
   const probe: Account = {
-    id: "new", label: fields.label, address, fromName: "",
+    id: "new", owner: user, label: fields.label, address, fromName: "",
     imap: await vetEndpoint({ host: imapHost, port: fields.imapPort, secure: fields.imapSecure }),
     smtp: await vetEndpoint({ host: smtpHost, port: fields.smtpPort, secure: fields.smtpSecure }),
     auth: { user: fields.username, pass: password },

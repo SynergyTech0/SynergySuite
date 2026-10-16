@@ -98,6 +98,7 @@ jobs:
           npx tsc --noEmit -p apps/base
           npx tsc --noEmit -p apps/phone
           npx tsc --noEmit -p apps/projects
+          npx tsc --noEmit -p apps/contracts
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -198,6 +199,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE projects_test"
           npm test --workspace apps/projects
+      - name: Contracts tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/contracts_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
+          npm test --workspace apps/contracts
       - name: Ops tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ops_test
@@ -287,9 +294,9 @@ jobs:
         run: |
           npx prisma migrate deploy
           npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
-      - name: Service API unit tests
+      - name: Service API, budget and consolidation unit tests
         working-directory: apps/books/api
-        run: npx jest --preset ts-jest src/modules/svc
+        run: npx jest --preset ts-jest src/modules/svc src/modules/budget src/modules/consolidation
       - name: Build Books
         run: |
           npm run build -w @synergy/books-web

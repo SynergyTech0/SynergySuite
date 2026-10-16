@@ -1,29 +1,32 @@
 import type { ImapFlow } from "imapflow";
-import { getAccount } from "./accounts";
+import { type Account, getAccount, listOutsideAccounts } from "./accounts";
 import { db, q } from "./db";
 import { withImap } from "./mailbox";
 import { heldMailboxes } from "./policy";
-import { preserveRaw, toDate } from "./preserved";
+import { noteAccount, preserveRaw, toDate } from "./preserved";
 
 /**
  * Legal hold for mail. People also read and delete their mail with desktop and phone clients that
  * talk to the mail server directly, so Mail can't rely on catching deletes. Instead, for everyone
- * on hold, this copies every message in every folder into the preserved store (preserved.ts):
+ * on hold, this copies every message in every folder of their suite mailbox and of every outside
+ * IMAP account they connected to Mail into the preserved store (preserved.ts):
  * every few minutes (MAIL_PRESERVE_INTERVAL_MINUTES, default 5), and within a minute of a new hold
  * appearing. Each folder remembers its UIDVALIDITY and the last UID copied, so later passes fetch
  * only new mail; a folder whose UIDVALIDITY changed is copied again (copies are idempotent).
  *
  * Started once per server from instrumentation.ts. Holds are read from the Admin center once per
  * check; when it can't be reached, everyone already being swept stays swept (fails closed).
- * Only one replica sweeps at a time (a Postgres advisory lock). Outside IMAP accounts people
- * connect are not covered: they belong to other providers.
+ * Only one replica sweeps at a time (a Postgres advisory lock). Outside accounts are opened with
+ * the password the person saved; one that no longer signs in (a revoked or changed password) is
+ * logged and tried again next pass, and what was copied from it before stays.
  */
 
 const CHECK_MS = 60_000;
 const g = globalThis as unknown as { __mailPreserver?: { timer: NodeJS.Timeout; running: boolean; lastFull: number } };
 
 export function startPreserver(): void {
-  if (g.__mailPreserver || !process.env.ADMIN_INTERNAL_URL || !process.env.MAIL_IMAP_HOST) return;
+  // Without MAIL_IMAP_HOST there is no suite mailbox, but outside accounts are still swept.
+  if (g.__mailPreserver || !process.env.ADMIN_INTERNAL_URL) return;
   const state = { running: false, lastFull: 0, timer: setInterval(() => void tick(), CHECK_MS) };
   state.timer.unref();
   g.__mailPreserver = state;
@@ -95,33 +98,51 @@ async function enrol(doFetch?: typeof fetch): Promise<string[]> {
   return held.mailboxes.filter((m) => !before.has(m));
 }
 
-/** Copies every message of one suite mailbox not copied yet. */
+/**
+ * Copies every message not copied yet of one person on hold: their suite mailbox, then each outside
+ * account. An outside account that fails is logged and doesn't stop the rest; a suite mailbox that
+ * fails throws once the outside accounts are done, so the pass isn't recorded as complete.
+ */
 export async function sweepMailbox(mailbox: string): Promise<{ stored: number; known: number }> {
-  const acct = await getAccount(mailbox, "suite");
-  if (!acct) throw new Error("the suite mail server isn't configured");
+  const count = { stored: 0, known: 0 };
+  let failed: unknown = null;
+  const suite = await getAccount(mailbox, "suite");
+  if (suite) await sweepAccount(suite, count).catch((err) => { failed = err; });
+  for (const acct of await listOutsideAccounts(mailbox)) {
+    await sweepAccount(acct, count).catch((err) => {
+      console.error(`[mail] couldn't preserve ${acct.address}, an outside account of ${mailbox}:`, (err as Error).message);
+    });
+  }
+  if (failed) throw failed;
+  return count;
+}
+
+/** Copies every message of one account (suite or outside) not copied yet, for its owner. */
+export async function sweepAccount(acct: Account, count = { stored: 0, known: 0 }): Promise<{ stored: number; known: number }> {
   return withImap(acct, async (c) => {
-    const count = { stored: 0, known: 0 };
+    await noteAccount(acct);
     const boxes = await c.list();
     for (const b of boxes) {
       if (b.flags.has("\\Noselect") || b.flags.has("\\NonExistent")) continue;
-      await sweepFolder(c, mailbox, b.path, count);
+      await sweepFolder(c, acct, b.path, count);
     }
     return count;
   });
 }
 
-async function sweepFolder(c: ImapFlow, mailbox: string, folder: string, count: { stored: number; known: number }): Promise<void> {
+async function sweepFolder(c: ImapFlow, acct: Account, folder: string, count: { stored: number; known: number }): Promise<void> {
+  const { owner: mailbox, id: account } = acct;
   const lock = await c.getMailboxLock(folder, { readOnly: true });
   try {
     if (typeof c.mailbox !== "object") return;
     const uidValidity = String(c.mailbox.uidValidity);
     const [cur] = await q<{ uidvalidity: string; last_uid: string }>(
-      "SELECT uidvalidity, last_uid FROM preserve_folders WHERE mailbox = $1 AND folder = $2", [mailbox, folder]);
+      "SELECT uidvalidity, last_uid FROM preserve_folders WHERE mailbox = $1 AND account = $2 AND folder = $3", [mailbox, account, folder]);
     let last = cur && cur.uidvalidity === uidValidity ? Number(cur.last_uid) : 0;
     const save = () => q(
-      `INSERT INTO preserve_folders (mailbox, folder, uidvalidity, last_uid) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (mailbox, folder) DO UPDATE SET uidvalidity = EXCLUDED.uidvalidity, last_uid = EXCLUDED.last_uid`,
-      [mailbox, folder, uidValidity, last]);
+      `INSERT INTO preserve_folders (mailbox, account, folder, uidvalidity, last_uid) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (mailbox, account, folder) DO UPDATE SET uidvalidity = EXCLUDED.uidvalidity, last_uid = EXCLUDED.last_uid`,
+      [mailbox, account, folder, uidValidity, last]);
     // "n:*" also matches the newest message when nothing is newer than n, hence the filter.
     const uids = c.mailbox.exists ? (((await c.search({ uid: `${last + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > last).sort((a, b) => a - b) : [];
     for (let i = 0; i < uids.length; i += 20) {
@@ -130,7 +151,7 @@ async function sweepFolder(c: ImapFlow, mailbox: string, folder: string, count: 
       const unreadable = msgs.find((m) => !m.source);
       for (const m of msgs) {
         if (!m.source) break;
-        count[await preserveRaw(mailbox, m.source, { folder, uidValidity, uid: m.uid }, { internalDate: toDate(m.internalDate) })]++;
+        count[await preserveRaw(mailbox, m.source, { account, folder, uidValidity, uid: m.uid }, { internalDate: toDate(m.internalDate) })]++;
       }
       // Messages that vanished between SEARCH and FETCH are gone anyway; one the server
       // wouldn't hand over is tried again next pass.

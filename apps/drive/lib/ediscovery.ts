@@ -1,7 +1,7 @@
-import { MAX_ATTACHMENT_BYTES, type ExportItem, type SearchHit, type SearchResponse, queryToSql } from "@synergy/compliance";
+import { MAX_ATTACHMENT_BYTES, type ExportItem, type SearchHit, type SearchResponse, labelById, queryToSql } from "@synergy/compliance";
 import { q } from "./db";
 import * as blobs from "./blobs";
-import { APP, type Search, nextCursor, snippet } from "./compliance";
+import { APP, type Search, nextCursor, policy, snippet } from "./compliance";
 
 /** Drive's one kind of content for the Admin center: files (folders are only where they sit). */
 export const KINDS = ["file"];
@@ -82,7 +82,7 @@ export async function exportItems(ids: string[]): Promise<{ items: ExportItem[] 
   const wanted = ids.filter((i) => UUID.test(i));
   if (!wanted.length) return { items: [] };
   const rows = await q<HitRow & { mime: string; sha256: string | null; version: number; created_at: Date; library_id: string | null;
-    library: string | null; space: string; trashed_at: Date | null; trashed_by: string | null }>(
+    library: string | null; space: string; trashed_at: Date | null; trashed_by: string | null; label_id: string | null }>(
     `${INHERITED}
      SELECT i.*, COALESCE(NULLIF(i.owner, ''), i.created_by) AS who,
        ARRAY(SELECT DISTINCT h.email FROM inherited h WHERE h.id = i.id) AS shared_with,
@@ -90,6 +90,7 @@ export async function exportItems(ids: string[]): Promise<{ items: ExportItem[] 
      FROM items i WHERE i.id = ANY($1) AND i.kind = 'file'`,
     [wanted],
   );
+  const labels = await policy().labels();
   const items: ExportItem[] = [];
   for (const r of rows) {
     const chain = await q<{ id: string; name: string }>(
@@ -153,6 +154,8 @@ export async function exportItems(ids: string[]): Promise<{ items: ExportItem[] 
         trashedAt: r.trashed_at?.toISOString() ?? null,
         trashedBy: r.trashed_by,
         heldDeletedAt: r.held_deleted_at?.toISOString() ?? null,
+        labelId: r.label_id,
+        labelName: labelById(labels, r.label_id)?.name ?? null,
       },
       ...(r.text ? { text: r.text } : {}),
       attachments: attachment,

@@ -1,7 +1,8 @@
 // Pure helpers for file names, types and sizes. No I/O, so they are unit tested directly.
 
 export class UserError extends Error {
-  constructor(message: string, public status = 400) {
+  /** `data` goes out in the JSON response next to `error`. */
+  constructor(message: string, public status = 400, public data?: Record<string, unknown>) {
     super(message);
   }
 }

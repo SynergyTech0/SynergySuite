@@ -1,13 +1,14 @@
 import { type Params, body, route } from "@/lib/api";
 import * as drive from "@/lib/drive";
+import type { DlpOverride } from "@/lib/protection";
 
 export const GET = route(async (me, _req, { params }: Params<"id">) => drive.sharing(me, (await params).id));
 
-/** Share with someone, or change what they can do. */
+/** Share with someone, or change what they can do. Checked like links (see ../links). */
 export const POST = route(async (me, req, { params }: Params<"id">) => {
   const { id } = await params;
-  const b = await body<{ email?: string; role?: string }>(req);
-  await drive.share(me, id, b.email, b.role);
+  const b = await body<{ email?: string; role?: string; dlpOverride?: DlpOverride }>(req);
+  await drive.share(me, id, b.email, b.role, b.dlpOverride);
   return drive.sharing(me, id);
 });
 

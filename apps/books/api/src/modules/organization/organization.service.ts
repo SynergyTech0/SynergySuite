@@ -54,13 +54,17 @@ export class OrganizationService {
   }
 
   async findAll(options: {
+    ids?: string[];
     skip?: number;
     take?: number;
     isActive?: boolean;
   } = {}) {
     const { skip = 0, take = 50, isActive } = options;
 
-    const where = isActive !== undefined ? { isActive } : {};
+    const where = {
+      ...(isActive !== undefined && { isActive }),
+      ...(options.ids && { id: { in: options.ids } }),
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.organization.findMany({

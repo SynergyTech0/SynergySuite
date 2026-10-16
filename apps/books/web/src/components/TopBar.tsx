@@ -1,15 +1,18 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Menu, Search, HelpCircle, Bell, ChevronDown, Check } from 'lucide-react';
 import clsx from 'clsx';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { SettingsMenu } from './SettingsMenu';
-
-const COMPANIES = ['Acme Corporation', 'Northwind Trading LLC', 'Globex Health, Inc.'];
+import { useCompanies, useSwitchCompany } from '../hooks/usePlanning';
 
 function CompanySwitcher() {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(COMPANIES[0]);
   const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
+  const { data: companies } = useCompanies();
+  const switchTo = useSwitchCompany();
+  const navigate = useNavigate();
+  const current = companies?.find((c) => c.current);
 
   return (
     <div className="relative" ref={ref}>
@@ -17,7 +20,7 @@ function CompanySwitcher() {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors max-w-[12rem]"
       >
-        <span className="truncate">{selected}</span>
+        <span className="truncate">{current?.name ?? 'Company'}</span>
         <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
       </button>
       {open && (
@@ -25,19 +28,31 @@ function CompanySwitcher() {
           <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             Switch company
           </p>
-          {COMPANIES.map((c) => (
+          {(companies ?? []).map((c) => (
             <button
-              key={c}
+              key={c.id}
+              disabled={switchTo.isPending}
               onClick={() => {
-                setSelected(c);
                 setOpen(false);
+                if (!c.current) switchTo.mutate(c.id, { onSuccess: () => navigate('/dashboard') });
               }}
               className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
-              <span className="truncate">{c}</span>
-              {c === selected && <Check className="w-4 h-4 text-primary-600 shrink-0" />}
+              <span className="truncate">
+                {c.name} <span className="text-gray-400">{c.currency}</span>
+              </span>
+              {c.current && <Check className="w-4 h-4 text-primary-600 shrink-0" />}
             </button>
           ))}
+          <button
+            onClick={() => {
+              setOpen(false);
+              navigate('/consolidation');
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-primary-600 hover:bg-gray-50 border-t border-gray-100"
+          >
+            Manage companies and groups
+          </button>
         </div>
       )}
     </div>

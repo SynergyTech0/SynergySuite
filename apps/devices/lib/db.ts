@@ -175,6 +175,108 @@ CREATE TABLE IF NOT EXISTS audit (
   at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_at_idx ON audit (at DESC);
+
+-- Apple MDM (lib/mdm): NanoMDM speaks the protocol to iPhones, iPads and Macs; Devices decides
+-- what to send and keeps what comes back. Settings such as the APNs push topic live here.
+CREATE TABLE IF NOT EXISTS mdm_settings (
+  key        TEXT PRIMARY KEY,
+  value      JSONB NOT NULL,
+  updated_by TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One per downloaded enrollment profile. Its token comes back on every MDM request and says
+-- whose device it is (owner NULL: an organization profile, the device starts without an owner).
+CREATE TABLE IF NOT EXISTS mdm_enroll_tokens (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_hash   TEXT NOT NULL UNIQUE,
+  owner        TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS mdm_enrollments (
+  -- NanoMDM's enrollment ID: the UDID for a device enrollment.
+  id               TEXT PRIMARY KEY,
+  device_id        UUID REFERENCES devices(id) ON DELETE SET NULL,
+  enrollment_type  TEXT NOT NULL DEFAULT 'Device',
+  token_id         UUID REFERENCES mdm_enroll_tokens(id) ON DELETE SET NULL,
+  serial           TEXT NOT NULL DEFAULT '',
+  model            TEXT NOT NULL DEFAULT '',
+  product          TEXT NOT NULL DEFAULT '',
+  platform         TEXT NOT NULL CHECK (platform IN ('darwin', 'ios')),
+  -- Authenticated: the device started enrolling. Enrolled: it sent its push token, so it can be reached.
+  status           TEXT NOT NULL DEFAULT 'authenticated' CHECK (status IN ('authenticated', 'enrolled', 'unenrolled')),
+  info             JSONB NOT NULL DEFAULT '{}',
+  info_at          TIMESTAMPTZ,
+  info_asked_at    TIMESTAMPTZ,
+  authenticated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  enrolled_at      TIMESTAMPTZ,
+  unenrolled_at    TIMESTAMPTZ,
+  last_seen        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS mdm_enrollments_device_idx ON mdm_enrollments (device_id);
+
+-- One command can go to many enrollments at once (one UUID), so the key is the pair.
+CREATE TABLE IF NOT EXISTS mdm_commands (
+  uuid          TEXT NOT NULL,
+  enrollment_id TEXT NOT NULL REFERENCES mdm_enrollments(id) ON DELETE CASCADE,
+  request_type  TEXT NOT NULL,
+  -- What a person sees: "Lock", "Install Slack", "Install profile Office Wi-Fi".
+  label         TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'acknowledged', 'error', 'notnow')),
+  requested_by  TEXT NOT NULL,
+  -- Lock and erase PINs (shown to admins to unlock a Mac), and what the command was for.
+  detail        JSONB NOT NULL DEFAULT '{}',
+  error         TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (uuid, enrollment_id)
+);
+CREATE INDEX IF NOT EXISTS mdm_commands_enrollment_idx ON mdm_commands (enrollment_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS mdm_profiles (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL,
+  settings    JSONB NOT NULL DEFAULT '{}',
+  platforms   TEXT[] NOT NULL DEFAULT '{}',
+  enabled     BOOLEAN NOT NULL DEFAULT true,
+  version     INTEGER NOT NULL DEFAULT 1,
+  created_by  TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Which version of each profile each enrollment was sent, and whether it installed.
+CREATE TABLE IF NOT EXISTS mdm_profile_status (
+  enrollment_id TEXT NOT NULL REFERENCES mdm_enrollments(id) ON DELETE CASCADE,
+  profile_id    UUID NOT NULL REFERENCES mdm_profiles(id) ON DELETE CASCADE,
+  version       INTEGER NOT NULL,
+  command_uuid  TEXT,
+  status        TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'installed', 'error', 'removing')),
+  error         TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (enrollment_id, profile_id)
+);
+
+CREATE TABLE IF NOT EXISTS mdm_apps (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  platform     TEXT NOT NULL CHECK (platform IN ('darwin', 'ios')),
+  -- app_store: by App Store ID. package: a signed macOS .pkg Devices describes in a manifest.
+  source       TEXT NOT NULL CHECK (source IN ('app_store', 'package')),
+  store_id     TEXT,
+  bundle_id    TEXT NOT NULL DEFAULT '',
+  version      TEXT NOT NULL DEFAULT '',
+  url          TEXT,
+  manifest     JSONB,
+  auto_install BOOLEAN NOT NULL DEFAULT false,
+  created_by   TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 type Db = ReturnType<typeof createDb>;

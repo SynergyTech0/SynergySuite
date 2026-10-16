@@ -14,6 +14,8 @@ import {
   ChevronDown,
   Package,
   Briefcase,
+  Target,
+  Network,
 } from 'lucide-react';
 import { useState } from 'react';
 import clsx from 'clsx';
@@ -61,6 +63,8 @@ const navigation = [
   },
   { name: 'Projects', href: '/projects', icon: Briefcase },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
+  { name: 'Budgets', href: '/budgets', icon: Target },
+  { name: 'Consolidation', href: '/consolidation', icon: Network },
   { name: 'Tax Classification', href: '/tax-classification', icon: Calculator },
   { name: 'Tax AI', href: '/tax-ai', icon: Sparkles },
   { name: 'Settings', href: '/settings', icon: Settings },

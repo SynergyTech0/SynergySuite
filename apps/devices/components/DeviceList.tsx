@@ -24,7 +24,7 @@ export function DeviceList({ app, mine }: { app: AppCtx; mine?: boolean }) {
       <div className="pagehead">
         <div>
           <h1>{mine ? "My devices" : "Devices"}</h1>
-          <p className="muted">{mine ? "The computers you have enrolled, and whether they meet your organization's requirements." : "Every enrolled computer, with its compliance and open threats."}</p>
+          <p className="muted">{mine ? "The computers and phones you have enrolled, and whether they meet your organization's requirements." : "Every enrolled computer, phone and tablet, with its compliance and open threats."}</p>
         </div>
         {!mine ? <a className="btn primary" href="#/enroll">Enroll devices</a> : null}
       </div>
@@ -46,7 +46,7 @@ export function DeviceList({ app, mine }: { app: AppCtx; mine?: boolean }) {
       <section className="panel flush">
         {!list ? <p className="muted pad">Loading…</p> : list.length === 0 ? (
           <Empty>
-            <p>{mine ? "You haven't enrolled a computer yet." : text || compliance || platform ? "No device matches." : "No devices are enrolled yet."}</p>
+            <p>{mine ? "You haven't enrolled a device yet." : text || compliance || platform ? "No device matches." : "No devices are enrolled yet."}</p>
           </Empty>
         ) : (
           <div className="tablewrap">

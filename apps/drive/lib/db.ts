@@ -110,6 +110,9 @@ CREATE INDEX IF NOT EXISTS items_held_idx ON items (held_deleted_at) WHERE held_
 
 -- Libraries another app keeps the people of, e.g. "sites:<id>" for a site's document library.
 ALTER TABLE libraries ADD COLUMN IF NOT EXISTS managed_by TEXT;
+
+-- Sensitivity label (id from the Admin center's list, lower case), kept across versions.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS label_id TEXT;
 `;
 
 type Db = ReturnType<typeof createDb>;

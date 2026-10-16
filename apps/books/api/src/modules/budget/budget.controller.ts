@@ -1,6 +1,8 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { BudgetService, CreateBudgetDto } from './budget.service';
+import { BudgetService } from './budget.service';
+import { BudgetFromActualsDto, BudgetLineItemDto, CreateBudgetDto, SaveForecastDto, UpdateBudgetDto } from './budget.dto';
+import { FORECAST_METHODS, ForecastMethod } from './budget-math';
 
 @ApiTags('budgets')
 @ApiBearerAuth()
@@ -10,20 +12,14 @@ export class BudgetController {
 
   @Post()
   @ApiOperation({ summary: 'Create a budget' })
-  async createBudget(
-    @Param('organizationId') organizationId: string,
-    @Body() dto: CreateBudgetDto,
-  ) {
+  async createBudget(@Param('organizationId') organizationId: string, @Body() dto: CreateBudgetDto) {
     return this.budgetService.createBudget(organizationId, dto);
   }
 
-  @Get(':budgetId')
-  @ApiOperation({ summary: 'Get a budget' })
-  async getBudget(
-    @Param('organizationId') organizationId: string,
-    @Param('budgetId') budgetId: string,
-  ) {
-    return this.budgetService.getBudget(organizationId, budgetId);
+  @Post('from-actuals')
+  @ApiOperation({ summary: "Create a budget from an earlier year's actuals" })
+  async createFromActuals(@Param('organizationId') organizationId: string, @Body() dto: BudgetFromActualsDto) {
+    return this.budgetService.createFromActuals(organizationId, dto);
   }
 
   @Get()
@@ -34,79 +30,108 @@ export class BudgetController {
     @Query('status') status?: string,
   ) {
     return this.budgetService.listBudgets(organizationId, {
-      fiscalYear: fiscalYear ? parseInt(fiscalYear) : undefined,
+      fiscalYear: fiscalYear ? parseInt(fiscalYear, 10) : undefined,
       status,
     });
   }
 
-  @Post(':budgetId/approve')
-  @ApiOperation({ summary: 'Approve a budget' })
-  async approveBudget(
+  @Get(':budgetId')
+  @ApiOperation({ summary: 'Get a budget with its plan by period' })
+  async getBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
+    return this.budgetService.getBudget(organizationId, budgetId);
+  }
+
+  @Put(':budgetId')
+  @ApiOperation({ summary: 'Rename a budget, change its notes, or replace its lines' })
+  async updateBudget(
     @Param('organizationId') organizationId: string,
     @Param('budgetId') budgetId: string,
+    @Body() dto: UpdateBudgetDto,
   ) {
+    return this.budgetService.updateBudget(organizationId, budgetId, dto);
+  }
+
+  @Put(':budgetId/line-item')
+  @ApiOperation({ summary: 'Set or add one budget line' })
+  async updateLineItem(
+    @Param('organizationId') organizationId: string,
+    @Param('budgetId') budgetId: string,
+    @Body() body: BudgetLineItemDto,
+  ) {
+    return this.budgetService.updateBudgetLineItem(organizationId, budgetId, body);
+  }
+
+  @Delete(':budgetId/line-item/:accountId')
+  @ApiOperation({ summary: 'Remove a budget line' })
+  async removeLineItem(
+    @Param('organizationId') organizationId: string,
+    @Param('budgetId') budgetId: string,
+    @Param('accountId') accountId: string,
+  ) {
+    return this.budgetService.removeLineItem(organizationId, budgetId, accountId);
+  }
+
+  @Post(':budgetId/approve')
+  @ApiOperation({ summary: 'Approve a budget' })
+  async approveBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
     return this.budgetService.approveBudget(organizationId, budgetId);
   }
 
   @Post(':budgetId/activate')
   @ApiOperation({ summary: 'Activate a budget' })
-  async activateBudget(
-    @Param('organizationId') organizationId: string,
-    @Param('budgetId') budgetId: string,
-  ) {
+  async activateBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
     return this.budgetService.activateBudget(organizationId, budgetId);
   }
 
   @Post(':budgetId/close')
   @ApiOperation({ summary: 'Close a budget' })
-  async closeBudget(
-    @Param('organizationId') organizationId: string,
-    @Param('budgetId') budgetId: string,
-  ) {
+  async closeBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
     return this.budgetService.closeBudget(organizationId, budgetId);
   }
 
-  @Put(':budgetId/line-item')
-  @ApiOperation({ summary: 'Update budget line item' })
-  async updateLineItem(
-    @Param('organizationId') organizationId: string,
-    @Param('budgetId') budgetId: string,
-    @Body() body: { accountId: string; budgetAmount: number; forecastAmount?: number },
-  ) {
-    return this.budgetService.updateBudgetLineItem(
-      organizationId,
-      budgetId,
-      body.accountId,
-      body.budgetAmount,
-      body.forecastAmount,
-    );
+  @Post(':budgetId/reopen')
+  @ApiOperation({ summary: 'Send a budget back to draft' })
+  async reopenBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
+    return this.budgetService.reopenBudget(organizationId, budgetId);
   }
 
   @Get(':budgetId/variance')
-  @ApiOperation({ summary: 'Get budget variance' })
+  @ApiOperation({ summary: 'Budget vs actual from the ledger, by period' })
   async getVariance(
     @Param('organizationId') organizationId: string,
     @Param('budgetId') budgetId: string,
+    @Query('asOf') asOf?: string,
   ) {
-    return this.budgetService.getBudgetVariance(organizationId, budgetId);
+    return this.budgetService.getBudgetVariance(organizationId, budgetId, asOf);
   }
 
-  @Put(':budgetId/actual-amounts')
-  @ApiOperation({ summary: 'Update actual amounts' })
-  async updateActualAmounts(
+  @Get(':budgetId/forecast')
+  @ApiOperation({ summary: 'Rolling forecast: actuals so far, the rest projected' })
+  async getForecast(
     @Param('organizationId') organizationId: string,
     @Param('budgetId') budgetId: string,
-    @Body() body: { accountAmounts: { accountId: string; actualAmount: number }[] },
+    @Query('method') method = 'RUN_RATE',
+    @Query('asOf') asOf?: string,
   ) {
-    return this.budgetService.updateActualAmounts(organizationId, budgetId, body.accountAmounts);
+    if (!FORECAST_METHODS.includes(method as ForecastMethod)) {
+      throw new BadRequestException(`method must be one of ${FORECAST_METHODS.join(', ')}`);
+    }
+    return this.budgetService.getForecast(organizationId, budgetId, method as ForecastMethod, asOf);
+  }
+
+  @Post(':budgetId/forecast')
+  @ApiOperation({ summary: 'Save a forecast onto the budget' })
+  async saveForecast(
+    @Param('organizationId') organizationId: string,
+    @Param('budgetId') budgetId: string,
+    @Body() dto: SaveForecastDto,
+  ) {
+    return this.budgetService.saveForecast(organizationId, budgetId, dto.method, dto.asOf);
   }
 
   @Delete(':budgetId')
   @ApiOperation({ summary: 'Delete a budget' })
-  async deleteBudget(
-    @Param('organizationId') organizationId: string,
-    @Param('budgetId') budgetId: string,
-  ) {
+  async deleteBudget(@Param('organizationId') organizationId: string, @Param('budgetId') budgetId: string) {
     return this.budgetService.deleteBudget(organizationId, budgetId);
   }
 }

@@ -1,0 +1,3 @@
+# Only the Apple MDM image builds from this folder; keep .env and everything else out of it.
+*
+!apple-mdm/

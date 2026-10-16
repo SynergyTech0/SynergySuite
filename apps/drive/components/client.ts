@@ -20,8 +20,33 @@ export type Item = {
   trashedBy: string | null;
   starred: boolean;
   shared: boolean;
+  labelId: string | null;
   location?: string;
 };
+
+/** A sensitivity label from the Admin center (see /api/labels). */
+export type Label = { id: string; name: string; color: string; description?: string; priority: number; protection: { blockExternal: boolean; marking?: string } };
+
+export function findLabel(labels: Label[], id: string | null | undefined): Label | null {
+  return id ? labels.find((l) => l.id.toLowerCase() === id.toLowerCase()) ?? null : null;
+}
+
+/** What a data loss prevention check found, as the server sends it with a 409 or 422. */
+export type DlpDecision = {
+  action: "allow" | "audit" | "warn" | "block";
+  matches: { type: string; name: string; count: number; samples: string[] }[];
+  rules: { id: string; name: string }[];
+  external: boolean;
+  outside: string[];
+  tip?: string;
+};
+
+/** A failed request, with the status and whatever else the server said. */
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public data: Record<string, unknown>) {
+    super(message);
+  }
+}
 
 export type Crumb = { label: string; parent?: string; library?: string; view?: string };
 export type Library = { id: string; name: string; description: string; role: Role; members: number; managedBy?: string | null };
@@ -35,7 +60,7 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError((data as { error?: string }).error || `Request failed (${res.status})`, res.status, data as Record<string, unknown>);
   return data as T;
 }
 

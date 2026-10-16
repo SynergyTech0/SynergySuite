@@ -11,7 +11,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Devices, Ops, HR, Whiteboard and Loop, audit log |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery, sensitivity labels and DLP | yes | early | People and sign-in blocking over SCIM, app health, suite-wide sensitivity labels (Mail, Drive, Docs, Sheets, Slides), data loss prevention rules with alerts for Mail, Drive and Chat, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Devices, Ops, HR, Whiteboard and Loop, audit log |
 | Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Ops, Office, Planner, Sites, Base, Builder, Insights, Phone, Diagrams, Projects, Devices, HR, Whiteboard, Loop and Flow, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
@@ -31,6 +31,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Forms (`apps/forms`) | Forms | yes | early | Form builder, public form links, responses, CSV export |
 | Planner (`apps/planner`) | Planner | yes | usable | Boards, lists, cards, checklists, comments, labels; board, table, calendar and timeline views; Trello and Jira import |
 | Diagrams (`apps/diagrams`) | Visio | yes | early | Flowcharts, org charts, network, UML, ER, BPMN and floor plans in the draw.io editor with its full shape libraries; template gallery, Visio (.vsdx) import, multi-page diagrams, autosave with conflict warnings, version history, sharing with editors and viewers, PNG, SVG and PDF export, AI drafting on your own model |
+| Contracts (`apps/contracts`) | Dynamics 365 and Syntex contract management | yes | early | Contract lifecycle: templates with fields and a clause library with required clauses, guidance and fallbacks; drafting with every version kept and a redline between versions; ordered approvals; signatures through Sign (by API, or printed and uploaded back); renewal and notice deadlines with contracts that renew or expire by themselves; obligations with due dates; AI review on your own model against the clause library; per-person access with a legal team that sees everything; suite search and eDiscovery |
 | Projects (`apps/projects`) | Project, Dynamics 365 Project Operations | yes | early | Plans with outline numbering, summary tasks, milestones, finish-to-start links and a Gantt chart; AI plan drafts on your own model; Planner board import; team with bill and cost rates and weekly capacity; weekly timesheets and a running timer; expenses with receipts; approvals; billing of approved time, expenses and fixed fees into Books as draft invoices; budget, utilization and profit reports |
 | Flow (`apps/flow`) | Power Automate | yes | early | Flows between suite apps and hundreds of outside services, designed in the Activepieces flow designer (MIT) and run by its engine; Synergy steps for Mail, Calendar, To Do, Planner, Chat, Forms, Contacts, Drive, Desk and CRM that act as the flow's owner; starter recipes, on/off switches and run history in the suite; suite sign-in carried into the designer |
 | Photo (`apps/photo`) | Designer / Photos | yes | early | The PhotoCraft image editor (layers, masks, PSD files) with a per-user image library |
@@ -108,6 +109,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/flow` | Power Automate | Next.js 16, no database; runs on Activepieces Community Edition (its own Postgres and Redis) |
 | `apps/forms` | Forms | Express + React/Vite |
 | `apps/planner` | Planner | Next.js 16 + Drizzle |
+| `apps/contracts` | Dynamics 365 and Syntex contract management | Next.js 16 + Postgres |
 | `apps/projects` | Project, Dynamics 365 Project Operations | Next.js 16 + Postgres |
 | `apps/photo` | Photo (image editing) | Next.js 16 + PhotoCraft (Rust, WebAssembly) |
 | `apps/stream` | Stream (video library and editor) | Next.js 16 + ffmpeg + FilmCraft (Rust, WebAssembly) |
@@ -133,7 +135,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | Package | What it gives every app |
 |---|---|
 | `@synergy/identity` | Who is signed in (SynergyAuth via the gateway's headers), dev-user overrides, signed guest links |
-| `@synergy/compliance` | The eDiscovery protocol between the Admin center and each app: search and export routes, the shared keyword language, legal-hold and retention checks that fail closed |
+| `@synergy/compliance` | The compliance protocol between the Admin center and each app: eDiscovery search and export routes, the shared keyword language, legal-hold and retention checks that fail closed, sensitivity labels, and the data loss prevention engine (sensitive information types, rules, incident reports) |
 | `@synergy/search` | Suite-wide search for the signed-in person: the `POST /api/search` protocol each content app answers for the Search app, with query, snippet and text helpers |
 | `@synergy/db` | Postgres pool, query helper, boot-time migrations under an advisory lock |
 | `@synergy/server` | Express basics: sign-in and bearer-token middleware, JSON errors, health check, SPA serving |
