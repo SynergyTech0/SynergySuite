@@ -37,6 +37,8 @@ const PROBE_HOSTS = list('TRUST_MONITOR_HOSTS');
 const SSH_HOSTS = list('TRUST_MONITOR_SSH_HOSTS');
 const BACKUP_HOST = process.env.TRUST_MONITOR_BACKUP_HOST?.trim() || '';
 const BACKUP_ROOT = process.env.TRUST_MONITOR_BACKUP_ROOT?.trim() || '/var/backups';
+// Synergy Devices' posture feed (compose sets both when Devices runs alongside Trust).
+const DEVICES = !!(process.env.DEVICES_INTERNAL_URL && process.env.DEVICES_SVC_TOKEN);
 
 const slug = process.argv[2] ?? process.env.TRUST_TENANT;
 if (!slug) {
@@ -138,6 +140,26 @@ const MONITORS = [
     schedule: 'weekly',
     severity: 'high',
     config: { max_age_days: 90, min_assets: 10 },
+  },
+  {
+    key: 'endpoint-compliance',
+    needs: DEVICES,
+    control: 'EP-ENDPOINT-HARDENING',
+    title: 'Computers meet the device compliance policies',
+    kind: 'endpoint_compliance',
+    schedule: 'daily',
+    severity: 'high',
+    config: { active_days: 30, min_compliant_pct: 95, max_unencrypted: 0 },
+  },
+  {
+    key: 'endpoint-threats',
+    needs: DEVICES,
+    control: 'OPS-MALWARE',
+    title: 'Endpoint threats are triaged and critical vulnerabilities patched',
+    kind: 'endpoint_threats',
+    schedule: 'daily',
+    severity: 'critical',
+    config: { active_days: 30, max_open_critical: 0, max_high_age_days: 7, max_critical_vuln_devices: 0 },
   },
   {
     key: 'restore-drill',

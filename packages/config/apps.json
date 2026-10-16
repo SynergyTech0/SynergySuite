@@ -18,6 +18,7 @@
   { "id": "stream",    "name": "Stream",    "m365": "Stream, Clipchamp",    "port": 3725, "icon": "play",     "dir": "apps/stream",    "core": true },
   { "id": "cad",       "name": "CAD",       "m365": "(AutoCAD equivalent)", "port": 3660, "icon": "ruler",    "dir": "apps/cad",       "core": true },
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
+  { "id": "devices",   "name": "Devices",   "m365": "Intune, Defender for Endpoint", "port": 3810, "icon": "laptop", "dir": "apps/devices", "core": true },
   { "id": "insights",  "name": "Insights",  "m365": "Power BI",             "port": 3720, "icon": "chart",    "dir": "apps/insights",  "core": true },
   { "id": "base",      "name": "Base",      "m365": "Access, Lists",        "port": 3680, "icon": "table",    "dir": "apps/base",      "core": true },
   { "id": "engage",    "name": "Engage",    "m365": "Viva Engage, Viva Connections", "port": 3740, "icon": "megaphone", "dir": "apps/engage", "core": true },

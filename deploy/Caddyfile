@@ -276,6 +276,28 @@ desk.{$SUITE_DOMAIN} {
 	}
 }
 
+devices.{$SUITE_DOMAIN} {
+	# The osquery agent on each computer has no suite account: it signs in with its enrollment
+	# key and node key, checked in the app. The posture feed for Trust stays on the compose network.
+	handle /api/osquery/* {
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		import to_app devices:3810
+	}
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app devices:3810
+	}
+}
+
 ops.{$SUITE_DOMAIN} {
 	# Demand and purchase-request feeds for other services (bearer OPS_API_TOKEN, checked in the app).
 	@svc path /api/svc/*

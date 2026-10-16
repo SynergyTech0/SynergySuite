@@ -32,6 +32,8 @@
 | Dynamics 365 Supply Chain Management | Manufacturing (BOMs, routings, work orders, MRP), asset management and maintenance | `apps/ops` | Have |
 | Entra ID | Sign-in, SSO, MFA, directory | synergyauth | Have, strongest piece |
 | Admin center | Users, licences, settings | `apps/admin` + synergyauth admin console | Have |
+| Intune | Device inventory, compliance policies, enrollment | `apps/devices` (osquery agents); no lock, wipe, settings or app push yet | Partial |
+| Defender for Endpoint | Threat detection, vulnerabilities, hunting | `apps/devices` detections, indicators, OSV vulnerabilities, live queries; detects and alerts, doesn't block | Partial |
 | Purview / eDiscovery | Retention, legal hold, search | `apps/admin` Compliance, `@synergy/compliance` in each app | Have |
 | Microsoft 365 home / app launcher | Portal and waffle | workspace home + Hub `sa_apps` waffle | Partial |
 
