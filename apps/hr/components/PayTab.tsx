@@ -76,7 +76,7 @@ export function PayTab({ ctx, person }: { ctx: Ctx; person: Employee }) {
               <span>Paid by</span>
               <select name="paymentMethod" defaultValue={p.paymentMethod}><option value="direct_deposit">Direct deposit</option><option value="check">Paper check</option></select>
             </label>
-            <label><span>Bank account, last 4 digits</span><input name="accountLast4" inputMode="numeric" maxLength={4} defaultValue={p.accountLast4} /></label>
+            <label><span>Bank account, last 4 digits</span><input name="accountLast4" inputMode="numeric" maxLength={4} key={p.accountLast4} defaultValue={p.accountLast4} title="Filled in from the bank details below when they're on file" /></label>
           </div>
         </fieldset>
         <fieldset>
@@ -136,6 +136,8 @@ export function PayTab({ ctx, person }: { ctx: Ctx; person: Employee }) {
           <button className="btn primary">Save pay details</button>
         </div>
       </form>
+
+      <PrivateSection ctx={ctx} person={person} onBank={(last4) => setP((x) => (x ? { ...x, accountLast4: last4 } : x))} />
 
       <section className="section">
         <div className="row"><h3 style={{ margin: 0 }}>Deductions and benefits</h3><button className="btn small right" onClick={() => setDed("new")}><Plus size={14} /> Add</button></div>
@@ -212,5 +214,93 @@ function DeductionDialog({ personId, d, onClose, onSaved }: { personId: string; 
         </div>
       </form>
     </Modal>
+  );
+}
+
+type Private = {
+  legalFirst: string; legalMiddle: string; legalLast: string; legalSuffix: string; address1: string; address2: string; city: string;
+  addressState: string; zip: string; ssnLast4: string; bankRouting: string; bankAccountLast4: string; bankAccountType: "checking" | "savings";
+  updatedAt: string | null; updatedBy: string;
+};
+
+/** Legal name, address, SSN and bank account: what W-2s and the direct deposit file need. */
+function PrivateSection({ ctx, person, onBank }: { ctx: Ctx; person: Employee; onBank: (last4: string) => void }) {
+  const [x, setX] = useState<Private | null>(null);
+  const [err, setErr] = useState("");
+  const [form, setForm] = useState(0);
+  useEffect(() => {
+    api<Private>(`/api/employees/${person.id}/pay/private`).then(setX, (e) => setErr((e as Error).message));
+  }, [person.id]);
+  if (!x) return err ? <p className="error">{err}</p> : null;
+  return (
+    <section className="section">
+      <h3>Tax and bank details</h3>
+      <form
+        key={form}
+        className="form"
+        style={{ padding: 0 }}
+        autoComplete="off"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setErr("");
+          const b = formData(e.currentTarget);
+          // Blank means "keep what's on file"; the numbers are never sent back to the browser.
+          if (!b.ssn) delete b.ssn;
+          if (!b.bankAccount) delete b.bankAccount;
+          try {
+            const saved = await api<Private>(`/api/employees/${person.id}/pay/private`, { method: "PUT", json: b });
+            setX(saved);
+            setForm((n) => n + 1);
+            onBank(saved.bankAccountLast4);
+            ctx.toast("Tax and bank details saved");
+          } catch (z) {
+            setErr((z as Error).message);
+          }
+        }}
+      >
+        <fieldset>
+          <legend>Legal name and address, as on their Social Security card and W-2</legend>
+          <div className="grid4">
+            <label><span>First</span><input name="legalFirst" defaultValue={x.legalFirst} /></label>
+            <label><span>Middle</span><input name="legalMiddle" defaultValue={x.legalMiddle} /></label>
+            <label><span>Last</span><input name="legalLast" defaultValue={x.legalLast} /></label>
+            <label><span>Suffix</span><input name="legalSuffix" defaultValue={x.legalSuffix} placeholder="Jr." /></label>
+          </div>
+          <div className="grid2">
+            <label><span>Street address</span><input name="address1" defaultValue={x.address1} /></label>
+            <label><span>Apartment, suite</span><input name="address2" defaultValue={x.address2} /></label>
+          </div>
+          <div className="grid3">
+            <label><span>City</span><input name="city" defaultValue={x.city} /></label>
+            <label><span>State</span><input name="addressState" maxLength={2} defaultValue={x.addressState} style={{ textTransform: "uppercase" }} /></label>
+            <label><span>ZIP code</span><input name="zip" inputMode="numeric" defaultValue={x.zip} /></label>
+          </div>
+          <label>
+            <span>Social Security number</span>
+            <input name="ssn" inputMode="numeric" placeholder={x.ssnLast4 ? `On file, ending ${x.ssnLast4}. Type a new one to replace it.` : "123-45-6789"} />
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend>Direct deposit</legend>
+          <div className="grid3">
+            <label><span>Routing number</span><input name="bankRouting" inputMode="numeric" maxLength={9} defaultValue={x.bankRouting} /></label>
+            <label>
+              <span>Account number</span>
+              <input name="bankAccount" placeholder={x.bankAccountLast4 ? `On file, ending ${x.bankAccountLast4}` : ""} />
+            </label>
+            <label>
+              <span>Account type</span>
+              <select name="bankAccountType" defaultValue={x.bankAccountType}><option value="checking">Checking</option><option value="savings">Savings</option></select>
+            </label>
+          </div>
+        </fieldset>
+        <p className="small muted">Social Security and account numbers are encrypted when saved. Only their last four digits are shown again.</p>
+        <p className="error" role="alert">{err}</p>
+        <div className="actions">
+          {x.updatedAt && <span className="small muted grow">Changed {new Date(x.updatedAt).toLocaleDateString()} by {x.updatedBy}</span>}
+          <button className="btn primary">Save tax and bank details</button>
+        </div>
+      </form>
+    </section>
   );
 }

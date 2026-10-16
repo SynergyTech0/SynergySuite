@@ -1,8 +1,9 @@
+import { articleVisible, type Viewer } from "./agents";
 import { q } from "./db";
 import type { Article } from "./types";
 import { text, UserError } from "./util";
 
-// Knowledge-base articles. Staff see drafts too; the public help center only published ones.
+// Knowledge-base articles. Agents see drafts too; everyone else and the public help center only published ones.
 
 const toArticle = (r: Record<string, unknown>): Article => ({
   id: Number(r.id),
@@ -28,12 +29,12 @@ export function slugify(title: string): string {
   );
 }
 
-export async function list(): Promise<Article[]> {
-  return (await q("SELECT * FROM kb_articles ORDER BY lower(title), id")).map(toArticle);
+export async function list(v: Viewer | null = null): Promise<Article[]> {
+  return (await q(`SELECT * FROM kb_articles a WHERE ${v ? articleVisible(v, "a") : "TRUE"} ORDER BY lower(title), id`)).map(toArticle);
 }
 
-export async function get(id: number): Promise<Article> {
-  const [r] = await q("SELECT * FROM kb_articles WHERE id = $1", [id]);
+export async function get(id: number, v: Viewer | null = null): Promise<Article> {
+  const [r] = await q(`SELECT * FROM kb_articles a WHERE id = $1 AND ${v ? articleVisible(v, "a") : "TRUE"}`, [id]);
   if (!r) throw new UserError("That article doesn't exist", 404);
   return toArticle(r);
 }

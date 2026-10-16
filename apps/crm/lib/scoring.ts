@@ -113,7 +113,7 @@ async function logCall(model: string, ok: boolean, started: number, who: string,
 
 export async function scoreLead(ctx: Ctx, id: string, cfg: AiConfig | null = crmAiConfig()): Promise<Lead> {
   if (!cfg) throw new UserError("AI lead scoring is off. An administrator can set AI_MODEL or CRM_AI_MODEL.", 503);
-  const lead = await leads.raw(id);
+  const lead = await leads.raw(ctx, id);
   assertCanEdit(ctx, lead);
   if (lead.score_is_override) throw new UserError("This lead has a manual score. Clear it to let the AI score it.", 409);
 

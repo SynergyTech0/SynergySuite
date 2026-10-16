@@ -1,11 +1,11 @@
 /**
  * Who may change what. Pure rules with no database, so they are tested on their own.
  *
- *   rep      reads everything; edits only records they own
+ *   rep      edits only records they own
  *   manager  reads and edits everything; may give a record to another owner
  *   admin    everything a manager can, plus changing people's roles
  *
- * Reads are open to everyone in the organization; the roles govern writes.
+ * These are the write rules. Who can read what is in access.ts.
  */
 import { ForbiddenError } from "./util";
 import type { Ctx, Role } from "./types";
