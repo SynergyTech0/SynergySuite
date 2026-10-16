@@ -51,6 +51,18 @@ describe("state tables", () => {
     for (const c of ["AK", "FL", "NV", "SD", "TN", "TX", "WA", "WY"]) expect(STATE_TABLES[c].method, c).toBe("none");
   });
 
+  it("match each state's own worked figures: single, one allowance, $60,000 a year", () => {
+    const one = { ...single, allowances: 1 };
+    // CA DE 44 Method B: 60,000 - 5,706 = 54,294; 1,124.21 + 6.6% over 41,452 = 1,971.78; less one 168.30 credit.
+    expect(stateWithholding(6_000_000, 1, one, STATE_TABLES.CA)).toBe(180_348);
+    // NY-50-T exact method: 60,000 - 7,400 - 1,000 = 51,600. The publication's rounded base amounts give 2,621.80.
+    expect(stateWithholding(6_000_000, 1, one, STATE_TABLES.NY)).toBe(262_140);
+    // GA 2026 guide: 60,000 - 15,000 - 5,000 = 40,000 at 4.99%.
+    expect(stateWithholding(6_000_000, 1, one, STATE_TABLES.GA)).toBe(199_600);
+    // Monthly, CA comes to the annual figure a twelfth at a time.
+    expect(stateWithholding(500_000, 12, one, STATE_TABLES.CA)).toBe(15_029);
+  });
+
   it("no wage tax in Texas", () => {
     expect(stateWithholding(200_000, 26, single, STATE_TABLES.TX)).toBe(0);
   });

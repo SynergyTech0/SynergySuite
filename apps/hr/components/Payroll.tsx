@@ -66,8 +66,8 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
       </div>
       <div className="viewbody">
         <div className="banner">
-          Payroll works out US federal withholding, Social Security, Medicare and FUTA from the published 2026 figures, and state tax as a flat
-          rate you set. It does not file returns, deposit taxes or move money. Check the results against IRS Publication 15-T before you pay people.
+          Payroll works out US federal withholding, Social Security, Medicare and FUTA from the published 2026 figures, and state withholding from each state's
+          published tables. It does not file returns, deposit taxes or move money. Check the results against IRS Publication 15-T before you pay people.
         </div>
         {!settings.booksConnected && (
           <div className="banner info">Books isn&apos;t connected, so paid runs won&apos;t reach the ledger. Set BOOKS_SVC_TOKEN for HR and Books to the same value.</div>
