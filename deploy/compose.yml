@@ -443,6 +443,33 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/todo
 
+  # Microsoft Whiteboard equivalent: an infinite canvas (Excalidraw) that everyone on a board draws
+  # on at once, with sticky notes, templates, sharing, copies saved to Drive, and a board for each
+  # meeting and chat. Sticky-note ideas use the suite's AI_* model (WHITEBOARD_AI_* to give it its own).
+  whiteboard:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-whiteboard:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: whiteboard } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/whiteboard
+      WHITEBOARD_AI_PROVIDER: ${WHITEBOARD_AI_PROVIDER:-}
+      WHITEBOARD_AI_BASE_URL: ${WHITEBOARD_AI_BASE_URL:-}
+      WHITEBOARD_AI_API_KEY: ${WHITEBOARD_AI_API_KEY:-}
+      WHITEBOARD_AI_MODEL: ${WHITEBOARD_AI_MODEL:-}
+
+  # Live drawing: the Yjs collaboration server for Whiteboard, reached at whiteboard.<domain>/collab.
+  whiteboard-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-whiteboard:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: whiteboard } }
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/whiteboard
+      COLLAB_ADDRESS: 0.0.0.0
+      COLLAB_PORT: "3751"
+
   # Microsoft 365 admin center and Purview eDiscovery equivalent: people (through the sign-in
   # service's SCIM API), app health, matters, legal holds, retention and cross-app search and export.
   admin:

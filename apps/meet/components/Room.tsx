@@ -18,7 +18,7 @@ import { Track, RoomEvent, LocalParticipant, Participant } from "livekit-client"
 import {
   Mic, Video as VideoIcon, MonitorUp, Hand, Smile, Users, MessageSquare,
   Sparkles, PhoneOff, Link2, MicOff, UserX, Circle, Square, Captions,
-  FileText, Download, Check, BarChart3, Plus, X, Boxes, ScrollText,
+  FileText, Download, Check, BarChart3, Plus, X, Boxes, ScrollText, Presentation,
 } from "lucide-react";
 
 const REACTIONS = ["👍", "👏", "🎉", "❤️", "😂", "😮", "🙌"];
@@ -78,6 +78,8 @@ export default function Room({
   const [breakoutCount, setBreakoutCount] = useState(2);
   const [showBreakoutForm, setShowBreakoutForm] = useState(false);
   const [breakoutMsg, setBreakoutMsg] = useState<string | null>(null); // host broadcast into a breakout
+  const [wbNotice, setWbNotice] = useState<string | null>(null);   // "<name> opened the whiteboard"
+  const [wbBusy, setWbBusy] = useState(false);
   const floatId = useRef(0);
   const capSeq = useRef(0);
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
@@ -177,6 +179,13 @@ export default function Room({
   // ---- data channel: reactions (ephemeral) + captions (from the transcription bot) ------------
   useEffect(() => {
     const onData = (payload: Uint8Array, participant?: Participant, _kind?: unknown, topic?: string) => {
+      if (topic === "whiteboard") {
+        try {
+          const { by } = JSON.parse(new TextDecoder().decode(payload));
+          setWbNotice(`${by || participant?.name || "Someone"} opened the meeting whiteboard`);
+        } catch {}
+        return;
+      }
       if (topic === "reaction") {
         try {
           const { emoji } = JSON.parse(new TextDecoder().decode(payload));
@@ -401,6 +410,33 @@ export default function Room({
     [localParticipant],
   );
 
+  // ---- whiteboard: the meeting's board in the Whiteboard app, opened in a new tab -------------
+  // The tab is opened before the request so the browser doesn't treat it as a pop-up.
+  const openWhiteboard = useCallback(async (announce: boolean) => {
+    const tab = window.open("", "_blank");
+    setWbBusy(true);
+    try {
+      const r = await fetch("/api/whiteboard", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room: roomName }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.url) throw new Error(d.error || "Couldn't open the whiteboard");
+      if (tab) tab.location.href = d.url;
+      else window.location.assign(d.url);
+      setWbNotice(null);
+      if (announce) {
+        const payload = new TextEncoder().encode(JSON.stringify({ by: localParticipant.name || localParticipant.identity }));
+        localParticipant.publishData(payload, { reliable: true, topic: "whiteboard" });
+      }
+    } catch (e) {
+      tab?.close();
+      alert((e as Error).message);
+    } finally {
+      setWbBusy(false);
+    }
+  }, [roomName, localParticipant]);
+
   // ---- raise hand (participant attribute — persists + visible to late joiners) ----------------
   const toggleHand = useCallback(() => {
     const next = !handRaised;
@@ -546,6 +582,17 @@ export default function Room({
             </div>
           );
         })()}
+
+        {/* someone opened the meeting whiteboard: everyone signed in can join it */}
+        {wbNotice && !breakoutMsg && !inBreakout && (
+          <div className="bkbanner">
+            <span>{wbNotice}{isStaff ? "" : ". Sign in to the suite to draw on it."}</span>
+            {isStaff && (
+              <button className="bkreturn" onClick={() => openWhiteboard(false)} disabled={wbBusy}>Open whiteboard</button>
+            )}
+            <button className="bkreturn" onClick={() => setWbNotice(null)} aria-label="Dismiss">✕</button>
+          </div>
+        )}
 
         {/* breakout banner: you're in a breakout, or a host broadcast just arrived */}
         {(inBreakout || breakoutMsg) && (
@@ -738,6 +785,13 @@ export default function Room({
               </div>
             )}
           </div>
+
+          {isStaff && (
+            <button className="mbtn" onClick={() => openWhiteboard(true)} disabled={wbBusy}
+              title="Open the meeting whiteboard (everyone signed in can draw on it)">
+              <Presentation size={18} />
+            </button>
+          )}
 
           {isStaff && (
             <button className={`mbtn ${poll && !poll.closed ? "on" : ""}`} onClick={() => setShowPollForm((s) => !s)}

@@ -16,6 +16,7 @@
 | Forms | Surveys, quizzes | synergyforms + workspace `forms` | Have |
 | Planner | Team task boards | synergyboards | Have |
 | To Do | Personal tasks | `apps/todo` | Have |
+| Whiteboard | Infinite collaborative canvas | `apps/whiteboard` (Excalidraw, live with Yjs) | Have |
 | Lists | Structured lists/trackers | none | **Gap** |
 | Loop | Shared live components | none | **Gap** |
 | Bookings | Public appointment booking | synergymeet `schedule` (partial) | Partial |

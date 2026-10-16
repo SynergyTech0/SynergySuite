@@ -1,5 +1,5 @@
 "use client";
-import { ChevronLeft, ChevronRight, Download, Share2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Share2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FileIcon } from "./FileIcon";
 import { formatSize, previewKind } from "./client";
@@ -10,10 +10,12 @@ const TEXT_LIMIT = 2 * 1024 * 1024;
 
 /** Full-window viewer for one file, with arrows to the next and previous files in the list. */
 export function Preview({
-  item, src, download, onClose, onPrev, onNext, onShare,
+  item, src, download, onClose, onPrev, onNext, onShare, openWith,
 }: {
   item: Previewable; src: string; download: string;
   onClose: () => void; onPrev?: () => void; onNext?: () => void; onShare?: () => void;
+  /** Another suite app that opens this kind of file, e.g. Whiteboard for .excalidraw. */
+  openWith?: { label: string; href: string };
 }) {
   const kind = previewKind(item.mime);
   useEffect(() => {
@@ -31,6 +33,11 @@ export function Preview({
       <div className="viewerhead">
         <FileIcon kind="file" name={item.name} />
         <span className="grow viewername">{item.name}</span>
+        {openWith && (
+          <a className="btn ghost dark" href={openWith.href} target="_blank" rel="noreferrer">
+            <ExternalLink size={16} /> {openWith.label}
+          </a>
+        )}
         {onShare && (
           <button className="btn ghost dark" onClick={onShare}>
             <Share2 size={16} /> Share

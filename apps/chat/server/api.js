@@ -3,6 +3,7 @@ const db = require('./db');
 const hub = require('./ws');
 const compliance = require('./compliance');
 const suiteSearch = require('./search');
+const whiteboard = require('./whiteboard');
 const { SearchInputError } = require('@synergy/search');
 
 const router = express.Router();
@@ -232,6 +233,30 @@ router.post('/channels/:id/messages', wrap(async (req, res) => {
      WHERE channel_id = $1 AND user_id = $2`, [chId, req.user.id, msg.id]);
   hub.broadcastChannel(chId, { type: 'message.new', message: msg });
   res.json(msg);
+}));
+
+// ---- whiteboard: the channel's board in the Whiteboard app, which every member can draw on ----
+router.post('/channels/:id/whiteboard', wrap(async (req, res) => {
+  const chId = Number(req.params.id);
+  if (!await db.isMember(chId, req.user.id)) return res.status(403).json({ error: 'not a member' });
+  const ch = (await db.q('SELECT id, kind, name FROM channels WHERE id = $1', [chId])).rows[0];
+  if (!ch) return res.status(404).json({ error: 'not found' });
+  const people = (await db.q(
+    'SELECT u.email FROM channel_members cm JOIN users u ON u.id = cm.user_id WHERE cm.channel_id = $1', [chId])).rows.map(r => r.email);
+  let board;
+  try {
+    board = await whiteboard.channelBoard(ch, req.user.email, people);
+  } catch (e) {
+    return res.status(e.status || 502).json({ error: e.message });
+  }
+  if (board.created) {
+    // Tell the channel, once, where its whiteboard is.
+    const body = `Started a whiteboard for everyone here: [Open the whiteboard](${board.url})`;
+    const { rows } = await db.q(
+      'INSERT INTO messages (channel_id, user_id, body) VALUES ($1,$2,$3) RETURNING id', [chId, req.user.id, body]);
+    hub.broadcastChannel(chId, { type: 'message.new', message: await messageRow(rows[0].id) });
+  }
+  res.json({ url: board.url, created: board.created });
 }));
 
 router.patch('/messages/:id', wrap(async (req, res) => {

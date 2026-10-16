@@ -260,6 +260,21 @@ todo.{$SUITE_DOMAIN} {
 	import to_app todo:3195
 }
 
+whiteboard.{$SUITE_DOMAIN} {
+	# Meet and Chat ask for their boards on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle /collab* {
+		import signed_in
+		import to_app whiteboard-collab:3751
+	}
+	handle {
+		import signed_in
+		import to_app whiteboard:3750
+	}
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.

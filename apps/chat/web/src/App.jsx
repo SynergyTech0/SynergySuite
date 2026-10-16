@@ -116,6 +116,7 @@ const ICON = {
   quote: 'M7 7H4v6h3l-1 4M17 7h-3v6h3l-1 4',
   emoji: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9 10h.01M15 10h.01M8 14a4 4 0 0 0 8 0',
   send: 'M4 12l16-8-6 16-2-6-8-2z',
+  board: 'M3 4h18v12H3zM8 20l4-4 4 4M7 12c2-3 3-3 5-1s3 1 5-2',
 };
 function Icon({ name, size = 18, className }) {
   return (
@@ -638,6 +639,16 @@ function ChannelView({ channel, label, online, me, users, directory, usersById, 
     try { await api.send(chId, `📞 started a huddle — [Join the call](${url})`); } catch (e) { flashError(e); }
   }
 
+  // Open the channel's whiteboard; the first time, Chat posts its link here for everyone.
+  async function openWhiteboard() {
+    const tab = window.open('', '_blank');
+    try {
+      const { url } = await api.whiteboard(chId);
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank', 'noopener');
+    } catch (e) { tab?.close(); flashError(e); }
+  }
+
   // Upload a file to SynergyDrive, then post it as an attachment link.
   async function doUpload(file) {
     if (!file) return;
@@ -727,6 +738,7 @@ function ChannelView({ channel, label, online, me, users, directory, usersById, 
             </div>
           )}
           <button className="tool-btn call-btn" title="Start a video huddle" onClick={startCall}><Icon name="headphones" /></button>
+          <button className="tool-btn" title="Whiteboard for this conversation" aria-label="Whiteboard" onClick={openWhiteboard}><Icon name="board" /></button>
           {!isDm && (
             <div className="invite-wrap">
               <button ref={inviteBtnRef} className="tool-btn" title="Add people" aria-label="Add people"

@@ -27,6 +27,7 @@
     "apps/sites",
     "apps/todo",
     "apps/trust",
+    "apps/whiteboard",
     "addons/people",
     "addons/portal"
   ],

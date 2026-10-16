@@ -13,3 +13,4 @@ apps/cad/engine/.cadcraft
 apps/cad/engine/dwg/target
 apps/cad/public/engine3d
 apps/cad/engine/.chili3d
+apps/whiteboard/public/fonts
