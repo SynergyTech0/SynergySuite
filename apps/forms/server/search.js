@@ -1,17 +1,17 @@
 // Suite search (POST /api/search, see @synergy/search): the forms and responses the signed-in
-// person can open in the app today. SynergyForms has no per-form sharing: every signed-in person
-// can open and edit every form (GET/PATCH /api/forms/:id) and see its responses
-// (GET /api/forms/:id/submissions), so every live form is "shared with them to edit" and its
-// results are theirs to see. If the app gains owners/sharing, change FORM_VISIBLE to match.
+// person can open in the app: forms they own or that are shared with them (server/access.js),
+// as an editor or a viewer, and those forms' responses, exactly as GET /api/forms/:id and
+// GET /api/forms/:id/submissions allow.
 // Forms a held owner deleted (held_deleted_at), and their responses, never come back; those are
 // for eDiscovery only.
 const { readSearchQuery, queryToSql, snippet, clipText } = require('@synergy/search');
+const { principalsFor, visibleSql } = require('./access');
 
 const APP = 'forms';
 const KINDS = ['form', 'response'];
 
-// Which forms (alias f) the person can open, edit and see the results of.
-const FORM_VISIBLE = 'f.held_deleted_at IS NULL';
+// Which forms (alias f) the person can open and see the results of: $3 is their email, $4 their principals.
+const FORM_VISIBLE = visibleSql('f', 3, 4);
 
 // Forms (title, description, questions) and responses ("Question: answer" lines) as one list.
 const ROWS = `
@@ -31,16 +31,16 @@ const ROWS = `
     FROM submissions s JOIN forms f ON f.id = s.form_id WHERE ${FORM_VISIBLE}`;
 
 function createSearch(q) {
-  return async function search(_email, body) {
+  return async function search(email, body) {
     const s = readSearchQuery(body);
     const kinds = s.kinds.length ? KINDS.filter(k => s.kinds.includes(k)) : KINDS;
     if (!kinds.length) return { app: APP, results: [] };
-    const kw = queryToSql(s.parsed, ['x.text'], 3);
+    const kw = queryToSql(s.parsed, ['x.text'], 5);
     const { rows } = await q(
       `SELECT x.* FROM (${ROWS}) x
         WHERE x.kind = ANY($1::text[]) AND ${kw.sql}
         ORDER BY x.date DESC, x.kind, x.id DESC LIMIT $2`,
-      [kinds, s.limit, ...kw.params]);
+      [kinds, s.limit, email, principalsFor(email), ...kw.params]);
     return {
       app: APP,
       results: rows.map(r => ({

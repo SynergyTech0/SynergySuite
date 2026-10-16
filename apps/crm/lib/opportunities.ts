@@ -1,4 +1,5 @@
 // Opportunities: deals on an account, moving left to right through the pipeline's stages.
+import { visible } from "./access";
 import { q, tx } from "./db";
 import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
@@ -23,10 +24,11 @@ export function oppRow(ctx: Ctx, r: OppRow): Opportunity {
   };
 }
 
-async function fields(b: Record<string, unknown>) {
+async function fields(ctx: Ctx, b: Record<string, unknown>) {
   const accountId = String(b.accountId ?? "");
   if (!isUuid(accountId)) throw new UserError("Pick an account");
-  const [acct] = await q("SELECT 1 FROM accounts WHERE id = $1", [accountId]);
+  const params: unknown[] = [accountId];
+  const [acct] = await q(`SELECT 1 FROM accounts a WHERE a.id = $1 AND ${visible(ctx, "account", "a", params)}`, params);
   if (!acct) throw new UserError("That account no longer exists");
   return {
     accountId,
@@ -41,8 +43,8 @@ async function fields(b: Record<string, unknown>) {
 export type ListOpps = { q?: string; stage?: string; mine?: boolean; accountId?: string };
 
 export async function list(ctx: Ctx, f: ListOpps = {}): Promise<Opportunity[]> {
-  const where: string[] = [];
   const params: unknown[] = [];
+  const where: string[] = [visible(ctx, "opportunity", "o", params)];
   if (f.q) {
     params.push(likeTerm(f.q));
     where.push(`(o.name ILIKE $${params.length} OR a.name ILIKE $${params.length})`);
@@ -61,24 +63,25 @@ export async function list(ctx: Ctx, f: ListOpps = {}): Promise<Opportunity[]> {
     where.push(`o.owner = $${params.length}`);
   }
   const rows = await q<OppRow>(
-    `${OPP_SELECT} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY o.close_date NULLS LAST, lower(o.name) LIMIT 2000`,
+    `${OPP_SELECT} WHERE ${where.join(" AND ")} ORDER BY o.close_date NULLS LAST, lower(o.name) LIMIT 2000`,
     params,
   );
   return rows.map((r) => oppRow(ctx, r));
 }
 
-async function load(id: string): Promise<OppRow> {
-  const [row] = await q<OppRow>(`${OPP_SELECT} WHERE o.id = $1`, [id]);
+async function load(ctx: Ctx, id: string): Promise<OppRow> {
+  const params: unknown[] = [id];
+  const [row] = await q<OppRow>(`${OPP_SELECT} WHERE o.id = $1 AND ${visible(ctx, "opportunity", "o", params)}`, params);
   if (!row) throw new UserError("Opportunity not found", 404);
   return row;
 }
 
 export async function get(ctx: Ctx, id: string): Promise<Opportunity> {
-  return oppRow(ctx, await load(id));
+  return oppRow(ctx, await load(ctx, id));
 }
 
 export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Opportunity> {
-  const v = await fields(b);
+  const v = await fields(ctx, b);
   const owner = await ownerFor(ctx, b.owner, null);
   const [row] = await q<{ id: string }>(
     `INSERT INTO opportunities (account_id, name, amount, stage, close_date, probability, owner, created_by, updated_by)
@@ -89,9 +92,9 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Oppo
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Opportunity> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
-  const v = await fields(merged(
+  const v = await fields(ctx, merged(
     { accountId: cur.account_id, name: cur.name, amount: cur.amount, stage: cur.stage, closeDate: cur.close_day, probability: cur.probability as unknown },
     b,
   ));
@@ -107,14 +110,14 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
 /** A move on the board. Like Orbit, it resets the probability to the new stage's default. */
 export async function moveStage(ctx: Ctx, id: string, stage: unknown): Promise<Opportunity> {
   const s = oneOf(stage, STAGES, "prospecting", "stage");
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
   await q("UPDATE opportunities SET stage=$2, probability=$3, updated_by=$4, updated_at=now() WHERE id = $1", [id, s, STAGE_PROBABILITY[s], ctx.email]);
   return get(ctx, id);
 }
 
 export async function remove(ctx: Ctx, id: string): Promise<void> {
-  assertCanEdit(ctx, await load(id));
+  assertCanEdit(ctx, await load(ctx, id));
   await tx(async (tq) => {
     await keepHeld(tq, ctx.email, "activity", "t.related_type = 'opportunity' AND t.related_id = $1", [id]);
     await keepHeld(tq, ctx.email, "opportunity", "t.id = $1", [id]);
@@ -123,11 +126,17 @@ export async function remove(ctx: Ctx, id: string): Promise<void> {
   });
 }
 
-/** Everyone's pipeline, or one owner's. */
-export async function summary(owner?: string): Promise<PipelineSummary> {
+/** The pipeline this person can see, or just one owner's part of it. */
+export async function summary(ctx: Ctx, owner?: string): Promise<PipelineSummary> {
+  const params: unknown[] = [];
+  const where = [visible(ctx, "opportunity", "o", params)];
+  if (owner) {
+    params.push(owner);
+    where.push(`o.owner = $${params.length}`);
+  }
   const rows = await q<{ stage: Stage; amount: string | null; probability: number | null }>(
-    `SELECT stage, amount, probability FROM opportunities ${owner ? "WHERE owner = $1" : ""}`,
-    owner ? [owner] : [],
+    `SELECT o.stage, o.amount, o.probability FROM opportunities o WHERE ${where.join(" AND ")}`,
+    params,
   );
   return computePipelineSummary(rows);
 }
