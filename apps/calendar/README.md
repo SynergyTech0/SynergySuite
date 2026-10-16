@@ -24,7 +24,7 @@ The tables are created on first start. Add `?as=other@example.com` to the URL to
 
 ## API
 
-Signed-in routes are under `/api`: `GET/POST /api/events`, `PATCH/DELETE /api/events/:id` and `GET /api/freebusy?email=`. Machine consumers such as a booking page use `/api/svc/freebusy` and `POST /api/svc/events` with `Authorization: Bearer $CAL_SVC_TOKEN`; the gateway lets `/api/svc/` through without a sign-in.
+Signed-in routes are under `/api`: `GET/POST /api/events`, `PATCH/DELETE /api/events/:id` and `GET /api/freebusy?email=`. Machine consumers such as Bookings use `/api/svc/freebusy`, `POST /api/svc/events`, and `PATCH`/`DELETE /api/svc/events/:id` with `Authorization: Bearer $CAL_SVC_TOKEN`. A service may move or remove only events it added: the request names the organizer (`ownerEmail`) and the `source` the event was added with; the gateway lets `/api/svc/` through without a sign-in.
 
 ## Settings
 

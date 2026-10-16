@@ -287,6 +287,20 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+bookings.{$SUITE_DOMAIN} {
+	# Customers book, and open their own appointment's link, without a suite account: the
+	# booking pages, their API and the build assets they load. Everything else is for staff.
+	@public path /book/* /booking/* /api/public/* /_next/* /favicon.ico /icon.png /apple-icon.png /app-icon.svg
+	handle @public {
+		import maybe_signed_in
+		import to_app bookings:3150
+	}
+	handle {
+		import signed_in
+		import to_app bookings:3150
+	}
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.

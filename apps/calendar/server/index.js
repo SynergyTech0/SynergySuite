@@ -187,6 +187,44 @@ async function main() {
       [...vals, String(b.source || 'api').slice(0, 20)]);
     res.json({ id: rows[0].id });
   }));
+  // A service may move or remove only the events it added, on the organizer's calendar it names
+  // (Bookings rescheduling or cancelling an appointment). Held organizers keep what is replaced.
+  const svcEvent = (b) => ({
+    id: Number(b.id),
+    owner: String(b.ownerEmail || '').toLowerCase(),
+    source: String(b.source || 'api').slice(0, 20),
+  });
+  app.patch('/api/svc/events/:id', svcAuth, wrap(async (req, res) => {
+    const b = req.body || {};
+    const { id, owner, source } = svcEvent({ ...b, id: req.params.id });
+    if (!owner.includes('@') || !Number.isSafeInteger(id)) return res.status(400).json({ error: 'ownerEmail and a numeric id required' });
+    const s = b.startAt != null ? new Date(b.startAt) : null;
+    const e = b.endAt != null ? new Date(b.endAt) : null;
+    if ((s && isNaN(s)) || (e && isNaN(e))) return res.status(400).json({ error: 'startAt and endAt must be valid dates' });
+    const cur = await q('SELECT start_at, end_at FROM events WHERE id = $1 AND owner_email = $2 AND source = $3 AND held_deleted_at IS NULL',
+      [id, owner, source]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'not found' });
+    if (!((s || cur.rows[0].start_at) < (e || cur.rows[0].end_at))) return res.status(400).json({ error: 'startAt must be before endAt' });
+    await compliance.keepVersion(owner, id);
+    await q(
+      `UPDATE events SET start_at = COALESCE($3, start_at), end_at = COALESCE($4, end_at),
+         title = COALESCE($5, title), description = COALESCE($6, description), location = COALESCE($7, location)
+       WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL`,
+      [id, owner, s, e,
+       b.title != null ? String(b.title).slice(0, 300) : null,
+       b.description != null ? String(b.description).slice(0, 2000) : null,
+       b.location != null ? String(b.location).slice(0, 300) : null]);
+    res.json({ ok: true });
+  }));
+  app.delete('/api/svc/events/:id', svcAuth, wrap(async (req, res) => {
+    const { id, owner, source } = svcEvent({ ...req.query, id: req.params.id });
+    if (!owner.includes('@') || !Number.isSafeInteger(id)) return res.status(400).json({ error: 'ownerEmail and a numeric id required' });
+    const own = await q('SELECT 1 FROM events WHERE id = $1 AND owner_email = $2 AND source = $3 AND held_deleted_at IS NULL',
+      [id, owner, source]);
+    if (!own.rows.length) return res.status(404).json({ error: 'not found' });
+    await compliance.deleteEvents(owner, [id]);
+    res.json({ ok: true });
+  }));
 
   app.use('/api', requireUser());
   app.use('/api', router);
