@@ -1,0 +1,23 @@
+{
+  "name": "@synergy/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "license": "AGPL-3.0-only",
+  "description": "Synergy for Windows, macOS and Linux: the suite in its own window.",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:web": "tsc --noEmit && vite build",
+    "icons": "tauri icon ../../packages/shell/assets/synergy-mark.png",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0",
+    "typescript": "^5.6.3",
+    "vite": "^7.1.0"
+  }
+}

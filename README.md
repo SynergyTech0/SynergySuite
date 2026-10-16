@@ -35,6 +35,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Portal add-on (`addons/portal`) | (customer portal) | yes | early | Client records with private share links |
 | Sign add-on (`addons/sign`) | (DocuSign-style) | no | standalone | E-signature with multi-party signing and templates; has its own sign-in |
 | Campaigns add-on (`addons/campaigns`) | (Mailchimp-style) | no | prototype | Audiences, email builder, campaigns; sending relies on a separate mailer that is not in this repository |
+| Desktop app (`clients/desktop`) | Outlook and Teams desktop apps | installers from CI | early | Windows, macOS and Linux app that opens your suite's apps in a native window: launcher, app menu with shortcuts, outside links in the browser, downloads to the Downloads folder |
 | Android UI (`mobile/synergy-ui`) | | no | prototype | Kotlin UI component library; no app yet |
 
 ## Screenshots
@@ -96,6 +97,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `addons/campaigns` | (Mailchimp-style) | Next.js 15 |
 | `addons/portal` | customer portal | Express + React/Vite |
 | `addons/people` | HR records and PTO | Express + React/Vite |
+| `clients/desktop` | Microsoft 365 desktop apps | Tauri 2 (Rust) + TypeScript launcher page |
 | `mobile/synergy-ui` | Android UI library | Kotlin |
 
 ## Shared packages
