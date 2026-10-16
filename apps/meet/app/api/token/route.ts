@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AccessToken } from "livekit-server-sdk";
 import crypto from "crypto";
 import { getServerSession } from "@/lib/session";
+import { livekitWsUrl } from "@/lib/livekit";
 
 /**
  * Mint short-lived TURN credentials for our coturn server (use-auth-secret / ephemeral scheme).
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
   const token = await at.toJwt();
   return NextResponse.json({
     token,
-    url: process.env.NEXT_PUBLIC_LIVEKIT_URL,
+    url: livekitWsUrl(),
     identity,
     isStaff,
     iceServers: turnIceServers(identity),

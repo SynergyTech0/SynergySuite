@@ -31,7 +31,8 @@ How the local domain works, and the trade-offs:
 - **Certificates**: with `local_certs`, Caddy signs certificates with its own CA instead of asking Let's Encrypt (which cannot reach your machine). Until you trust `deploy/local-ca.crt`, the browser shows a certificate warning on each subdomain. The CA's key stays in the `caddy-data` volume.
 - **Containers**: nothing inside the compose network needs to resolve the suite domain or trust Caddy's CA. The gateway (oauth2-proxy) sends the browser to `https://auth.<domain>` to sign in, but redeems codes and fetches signing keys from `http://auth:3500` directly, and checks ID tokens against the public issuer. The same holds on a server, where it also avoids hairpin NAT.
 - **Ports**: Caddy must be on 443 (and 80) of `127.0.0.1`, because sign-in redirects go to `https://<host>/` without a port. Stop whatever else holds 443 first.
-- **Not covered locally**: meetings need the LiveKit media server from `apps/meet/deploy`, and mail stays on this machine (nothing can deliver to `suite.lvh.me`).
+- **Meetings**: the `livekit` media server starts with Meet and Phone (`deploy/quickstart.sh meet` adds it). The script binds its media ports to `127.0.0.1` (7881/tcp, 7882/udp) and tells browsers to send media there, so calls work between browsers on this machine. To join from other machines on your network, see Meet and Phone media below.
+- **Not covered locally**: mail stays on this machine (nothing can deliver to `suite.lvh.me`).
 
 Stop with `docker compose -f deploy/compose.yml --env-file deploy/.env down`; add `-v` and delete `deploy/.env` to start over.
 
@@ -78,6 +79,22 @@ These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), publi
 - **Upgrading the engine.** `FLOW_ENGINE_VERSION` pins the Activepieces image (default `0.92.3`, the version Flow is tested with). Its own database migrates on start.
 - Polling triggers check every `FLOW_POLL_MINUTES` (default 5).
 - Known gaps: a person removed from the suite keeps their running flows until an admin turns them off in the designer; flows are not yet covered by Admin center holds and searches.
+
+## Meet and Phone media
+
+Meet's video rooms and Phone's calls run on the `livekit` service: the [LiveKit](https://github.com/livekit/livekit) media server (Apache-2.0, headless, so people only ever see Meet and Phone). The apps sign join tokens with `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (quickstart generates them; on a server pick a short key and `openssl rand -hex 32` as the secret) and manage rooms over the internal network (`http://livekit:7880`).
+
+```
+browser ─► caddy  wss://meet.<domain>/rtc ─► livekit:7880   (signalling, through the gateway)
+browser ─────────────── 7882/udp or 7881/tcp ─► livekit       (audio and video, straight to it)
+```
+
+- **Ports**: open 7881/tcp and 7882/udp on the host. Every call shares the one UDP port; browsers whose network blocks UDP fall back to TCP 7881. `LIVEKIT_TCP_PUBLISH` and `LIVEKIT_UDP_PUBLISH` change what is published (e.g. `127.0.0.1:7881`); the port numbers inside must stay the same, since LiveKit announces them to browsers.
+- **The address browsers send media to**: on a server, leave `LIVEKIT_NODE_IP` empty and LiveKit finds its public IP over STUN. If that fails (no outbound STUN: the `livekit` log then says `could not resolve external IP` and it keeps restarting; or a server behind 1:1 NAT), set `LIVEKIT_NODE_IP` to the public IP and `LIVEKIT_USE_EXTERNAL_IP=false`. Locally, quickstart sets `127.0.0.1`; for other machines on your LAN, set the machine's LAN IP, publish the two ports on it (`LIVEKIT_TCP_PUBLISH=7881`, `LIVEKIT_UDP_PUBLISH=7882`) and run `up -d livekit` again (they also need the suite's names to resolve to that IP and to trust `local-ca.crt`).
+- **TURN**: there is no TURN relay in the compose file. TCP 7881 covers networks that block UDP. For networks that only allow web traffic, run coturn (BSD) on a different public IP with `use-auth-secret` and set `TURN_HOST` and `TURN_STATIC_SECRET`; Meet and Phone then hand browsers short-lived TURN logins.
+- **Phone**: LiveKit sends its webhooks (who joined and left) to Phone at `http://phone:3440/api/livekit/webhook` (`LIVEKIT_WEBHOOK_URL`). Calls between colleagues need nothing more. Real phone numbers need LiveKit SIP: set `COMPOSE_PROFILES=sip` and `LIVEKIT_REDIS_ADDRESS=sip-valkey:6379` in `.env`, run `up -d` again, and open 5060/udp+tcp and 10000-10099/udp to your SIP provider (see `apps/phone/README.md`).
+- **Recording** needs LiveKit Egress and Redis, which are not in this file yet (see `apps/meet/deploy`).
+- **Your own media server**: to keep LiveKit on its own host (`apps/meet/deploy`), point `LIVEKIT_UPSTREAM` at it (host:port), use its keys, and leave the `livekit` service out (`up -d --scale livekit=0`). An existing host-network LiveKit on the same machine holds 7881, so stop it before starting this one.
 
 ## Mail
 

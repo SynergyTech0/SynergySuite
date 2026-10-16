@@ -288,6 +288,72 @@ services:
       DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
       DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
+  # Meet's and Phone's media server: LiveKit (Apache-2.0, headless; people only ever see Meet and
+  # Phone). Browsers reach its signalling through the gateway (wss://meet.SUITE_DOMAIN/rtc, see
+  # LIVEKIT_UPSTREAM in the Caddyfile) and send media straight to it:
+  #   7881/tcp  media over TCP, for networks that block UDP (LIVEKIT_TCP_PUBLISH)
+  #   7882/udp  media over UDP, every call on this one port (LIVEKIT_UDP_PUBLISH)
+  # It tells browsers to send media to LIVEKIT_NODE_IP, or with that empty, to the public IP it
+  # finds over STUN. Keys: LIVEKIT_API_KEY / LIVEKIT_API_SECRET (quickstart generates them).
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    ports:
+      - "${LIVEKIT_TCP_PUBLISH:-7881}:7881/tcp"
+      - "${LIVEKIT_UDP_PUBLISH:-7882}:7882/udp"
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+      NODE_IP: ${LIVEKIT_NODE_IP:-}
+      # Tells Phone who joined and left each call. With the sip profile, LIVEKIT_REDIS_ADDRESS=sip-valkey:6379
+      # links it to the SIP service.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+        webhook:
+          api_key: "${LIVEKIT_API_KEY:-}"
+          urls: ["${LIVEKIT_WEBHOOK_URL:-http://phone:3440/api/livekit/webhook}"]
+        redis:
+          address: "${LIVEKIT_REDIS_ADDRESS:-}"
+
+  # Phone's link to real phone numbers (optional): LiveKit's SIP service (Apache-2.0, headless) and
+  # the Valkey (BSD) store it shares with the media server. Start them with the sip profile:
+  #   COMPOSE_PROFILES=sip and LIVEKIT_REDIS_ADDRESS=sip-valkey:6379 in .env, then up -d
+  #   5060/udp+tcp     SIP signalling   -> open to your SIP trunk provider or PBX (SIP_PUBLISH)
+  #   10000-10099/udp  call audio (RTP) -> open to the same (100 ports: about 100 calls at once)
+  sip-valkey:
+    image: valkey/valkey:8.1-alpine
+    profiles: [sip]
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1"]
+    volumes:
+      - sip-valkey-data:/data
+
+  sip:
+    image: livekit/sip:v1.19
+    profiles: [sip]
+    restart: unless-stopped
+    depends_on: [sip-valkey, livekit]
+    ports:
+      - "${SIP_PUBLISH:-5060}:5060/udp"
+      - "${SIP_PUBLISH:-5060}:5060/tcp"
+      - "10000-10099:10000-10099/udp"
+    environment:
+      SIP_CONFIG_BODY: |
+        api_key: "${LIVEKIT_API_KEY:-}"
+        api_secret: "${LIVEKIT_API_SECRET:-}"
+        ws_url: ws://livekit:7880
+        redis:
+          address: sip-valkey:6379
+        sip_port: 5060
+        rtp_port: 10000-10099
+        use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+        nat_1_to_1_ip: "${LIVEKIT_NODE_IP:-}"
+        log_level: info
+
   # Word, Excel and PowerPoint equivalents, plus their real-time co-editing server.
   meet:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-meet:${SYNERGY_IMAGE_TAG:-latest}
@@ -301,10 +367,10 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/meet
       NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
-      # The LiveKit media server itself runs from apps/meet/deploy; these must match its keys.
+      # The media server (the livekit service above, or your own: LIVEKIT_UPSTREAM) and its keys.
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
-      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_URL: http://${LIVEKIT_UPSTREAM:-livekit:7880}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
       # Hosts call phone numbers into meetings through Phone.
@@ -312,7 +378,7 @@ services:
 
   # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
   # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through
-  # LiveKit's SIP service and the SIP trunks set up in Phone admin (see apps/phone/deploy).
+  # LiveKit's SIP service (the sip profile above) and the SIP trunks set up in Phone admin.
   phone:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-phone:${SYNERGY_IMAGE_TAG:-latest}
     <<: *next
@@ -323,7 +389,7 @@ services:
       NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
-      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_URL: http://${LIVEKIT_UPSTREAM:-livekit:7880}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
       PHONE_ADMIN_EMAILS: ${PHONE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
@@ -1107,6 +1173,7 @@ volumes:
   flow-pgdata: {}
   stalwart-data: {}
   stalwart-plan: {}
+  sip-valkey-data: {}
 
 networks:
   default: {}
