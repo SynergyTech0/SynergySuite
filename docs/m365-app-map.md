@@ -21,6 +21,7 @@
 | Loop | Shared live components | none | **Gap** |
 | Bookings | Public appointment booking | synergymeet `schedule` (partial) | Partial |
 | Viva Engage / M365 Groups | Communities, group mailboxes | workspace `groups` | Prototype |
+| Visio | Flowcharts, org charts, network and floor plans | `apps/diagrams` (draw.io editor, .vsdx import; no .vsdx export) | Have |
 | Stream / Clipchamp | Video library, recordings | none (meet recordings only) | **Gap** |
 | Power Automate | Workflows between apps | none (n8n runs separately on your PC) | **Gap** |
 | Power Apps | Low-code business apps | `apps/builder` (Synergy Builder, on Base data) | Have |

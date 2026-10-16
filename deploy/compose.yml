@@ -473,6 +473,25 @@ services:
     volumes:
       - cad-files:/data/drawings
 
+  # Visio equivalent: flowcharts, org charts, network and software diagrams in draw.io's editor,
+  # with Visio (.vsdx) import, sharing and version history. Its AI drafting uses the suite's AI
+  # setting unless the DIAGRAMS_AI_* settings point it at another model.
+  diagrams:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-diagrams:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/diagrams.Dockerfile
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/diagrams
+      DIAGRAMS_MAX_MB: ${DIAGRAMS_MAX_MB:-}
+      DIAGRAMS_VERSIONS: ${DIAGRAMS_VERSIONS:-}
+      DIAGRAMS_AI_PROVIDER: ${DIAGRAMS_AI_PROVIDER:-}
+      DIAGRAMS_AI_BASE_URL: ${DIAGRAMS_AI_BASE_URL:-}
+      DIAGRAMS_AI_API_KEY: ${DIAGRAMS_AI_API_KEY:-}
+      DIAGRAMS_AI_MODEL: ${DIAGRAMS_AI_MODEL:-}
+
   # OneDrive equivalent: files, folders, sharing, view links, shared libraries and version history.
   # File contents live in the drive-files volume; back it up together with Postgres.
   drive:

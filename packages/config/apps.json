@@ -24,6 +24,7 @@
   { "id": "engage",    "name": "Engage",    "m365": "Viva Engage, Viva Connections", "port": 3740, "icon": "megaphone", "dir": "apps/engage", "core": true },
   { "id": "builder",   "name": "Builder",   "m365": "Power Apps",           "port": 3745, "icon": "apps",     "dir": "apps/builder",   "core": true },
   { "id": "sites",     "name": "Sites",     "m365": "SharePoint",           "port": 3170, "icon": "globe",    "dir": "apps/sites",     "core": true },
+  { "id": "diagrams",  "name": "Diagrams",  "m365": "Visio",                "port": 3790, "icon": "flow",     "dir": "apps/diagrams",  "core": true },
   { "id": "whiteboard", "name": "Whiteboard", "m365": "Microsoft Whiteboard", "port": 3750, "icon": "easel", "dir": "apps/whiteboard", "core": true },
   { "id": "notes",     "name": "Notes",     "m365": "OneNote",              "port": 3135, "icon": "note",     "dir": "apps/notes",     "core": true },
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },
