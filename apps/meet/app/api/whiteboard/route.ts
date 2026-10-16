@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { getServerSession } from "@/lib/session";
 import { WhiteboardError, meetingBoard, staffIn } from "@/lib/whiteboard";
+import { livekitApiUrl } from "@/lib/livekit";
 
 export const dynamic = "force-dynamic";
 
-const LIVEKIT_URL = process.env.LIVEKIT_API_URL || `https://meet.${process.env.SUITE_DOMAIN}`;
+const LIVEKIT_URL = livekitApiUrl();
 
 /**
  * Opens the meeting's whiteboard: { room } -> { url }. Only someone signed in to the suite who is

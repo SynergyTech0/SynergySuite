@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { getServerSession } from "@/lib/session";
+import { livekitApiUrl } from "@/lib/livekit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  * We reach LiveKit over its public /twirp path (nginx routes it to :7880) so this works whether the
  * app runs in the same container network as the media engine or not.
  */
-const LIVEKIT_URL = process.env.LIVEKIT_API_URL || `https://meet.${process.env.SUITE_DOMAIN}`;
+const LIVEKIT_URL = livekitApiUrl();
 
 export async function POST(req: Request) {
   const session = await getServerSession();

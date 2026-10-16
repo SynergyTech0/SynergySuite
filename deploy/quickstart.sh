@@ -85,6 +85,16 @@ fill FLOW_SECRET "$(hex 32)"
 fill FLOW_DB_PASSWORD "$(hex 24)"
 fill FLOW_ENCRYPTION_KEY "$(hex 16)"
 fill FLOW_JWT_SECRET "$(hex 32)"
+# Meet and Phone's media server (the livekit service).
+fill LIVEKIT_API_KEY "API$(hex 6)"
+fill LIVEKIT_API_SECRET "$(hex 32)"
+if [ "$(getvar CADDY_GLOBAL_OPTIONS)" = local_certs ]; then
+  # Local mode: browsers on this machine send call media to 127.0.0.1:7881/tcp and 7882/udp.
+  fill LIVEKIT_NODE_IP 127.0.0.1
+  fill LIVEKIT_USE_EXTERNAL_IP false
+  fill LIVEKIT_TCP_PUBLISH 127.0.0.1:7881
+  fill LIVEKIT_UDP_PUBLISH 127.0.0.1:7882
+fi
 
 domain=$(getvar SUITE_DOMAIN)
 [ -n "$domain" ] || die "SUITE_DOMAIN is empty in $ENV_FILE."
@@ -114,7 +124,13 @@ if [ "$addr" != "127.0.0.1" ]; then
 fi
 
 services=()
-if [ $# -gt 0 ]; then services=("${CORE[@]}" "$@"); fi
+if [ $# -gt 0 ]; then
+  services=("${CORE[@]}" "$@")
+  # Meet and Phone need the media server.
+  for s in "$@"; do
+    case "$s" in meet|phone) services+=(livekit); break ;; esac
+  done
+fi
 
 # The suite's images are built by .github/workflows/images.yml and published to the GitHub
 # Container Registry, so by default they are downloaded, not built here. Anything that can't be
@@ -219,7 +235,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|meet|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""
