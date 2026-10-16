@@ -32,7 +32,7 @@ The tables are created on first start. Add `?as=other@example.com` to the URL to
 | `PORT` | Port to listen on (default 3170). |
 | `PROXY_SHARED_SECRET` | Shared secret the gateway sends, so the app can't be reached around it. |
 | `SUITE_DOMAIN` | The suite's domain. Form blocks embed `https://forms.<domain>/f/<slug>`; without it they use the local forms port. |
-| `SITES_BOOKING_URL` | Base URL of a booking app. Booking blocks embed `<url>/book/<owner>/<slug>`, and are left out when this is unset. |
+| `SITES_BOOKING_URL` | Base URL of the Bookings app (compose sets `https://bookings.<domain>`). A Booking block embeds `<url>/book/<page>` or `<url>/book/<page>/<service>`, using the block's owner and slug fields, and is left out when this is unset. |
 | `SITES_LIVECHAT_URL` | Base URL of a live chat widget server. Sites with a live chat key load `<url>/widget.js`; nothing loads when this is unset. |
 
 ## Production
