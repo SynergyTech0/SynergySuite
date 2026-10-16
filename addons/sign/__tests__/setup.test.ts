@@ -72,14 +72,8 @@ describe('Test Environment Setup', () => {
 })
 
 describe('Environment Variables', () => {
-  it('should have NEXTAUTH_SECRET defined', () => {
-    expect(process.env.NEXTAUTH_SECRET).toBeDefined()
-    expect(process.env.NEXTAUTH_SECRET).toBe('test-secret-key')
-  })
-
-  it('should have NEXTAUTH_URL defined', () => {
-    expect(process.env.NEXTAUTH_URL).toBeDefined()
-    expect(process.env.NEXTAUTH_URL).toBe('http://localhost:3000')
+  it('should have SIGN_PUBLIC_URL defined', () => {
+    expect(process.env.SIGN_PUBLIC_URL).toBe('http://localhost:3300')
   })
 
   it('should have DATABASE_URL defined', () => {

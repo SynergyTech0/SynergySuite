@@ -432,6 +432,21 @@ bookings.{$SUITE_DOMAIN} {
 	}
 }
 
+sign.{$SUITE_DOMAIN} {
+	# Signers outside the organization sign from their emailed link without a suite account: the
+	# signing page, its token-checked API, the short-lived signed file links its PDF viewer loads,
+	# and the build assets. Everything else (sending, templates, the dashboard) needs a sign-in.
+	@signer path /sign/* /api/signers/access* /api/signers/secure-url* /api/signers/verify* /api/signers/fields* /api/signers/complete* /api/files/* /_next/* /favicon.png /pdf.worker.min.mjs /pdf.worker.min.js /pdfjs/*
+	handle @signer {
+		import maybe_signed_in
+		import to_app sign:3300
+	}
+	handle {
+		import signed_in
+		import to_app sign:3300
+	}
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.

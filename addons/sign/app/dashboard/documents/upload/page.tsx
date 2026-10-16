@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useRef, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/session-client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 

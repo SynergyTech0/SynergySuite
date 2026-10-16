@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/session-client";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Loader2 } from "lucide-react";
@@ -76,7 +76,7 @@ export default function UpgradeSuccess() {
 				}
 
 				// Ask NextAuth to refresh JWT/session from DB
-				await update?.({});
+				await update?.();
 
 				// Refresh the router to update any server components using the session
 				router.refresh();

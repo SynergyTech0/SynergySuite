@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getFileBuffer, getContentType } from "@/lib/storage";
@@ -35,13 +35,15 @@ export async function GET(
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    // Derive filename from storage path
-    const fileName = document.cloudStoragePath.split('/').pop() || `document-${document.id}`;
+    // Once everyone has signed, the signed PDF (signatures, certificate page); ?original=1 for the upload.
+    const wantOriginal = new URL(request.url).searchParams.get('original') === '1';
+    const storagePath = (!wantOriginal && document.signedDocumentPath) || document.cloudStoragePath;
+    const fileName = storagePath.split('/').pop() || `document-${document.id}`;
     const contentType = getContentType(fileName);
 
     try {
       // Fetch file buffer based on provider
-      const fileBuffer = await getFileBuffer(document.cloudStoragePath, document.cloudProvider);
+      const fileBuffer = await getFileBuffer(storagePath, document.cloudProvider);
 
       // Return binary response with download headers
       const bytes = new Uint8Array(fileBuffer); // Convert Buffer to acceptable BodyInit

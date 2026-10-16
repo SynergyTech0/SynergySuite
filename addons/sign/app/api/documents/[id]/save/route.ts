@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export async function PATCH(
   request: NextRequest,
@@ -7,6 +8,8 @@ export async function PATCH(
 ) {
   try {
     const documentId = ((await context.params).id);
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
     const body = await request.json();
 
     const { title, aiSummary, suggestedFields } = body;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -24,7 +24,7 @@ export async function GET() {
     // Use weekStart for ordering since month field was removed
     const earnings = await prisma.affiliateEarning.findMany({
       where: { affiliateId: user.id },
-      orderBy: { weekStart: "desc" },
+      orderBy: { monthStart: "desc" },
     });
 
     // Get referred user details for each earning
@@ -36,8 +36,8 @@ export async function GET() {
 
         return {
           id: earning.id,
-          weekStart: earning.weekStart.toISOString(),
-          weekEnd: earning.weekEnd.toISOString(),
+          weekStart: earning.monthStart.toISOString(),
+          weekEnd: earning.monthEnd.toISOString(),
           amount: earning.amount,
           isPaid: earning.isPaid,
           referredUserName:

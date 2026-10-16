@@ -42,4 +42,4 @@
 
 ## Synergy apps that are not part of M365
 
-synergysign (DocuSign-style), synergymail (Mailchimp-style), synergyportal (customer portal), synergypeople (HR / PTO), synergy-ui (Android UI library). These can stay as optional add-ons rather than core suite apps.
+synergysign (DocuSign-style; now `addons/sign`, on the suite sign-in and in the Docker deploy, with outside signers signing from emailed links), synergymail (Mailchimp-style), synergyportal (customer portal), synergypeople (HR / PTO), synergy-ui (Android UI library). These can stay as optional add-ons rather than core suite apps.

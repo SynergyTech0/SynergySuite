@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { CloudProvider } from "@prisma/client";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 interface DocumentDetails {
   id: string;
@@ -48,6 +49,8 @@ export async function GET(
   try {
     // ✅ Fix: properly destructure params
     const { id } = await context.params;
+    const __owner = await documentForOwner(id);
+    if (isDenied(__owner)) return __owner.denied;
 
     const document = await prisma.document.findUnique({
       where: { id },
@@ -113,7 +116,7 @@ export async function GET(
       updatedAt: document.updatedAt.toISOString(),
       deadline: document.deadline ? document.deadline.toISOString() : null,
       cloudStoragePath: "", // Use /secure-url instead
-      cloudProvider: CloudProvider.NONE, // Internal implementation
+      cloudProvider: null, // Internal implementation
       sender: {
         id: document.sender.id,
         name: document.sender.name ?? "",

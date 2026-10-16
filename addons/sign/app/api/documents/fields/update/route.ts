@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -25,10 +25,10 @@ export async function POST(req: NextRequest) {
     // 🔐 3. Ensure the document belongs to the user
     const doc = await prisma.document.findUnique({
       where: { id: documentId },
-      select: { id: true, userId: true },
+      select: { id: true, senderId: true },
     });
 
-    if (!doc || doc.userId !== userId) {
+    if (!doc || doc.senderId !== userId) {
       return NextResponse.json(
         { error: "Document not found or unauthorized" },
         { status: 403 }

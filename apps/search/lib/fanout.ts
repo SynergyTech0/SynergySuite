@@ -10,7 +10,7 @@ import type { Viewer } from "./api";
  */
 
 /** Apps that answer POST /api/search, in the order their results win a tie. */
-export const SEARCHABLE = ["mail", "drive", "chat", "calendar", "notes", "forms", "contacts", "todo", "bookings", "crm", "desk", "commerce", "ops", "diagrams", "office", "planner", "sites", "base", "engage", "insights", "builder", "devices", "hr", "stream", "whiteboard", "projects", "phone", "loop", "flow"] as const;
+export const SEARCHABLE = ["mail", "drive", "chat", "calendar", "notes", "forms", "contacts", "todo", "bookings", "crm", "desk", "commerce", "ops", "diagrams", "office", "planner", "sites", "base", "engage", "insights", "builder", "devices", "hr", "stream", "whiteboard", "projects", "phone", "loop", "flow", "sign"] as const;
 
 export type AppState = "ok" | "not-supported" | "unavailable" | "error";
 

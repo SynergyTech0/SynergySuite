@@ -30,7 +30,7 @@ import {
 interface Enterprise {
   id: string;
   name: string;
-  domain: string;
+  domain: string | null;
   contactEmail: string;
   customPricing: number | null;
   notes: string | null;
@@ -50,7 +50,7 @@ export default function EnterpriseList({ initialEnterprises }: { initialEnterpri
 
   const filteredEnterprises = enterprises.filter((enterprise) =>
     enterprise.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    enterprise.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (enterprise.domain ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
     enterprise.contactEmail.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

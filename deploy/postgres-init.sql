@@ -34,3 +34,4 @@ CREATE DATABASE loop;
 -- Metabase's own settings, questions and dashboards (Insights).
 CREATE DATABASE metabase;
 CREATE DATABASE whiteboard;
+CREATE DATABASE sign;

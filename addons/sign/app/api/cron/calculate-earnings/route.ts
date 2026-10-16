@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
   try {
     const { adminSecret } = await request.json();
 
-    if (adminSecret !== process.env.ADMIN_SECRET) {
+    if (!process.env.ADMIN_SECRET || adminSecret !== process.env.ADMIN_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

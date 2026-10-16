@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { deleteFile } from "@/lib/storage";
+import { isDenied, templateFor } from "@/lib/access";
 
 export async function DELETE(
   request: NextRequest,
@@ -11,6 +12,8 @@ export async function DELETE(
     if (!id) {
       return NextResponse.json({ error: "Missing template id" }, { status: 400 });
     }
+    const access = await templateFor(id);
+    if (isDenied(access)) return access.denied;
 
     // ✅ Fetch template metadata before deletion
     const template = await prisma.template.findUnique({
@@ -22,11 +25,17 @@ export async function DELETE(
       return NextResponse.json({ error: "Template not found" }, { status: 404 });
     }
 
-    // ✅ Delete the file from cloud/local storage
-    try {
-      await deleteFile(template.cloudStoragePath, template.cloudProvider);
-    } catch (err) {
-      console.warn("⚠️ File delete warning:", err);
+    // Copies share the stored file, and documents made from the template may point at it too:
+    // only the last one out removes it.
+    const sharing =
+      (await prisma.template.count({ where: { cloudStoragePath: template.cloudStoragePath, id: { not: id } } })) +
+      (await prisma.document.count({ where: { cloudStoragePath: template.cloudStoragePath } }));
+    if (!sharing) {
+      try {
+        await deleteFile(template.cloudStoragePath, template.cloudProvider);
+      } catch (err) {
+        console.warn("⚠️ File delete warning:", err);
+      }
     }
 
     // ✅ Delete the template record from DB

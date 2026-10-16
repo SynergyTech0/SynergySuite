@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { documentForOwner, isDenied } from "@/lib/access";
 
 // ✅ Update a single document field (e.g. assign signer, change label, etc.)
 // Automatically records corrections when OCR-detected fields are adjusted
@@ -11,6 +12,8 @@ export async function PATCH(
 ) {
   try {
     const { id: documentId, fieldId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
     const body = await req.json();
     const { assignedTo, assignedToId, label, fieldType, required, x, y, width, height, value } = body;
 
@@ -27,7 +30,7 @@ export async function PATCH(
       where: { id: fieldId },
     });
 
-    if (!existingField) {
+    if (!existingField || existingField.documentId !== documentId) {
       return NextResponse.json({ error: 'Field not found' }, { status: 404 });
     }
 
@@ -104,9 +107,10 @@ export async function DELETE(
   context: { params: Promise<{ id: string; fieldId: string }>}
 ) {
   try {
-    await prisma.documentField.delete({
-      where: { id: ((await context.params).fieldId) },
-    });
+    const { id: documentId, fieldId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
+    await prisma.documentField.deleteMany({ where: { id: fieldId, documentId } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

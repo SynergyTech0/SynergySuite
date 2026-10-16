@@ -10,7 +10,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
 import { prisma } from "./db";
+import { signFileQuery } from "./file-links";
 import { get } from "http";
+import { publicBase } from "@/lib/urls";
 
 //Proper way to do this in the future would be to have separate modules for each storage type
 // and then have this file orchestrate which one to use based on config.
@@ -26,7 +28,7 @@ const STORAGE_MODE = process.env.STORAGE_MODE || "hybrid"; // 'local', 's3', 'hy
 const LOCAL_STORAGE_PATH =
   process.env.LOCAL_STORAGE_PATH || "/var/www/ai_docusign_clone/uploads";
 const ENABLE_S3_BACKUP = process.env.ENABLE_S3_BACKUP !== "false"; // Default true for hybrid
-const SERVING_PATH = process.env.NEXTAUTH_URL || "http://localhost:3000";
+const SERVING_PATH = publicBase();
 
 // S3 configuration
 const s3Enabled =
@@ -38,6 +40,8 @@ let folderPrefix: string = "";
 if (s3Enabled && process.env.AWS_BUCKET_NAME) {
   s3Client = new S3Client({
     region: process.env.AWS_REGION,
+    // Any S3-compatible store (MinIO, Garage, Ceph…): its address, with path-style bucket URLs.
+    ...(process.env.AWS_ENDPOINT_URL ? { endpoint: process.env.AWS_ENDPOINT_URL, forcePathStyle: true } : {}),
     ...(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
       ? {
           credentials: {
@@ -242,9 +246,12 @@ export async function getFileDownloadUrl(
   expiresIn: number = 300,
 ): Promise<string> {
   switch (provider) {
-    case CloudProvider.LOCAL:
-      // For local storage, return the API route URL (because relative path works better with PDF.js)
-      return `/api/files/${storagePath}`;
+    case CloudProvider.LOCAL: {
+      // For local storage, return the API route URL (because relative path works better with PDF.js),
+      // signed so it also opens for a signer who has no account (lib/file-links).
+      const clean = storagePath.replace(/\\/g, "/").replace(/^\/+/, "");
+      return `/api/files/${clean}?${signFileQuery(clean, expiresIn)}`;
+    }
     case CloudProvider.AWS:
       // For S3, return a signed URL with custom expiry
       return await getS3SignedUrl(storagePath, expiresIn);

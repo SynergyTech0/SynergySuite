@@ -1,6 +1,6 @@
 // Retrieve all unsigned documents for the authenticated signer
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from '@/lib/db';
 

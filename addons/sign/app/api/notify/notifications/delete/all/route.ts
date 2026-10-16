@@ -1,7 +1,7 @@
 // API endpoint for deleting all notifications for a user
 
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { deleteAllNotifications } from "@/lib/notifications";
 

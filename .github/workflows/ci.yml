@@ -256,6 +256,30 @@ jobs:
           npx drizzle-kit migrate
           npx vitest run
 
+  # Sign keeps its own lockfile (Next.js 14 / React 18) and uses the suite packages through file: links.
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            addons/sign/package-lock.json
+      - run: npm ci --workspace packages/shell --workspace packages/search --workspace packages/identity --workspace packages/compliance --workspace packages/ai --include-workspace-root
+      - run: npm run build:packages
+      - name: Install Sign
+        working-directory: addons/sign
+        run: npm ci --legacy-peer-deps && npx prisma generate
+      - name: Typecheck Sign
+        working-directory: addons/sign
+        run: npm run typecheck
+      - name: Sign tests
+        working-directory: addons/sign
+        run: npx jest --ci
+
   books:
     runs-on: ubuntu-latest
     services:

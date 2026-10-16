@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { verify } from "jsonwebtoken";
 import crypto from "crypto";
 import { scrubInvisible } from "@/lib/ai/visible-text";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -65,16 +65,6 @@ export async function POST(request: NextRequest) {
     userId = session?.user?.id ?? null;
 
     // 2️⃣ Bearer token fallback
-    if (!userId) {
-      const header = request.headers.get("authorization");
-      if (header?.startsWith("Bearer ")) {
-        try {
-          const token = header.split(" ")[1];
-          const decoded: any = verify(token, process.env.NEXTAUTH_SECRET!);
-          userId = decoded.userId || decoded.id || null;
-        } catch {}
-      }
-    }
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -92,6 +82,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (documentId) {
+      const __owner = await documentForOwner(documentId);
+      if (isDenied(__owner)) return __owner.denied;
+    }
+
     let text = "";
 
     if (file) {
@@ -100,7 +95,7 @@ export async function POST(request: NextRequest) {
       text = (await visiblePdfText(buffer)).slice(0, 15000);
     } else {
       const doc = await prisma.document.findUnique({
-        where: { id: documentId },
+        where: { id: documentId! },
       });
 
       if (!doc) {
@@ -143,7 +138,7 @@ ${text}
     let updatedDoc = null;
     if (documentId) {
       updatedDoc = await prisma.document.update({
-        where: { id: documentId },
+        where: { id: documentId! },
         data: {
           aiFullAnalysis: resultText,
           aiSummary: resultText.slice(0, 500),

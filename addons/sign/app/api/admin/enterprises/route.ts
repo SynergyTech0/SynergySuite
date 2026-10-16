@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { stripe, STRIPE_PRICING, ENTERPRISE_PRICING } from '@/lib/stripe';
 import { generateInvitationToken } from '@/lib/invitation-tokens';
 import { sendEmail } from '@/lib/email';
 import { renderEnterpriseRequestApproved } from '@/lib/email-templates/enterprise-request-approved';
+import { publicBase } from "@/lib/urls";
 
 export async function POST(request: NextRequest) {
   try {
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      passwordSetupUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/enterprise/setup-password?token=${passwordSetupToken}`;
+      passwordSetupUrl = `${publicBase()}/dashboard`;
     } else {
       // User exists - proceed with linking and subscription creation
       
