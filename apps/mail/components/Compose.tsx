@@ -1,7 +1,7 @@
 "use client";
-import { Bold, Italic, Link as LinkIcon, List, ListOrdered, Paperclip, Send, ShieldAlert, Trash2, Underline, X } from "lucide-react";
+import { Bold, Italic, Link as LinkIcon, List, ListOrdered, Paperclip, Send, ShieldAlert, Sparkles, Trash2, Underline, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { bytes, htmlToText, type AccountSummary, type DlpStop, type Label } from "@/lib/client";
+import { bytes, escapeHtml, htmlToText, postJson, type AccountSummary, type DlpStop, type Label } from "@/lib/client";
 import { LabelChip } from "./LabelChip";
 import { RecipientInput } from "./RecipientInput";
 
@@ -17,9 +17,28 @@ export type Draft = {
   labelId?: string | null; // sensitivity label; undefined: the organization's default, null: none
 };
 
+/** The person's own part of the editor (above a quoted message's rule) and the quoted part, as text. */
+function parts(el: HTMLElement): { mine: Node[]; quote: HTMLElement | null } {
+  const quote = Array.from(el.children).find((c) => c.tagName === "HR") as HTMLElement | undefined;
+  const mine: Node[] = [];
+  for (const n of Array.from(el.childNodes)) {
+    if (n === quote) break;
+    mine.push(n);
+  }
+  return { mine, quote: quote ?? null };
+}
+
+function nodesText(nodes: Node[]): string {
+  const div = document.createElement("div");
+  nodes.forEach((n) => div.appendChild(n.cloneNode(true)));
+  return htmlToText(div.innerHTML);
+}
+
 export function Compose(props: {
   draft: Draft;
   accounts: AccountSummary[];
+  /** Shows "Draft with Copilot" when the suite has an AI model. */
+  aiOn?: boolean;
   labels: Label[];
   defaultLabelId: string | null;
   onClose: () => void;
@@ -34,6 +53,38 @@ export function Compose(props: {
   const [reason, setReason] = useState("");
   const body = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [assist, setAssist] = useState(false);
+  const [ask, setAsk] = useState("");
+  const [drafting, setDrafting] = useState(false);
+
+  /** Copilot writes, rewrites or shortens the person's part; the quoted message stays as it is. Nothing is sent. */
+  async function copilot(mode: "write" | "rewrite" | "shorten") {
+    const el = body.current;
+    if (!el) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      const { mine, quote } = parts(el);
+      const thread = quote ? nodesText(Array.from(el.childNodes).slice(Array.from(el.childNodes).indexOf(quote))) : "";
+      const { text } = await postJson<{ text: string }>("/api/draft", {
+        mode, instructions: ask, mine: nodesText(mine), thread, subject: d.subject, to: d.to,
+      });
+      const paras = text.split(/\n{2,}/).map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("") || "<p><br></p>";
+      mine.forEach((n) => n.parentNode?.removeChild(n));
+      const holder = document.createElement("div");
+      holder.innerHTML = paras;
+      const frag = document.createDocumentFragment();
+      while (holder.firstChild) frag.appendChild(holder.firstChild);
+      // Keep a blank line between the draft and the quoted message.
+      if (quote) frag.appendChild(Object.assign(document.createElement("p"), { innerHTML: "<br>" }));
+      el.insertBefore(frag, el.firstChild);
+      setAssist(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   useEffect(() => {
     const el = body.current;
@@ -108,6 +159,9 @@ export function Compose(props: {
         <button className="tbtn" onClick={() => cmd("insertUnorderedList")} title="Bullets"><List size={16} /></button>
         <button className="tbtn" onClick={() => cmd("insertOrderedList")} title="Numbering"><ListOrdered size={16} /></button>
         <button className="tbtn" title="Link" onClick={() => { const u = prompt("Link address"); if (u && /^(https?:|mailto:)/i.test(u)) cmd("createLink", u); }}><LinkIcon size={16} /></button>
+        {props.aiOn && (
+          <button className="tbtn" onClick={() => setAssist(!assist)} aria-expanded={assist} title="Draft with Copilot"><Sparkles size={16} /> Draft with Copilot</button>
+        )}
         <span className="grow" />
         <button className="tbtn" onClick={props.onClose} title="Discard"><Trash2 size={16} /> Discard</button>
       </div>
@@ -142,6 +196,18 @@ export function Compose(props: {
             <span key={i} className="chip"><Paperclip size={14} /> <span className="fn">{f.name}</span> <span className="muted small">{bytes(f.size)}</span>
               <button className="iconbtn small" onClick={() => setFiles(files.filter((_, j) => j !== i))}><X size={12} /></button></span>
           ))}
+        </div>
+      )}
+      {assist && (
+        <div className="assist" role="group" aria-label="Draft with Copilot">
+          <textarea rows={2} value={ask} onChange={(e) => setAsk(e.target.value)} maxLength={1000}
+            placeholder="What should it say? e.g. Thank them and say Tuesday works" aria-label="What should the email say?" />
+          <div className="assist-actions">
+            <button className="btn primary" disabled={drafting} onClick={() => copilot("write")}>{drafting ? "Writing…" : "Write"}</button>
+            <button className="btn" disabled={drafting} onClick={() => copilot("rewrite")}>Rewrite mine</button>
+            <button className="btn" disabled={drafting} onClick={() => copilot("shorten")}>Shorten mine</button>
+            <span className="muted small">Copilot replaces your part above the quoted message. Review it before you press Send.</span>
+          </div>
         </div>
       )}
       {error && <p className="error pad">{error}</p>}

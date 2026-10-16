@@ -5,6 +5,7 @@ const { baseApp, requireUser, requireBearer, wrap, errorHandler, serveSpa } = re
 const { portFor } = require('@synergy/config');
 const { createCompliance } = require('./compliance');
 const { createSearch } = require('./search');
+const { calendarAiConfig, draftHandler } = require('./draft');
 const groupCalendars = require('./groups');
 const { SearchInputError } = require('@synergy/search');
 
@@ -105,7 +106,10 @@ async function editableEvent(email, id) {
 }
 
 const router = express.Router();
-router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail })));
+router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail, ai: calendarAiConfig() !== null })));
+
+// Draft with Copilot: notes for the event editor. Returns text only; nothing is saved here.
+router.post('/draft', wrap(draftHandler));
 
 router.get('/calendars', wrap(async (req, res) => {
   res.json([

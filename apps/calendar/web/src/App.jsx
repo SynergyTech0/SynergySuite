@@ -17,6 +17,7 @@ const api = {
   create: e => req('POST', '/api/events', e),
   update: (id, e) => req('PATCH', `/api/events/${id}`, e),
   remove: id => req('DELETE', `/api/events/${id}`),
+  draft: d => req('POST', '/api/draft', d),
 };
 
 const HOUR_START = 7, HOUR_END = 21;
@@ -187,6 +188,27 @@ function EventEditor({ me, calendars, calendarName, canEdit, event, defaults, on
   });
   const set = p => setF(prev => ({ ...prev, ...p }));
   const mine = !event || event.owner_email === me?.email;
+  // Draft with Copilot: notes from the title, attendees and what the person asks for. Saved only with Save.
+  const [assist, setAssist] = useState(false);
+  const [ask, setAsk] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  async function copilot(mode) {
+    setDrafting(true);
+    setDraftError('');
+    try {
+      const { text } = await api.draft({
+        mode, instructions: ask, title: f.title, description: f.description, location: f.location,
+        attendees: f.attendees, when: f.startAt ? new Date(f.startAt).toLocaleString() : '',
+      });
+      set({ description: text });
+      setAssist(false);
+    } catch (e) {
+      setDraftError(String(e.message || e));
+    } finally {
+      setDrafting(false);
+    }
+  }
   const groups = calendars.filter(c => c.source);
   // An event on a group calendar the person has left still shows its own calendar.
   const stale = f.calendar.startsWith('group:') && !groups.some(c => c.id === f.calendar);
@@ -217,7 +239,27 @@ function EventEditor({ me, calendars, calendarName, canEdit, event, defaults, on
             </label>
             <label>Location / link <input value={f.location} onChange={e => set({ location: e.target.value })} /></label>
             <label>Attendees <input placeholder="emails, comma separated" value={f.attendees} onChange={e => set({ attendees: e.target.value })} /></label>
-            <label>Notes <input value={f.description} onChange={e => set({ description: e.target.value })} /></label>
+            <label>Notes <textarea rows={4} maxLength={2000} value={f.description} onChange={e => set({ description: e.target.value })} /></label>
+            {me?.ai && (
+              <div className="assist">
+                {!assist ? (
+                  <button type="button" onClick={() => setAssist(true)}>✨ Draft with Copilot</button>
+                ) : (
+                  <>
+                    <input aria-label="What should the notes cover?" placeholder="What should the notes cover? e.g. agenda for the Q3 review"
+                      value={ask} maxLength={1000} onChange={e => setAsk(e.target.value)} />
+                    <div className="assist-actions">
+                      <button type="button" className="primary" disabled={drafting} onClick={() => copilot('write')}>{drafting ? 'Writing…' : 'Write notes'}</button>
+                      <button type="button" disabled={drafting || !f.description.trim()} onClick={() => copilot('rewrite')}>Rewrite</button>
+                      <button type="button" disabled={drafting || !f.description.trim()} onClick={() => copilot('shorten')}>Shorten</button>
+                      <button type="button" onClick={() => setAssist(false)}>Close</button>
+                    </div>
+                    <p className="hint">Copilot replaces the notes above. Check them, then Save.</p>
+                    {draftError && <p className="hint bad-text" role="alert">{draftError}</p>}
+                  </>
+                )}
+              </div>
+            )}
             <div className="modal-actions">
               {onDelete && <button className="bad" onClick={() => confirm('Delete event?') && onDelete()}>Delete</button>}
               <button onClick={onClose}>Cancel</button>
