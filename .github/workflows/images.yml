@@ -63,6 +63,7 @@ jobs:
             {"name":"office","file":"deploy/next-app.Dockerfile","context":".","args":"APP=office","paths":["apps/office/"]},
             {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
             {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
+            {"name":"engage","file":"deploy/next-app.Dockerfile","context":".","args":"APP=engage","paths":["apps/engage/"]},
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
             {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]}
           ]'
