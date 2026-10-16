@@ -403,6 +403,11 @@ projects.{$SUITE_DOMAIN} {
 	import to_app projects:3820
 }
 
+field.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app field:3850
+}
+
 whiteboard.{$SUITE_DOMAIN} {
 	# Meet and Chat ask for their boards on the internal network; never from outside.
 	handle /api/svc/* {

@@ -271,6 +271,17 @@ describe.skipIf(!url)("commerce", async () => {
       .toEqual({ onHand: 3, unitCost: "7.5000" });
     expect((await svc.svcItems({ skus: ["KIT-1"] }))[0]).toMatchObject({ name: "Starter kit", unit: "box", cost: "7.5000", onHand: 3 });
     await expect(svc.stockMove({ reference: "ops:x:8", sku: "KIT-2", name: "Nope", qty: -1, kind: "mfg_issue" })).rejects.toMatchObject({ status: 404 });
+
+    // Field Service takes parts for its jobs the same way, and sees the price to bill them at.
+    const [kit] = await svc.svcItems({ skus: ["KIT-1"] });
+    expect(kit.price).toBe("0.00");
+    expect(await svc.stockMove({ reference: "field-part-1", sku: "KIT-1", qty: -1, kind: "service_issue", account: "5000", note: "Field service WO-00001" }))
+      .toEqual({ onHand: 2, unitCost: "7.5000" });
+    const [fp] = await q<{ payload: { description: string; lines: { account: string; debit: number }[] } }>(
+      "SELECT payload FROM postings WHERE reference = 'commerce:svc:field-part-1'",
+    );
+    expect(fp.payload.description).toMatch(/^Used on a service job: KIT-1 -1/);
+    expect(fp.payload.lines[0]).toMatchObject({ account: "5000", debit: 750 });
   });
 
   it("keeps every queued posting balanced", async () => {

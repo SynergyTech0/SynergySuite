@@ -314,6 +314,32 @@ export async function feedFor(email: string) {
   return rows.map((r) => ({ ...r, created_at: iso(r.created_at), updated_at: iso(r.updated_at) }));
 }
 
+/**
+ * One ticket by its number, for Field Service turning a case into a work order: who raised it and
+ * what they first wrote. Bearer DESK_API_TOKEN.
+ */
+export async function svcTicket(number: string) {
+  const [t] = await q(
+    `SELECT t.number, t.subject, t.status, t.priority, t.requester_email, t.requester_name,
+       (SELECT m.body FROM ticket_messages m WHERE m.ticket_id = t.id AND m.direction = 'inbound' ORDER BY m.id LIMIT 1) AS first_message
+     FROM tickets t WHERE upper(t.number) = upper($1)`,
+    [text(number, 40)],
+  );
+  if (!t) throw new UserError("That ticket doesn't exist", 404);
+  return {
+    number: t.number as string, subject: t.subject as string, status: t.status as string, priority: t.priority as string,
+    requesterEmail: t.requester_email as string, requesterName: t.requester_name as string, firstMessage: (t.first_message as string) ?? "",
+  };
+}
+
+/** An internal note from another suite app (Field Service's job updates). Nothing is emailed. */
+export async function svcNote(number: string, input: { body?: unknown; author?: unknown }): Promise<{ ok: true }> {
+  const [t] = await q<{ id: number }>("SELECT id FROM tickets WHERE upper(number) = upper($1)", [text(number, 40)]);
+  if (!t) throw new UserError("That ticket doesn't exist", 404);
+  await reply(t.id, text(input.author, 100) || "suite", { body: input.body, internal: true });
+  return { ok: true };
+}
+
 /** Everyone on a ticket, lower-case: requester, assignee and whoever wrote on it. */
 export const TICKET_PEOPLE = `ARRAY(SELECT DISTINCT lower(e) FROM unnest(
   ARRAY[t.requester_email, t.assignee] || ARRAY(SELECT m.author FROM ticket_messages m WHERE m.ticket_id = t.id)

@@ -638,6 +638,28 @@ services:
       PROJECTS_AI_API_KEY: ${PROJECTS_AI_API_KEY:-}
       PROJECTS_AI_MODEL: ${PROJECTS_AI_MODEL:-}
 
+  # Dynamics 365 Field Service equivalent: work orders for jobs at customer sites, a schedule
+  # board for dispatchers, a phone view for technicians with sign-off, and customers' equipment.
+  # Each link is on when its token is set: parts come off Commerce stock (COMMERCE_SVC_TOKEN),
+  # finished jobs bill into Books as draft invoices (BOOKS_SVC_TOKEN), Desk cases become work
+  # orders and hear back (DESK_API_TOKEN), and equipment imports from Ops (OPS_API_TOKEN).
+  field:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-field:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: field } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/field
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      DESK_API_TOKEN: ${DESK_API_TOKEN:-}
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      FIELD_PARTS_ACCOUNT: ${FIELD_PARTS_ACCOUNT:-}
+      FIELD_AI_PROVIDER: ${FIELD_AI_PROVIDER:-}
+      FIELD_AI_BASE_URL: ${FIELD_AI_BASE_URL:-}
+      FIELD_AI_API_KEY: ${FIELD_AI_API_KEY:-}
+      FIELD_AI_MODEL: ${FIELD_AI_MODEL:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:
