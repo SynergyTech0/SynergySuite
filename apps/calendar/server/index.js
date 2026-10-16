@@ -5,6 +5,7 @@ const { baseApp, requireUser, requireBearer, wrap, errorHandler, serveSpa } = re
 const { portFor } = require('@synergy/config');
 const { createCompliance } = require('./compliance');
 const { createSearch } = require('./search');
+const { calendarAiConfig, draftHandler } = require('./draft');
 const { SearchInputError } = require('@synergy/search');
 
 const PORT = portFor('calendar');
@@ -78,7 +79,10 @@ function cleanEvent(b, ownerEmail) {
 }
 
 const router = express.Router();
-router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail })));
+router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail, ai: calendarAiConfig() !== null })));
+
+// Draft with Copilot: notes for the event editor. Returns text only; nothing is saved here.
+router.post('/draft', wrap(draftHandler));
 
 router.get('/events', wrap(async (req, res) => {
   const from = new Date(req.query.from || Date.now() - 7 * 86400000);

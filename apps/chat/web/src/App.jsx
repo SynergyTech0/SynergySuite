@@ -418,6 +418,13 @@ export default function App() {
     try { setSearchResults(await api.search(q, activeWsRef.current)); } catch { /* noop */ }
   }
 
+  // Tell the suite header's Copilot which conversation is open, so "summarize this" knows.
+  useEffect(() => {
+    const bar = document.querySelector('synergy-app-bar');
+    if (!bar) return;
+    bar.setAttribute('context', activeId ? new URLSearchParams({ ...(activeWs ? { ws: String(activeWs) } : {}), channel: String(activeId) }).toString() : '');
+  }, [activeId, activeWs]);
+
   const activeWorkspace = workspaces.find(w => Number(w.id) === Number(activeWs));
   const wsName = activeWorkspace?.name || 'SynergyChat';
 

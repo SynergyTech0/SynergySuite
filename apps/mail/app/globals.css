@@ -124,3 +124,8 @@ body.suite-body { height: 100vh; display: flex; flex-direction: column; overflow
   .reading { display: none; }
 }
 .compose .fields .suggestions span { width: auto; }
+
+/* Draft with Copilot, in compose */
+.assist { display: flex; flex-direction: column; gap: 6px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--hover); }
+.assist textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; resize: vertical; }
+.assist-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

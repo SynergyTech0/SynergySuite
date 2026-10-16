@@ -192,6 +192,11 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/calendar
       CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
+      # Draft with Copilot for event notes: the AI_* model, or these to give Calendar its own.
+      CALENDAR_AI_PROVIDER: ${CALENDAR_AI_PROVIDER:-}
+      CALENDAR_AI_BASE_URL: ${CALENDAR_AI_BASE_URL:-}
+      CALENDAR_AI_API_KEY: ${CALENDAR_AI_API_KEY:-}
+      CALENDAR_AI_MODEL: ${CALENDAR_AI_MODEL:-}
 
   # Microsoft Bookings equivalent: public booking pages, services, staff availability from
   # Calendar, Meet links, and confirmations and reminders sent from each page's suite mailbox.
@@ -698,7 +703,9 @@ services:
 
   # Microsoft Search and Copilot equivalent: one search box across the content apps for the
   # signed-in person (each app answers only with what that person can open), and an assistant
-  # that answers from those results. It uses the suite's AI_* model (SEARCH_AI_* to give it its own).
+  # that answers from those results, and the Copilot panel in every app's header (answers, summaries,
+  # and actions in To Do, Calendar, Chat, Planner and Mail that run only after the person confirms).
+  # It uses the suite's AI_* model (SEARCH_AI_* to give it its own).
   search:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-search:${SYNERGY_IMAGE_TAG:-latest}
     <<: *next
@@ -937,6 +944,11 @@ services:
     environment:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/mail
+      # Draft with Copilot in compose: the AI_* model, or these to give Mail its own.
+      MAIL_AI_PROVIDER: ${MAIL_AI_PROVIDER:-}
+      MAIL_AI_BASE_URL: ${MAIL_AI_BASE_URL:-}
+      MAIL_AI_API_KEY: ${MAIL_AI_API_KEY:-}
+      MAIL_AI_MODEL: ${MAIL_AI_MODEL:-}
       # Demo mode only lets mail go to this domain.
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
       # Encrypts the passwords of outside accounts users connect. openssl rand -base64 32
