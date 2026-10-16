@@ -19,6 +19,7 @@
     "apps/drive",
     "apps/forms",
     "apps/hr",
+    "apps/insights",
     "apps/mail",
     "apps/meet",
     "apps/notes",
