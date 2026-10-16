@@ -260,6 +260,11 @@ todo.{$SUITE_DOMAIN} {
 	import to_app todo:3195
 }
 
+engage.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app engage:3740
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.
@@ -285,5 +290,37 @@ cad.{$SUITE_DOMAIN} {
 	handle {
 		import signed_in
 		import to_app cad:3660
+	}
+}
+
+insights.{$SUITE_DOMAIN} {
+	import signed_in
+	redir /studio /studio/ 308
+	# The report designer (Metabase) at /studio. Signed dashboard addresses, which Insights
+	# shows in its own pages, and the designer's scripts and styles need no Metabase session.
+	@embed path /studio/embed/* /studio/api/embed/* /studio/app/*
+	handle @embed {
+		uri strip_prefix /studio
+		reverse_proxy metabase:3000
+	}
+	# Everything else in the designer needs the Metabase session Insights opened for whoever is
+	# signed in to the suite; when it is missing or someone else's, Insights signs them in.
+	# route keeps this order: the check (and the return address it sends) sees the full path.
+	handle /studio/* {
+		route {
+			forward_auth insights:3720 {
+				uri /api/studio/check
+				header_up X-Proxy-Auth-Secret {$PROXY_SHARED_SECRET}
+				@mismatch status 401
+				handle_response @mismatch {
+					redir * /api/studio/login?rd={uri}
+				}
+			}
+			uri strip_prefix /studio
+			reverse_proxy metabase:3000
+		}
+	}
+	handle {
+		import to_app insights:3720
 	}
 }
