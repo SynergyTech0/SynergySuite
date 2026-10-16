@@ -1,0 +1,4 @@
+# Scripts and SQL run on Linux hosts and in containers; keep LF endings on every checkout.
+*.sh      text eol=lf
+*.mjs     text eol=lf
+*.sql     text eol=lf

@@ -1,0 +1,50 @@
+{
+ "title": "Synergy Chat",
+ "navItems": [
+  "tagEngineering",
+  "tagSuite launch",
+  "DRDana Reyes",
+  "LALogan Ansel"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addNew chat"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search chat",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Start a meeting",
+  "Add people",
+  "Attach",
+  "Emoji",
+  "Send"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 2,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

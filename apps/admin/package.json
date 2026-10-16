@@ -1,0 +1,31 @@
+{
+  "name": "synergy-admin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy Admin - the admin center: people, app health, audit, and eDiscovery with legal holds and retention across the suite",
+  "scripts": {
+    "dev": "next dev -p 3700",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3700",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@synergy/compliance": "*",
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/shell": "*",
+    "fflate": "^0.8.2",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

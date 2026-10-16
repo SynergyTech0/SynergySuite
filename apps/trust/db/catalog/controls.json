@@ -1,0 +1,583 @@
+{
+  "_note": "The shipped control library. Each template maps to requirements across every seeded framework; `maps` entries are [framework_key, requirement_key, coverage, rationale]. Coverage: 'full' = this control alone satisfies the requirement; 'partial' = it satisfies part, other controls needed; 'supporting' = it contributes evidence but does not itself satisfy. Honest coverage grading is the point - a library that claims 'full' everywhere produces a green dashboard and a failed audit.",
+  "templates": [
+    {
+      "key": "AC-MFA",
+      "title": "Multi-factor authentication on privileged and remote access",
+      "objective": "All administrative, remote and externally-reachable access requires a second authentication factor.",
+      "category": "Access control",
+      "guidance": "Scope must include infrastructure SSH, cloud consoles, VPN, source control and the production database - not only the web application. Break-glass accounts need a documented exception with compensating controls.",
+      "maps": [
+        ["soc2", "CC6.1", "partial", "Implements the authentication element of logical access security; other controls cover authorisation and boundary protection."],
+        ["soc2", "CC6.6", "partial", "Raises the cost of credential-based attack from outside the system boundary."],
+        ["iso27001", "A.8.5", "full", "Secure authentication is precisely what this control implements."],
+        ["iso27001", "A.5.17", "partial", "Governs the handling of authentication information; allocation and lifecycle covered elsewhere."],
+        ["iso27001", "A.8.2", "partial", "Constrains how privileged rights may be exercised."],
+        ["hipaa", "164.312(d)", "full", "Verifies that the person seeking ePHI access is the one claimed."],
+        ["hipaa", "164.308(a)(5)(ii)(D)", "partial", "A second factor reduces reliance on password strength alone."],
+        ["gdpr", "Art.32", "supporting", "Contributes to appropriate technical measures; not sufficient alone."]
+      ]
+    },
+    {
+      "key": "AC-UNIQUE-ID",
+      "title": "Unique named accounts; no shared or generic credentials",
+      "objective": "Every actor with system access holds an individually attributable identity.",
+      "category": "Access control",
+      "guidance": "Shared accounts break attribution, which silently invalidates audit logging as evidence. Service accounts are permitted but must be owned by a named person.",
+      "maps": [
+        ["soc2", "CC6.1", "partial", "Identity is the precondition for logical access control."],
+        ["soc2", "CC6.2", "partial", "Registration of users presupposes distinguishable users."],
+        ["iso27001", "A.5.16", "full", "Identity management across the full lifecycle."],
+        ["hipaa", "164.312(a)(2)(i)", "full", "Unique user identification, verbatim."],
+        ["hipaa", "164.312(b)", "supporting", "Audit controls are unattributable without unique identity."],
+        ["gdpr", "Art.32", "supporting", "Contributes to integrity and confidentiality of processing."]
+      ]
+    },
+    {
+      "key": "AC-RBAC-LEAST-PRIV",
+      "title": "Role-based access with least privilege and segregation of duties",
+      "objective": "Access is granted by role, limited to what the role requires, and conflicting duties are separated.",
+      "category": "Access control",
+      "maps": [
+        ["soc2", "CC6.3", "full", "Role-based authorisation, least privilege and segregation of duties are the stated criterion."],
+        ["iso27001", "A.8.3", "full", "Information access restriction per the access control policy."],
+        ["iso27001", "A.5.18", "partial", "Covers provisioning and modification; periodic review is a separate control."],
+        ["iso27001", "A.5.3", "partial", "Segregation of conflicting duties."],
+        ["iso27001", "A.8.2", "partial", "Restricts allocation of privileged rights."],
+        ["hipaa", "164.308(a)(4)(ii)(B)", "full", "Access authorisation policies and procedures."],
+        ["hipaa", "164.308(a)(4)(ii)(C)", "full", "Access establishment and modification."],
+        ["hipaa", "164.312(a)(1)", "partial", "Technical access control; authentication and emergency access covered elsewhere."],
+        ["gdpr", "Art.5", "partial", "Supports data minimisation by limiting who may reach personal data."],
+        ["gdpr", "Art.32", "supporting", "Technical measure appropriate to risk."]
+      ]
+    },
+    {
+      "key": "AC-ACCESS-REVIEW",
+      "title": "Quarterly access review and recertification",
+      "objective": "Access rights are reviewed by system owners at least quarterly and revoked where no longer justified.",
+      "category": "Access control",
+      "guidance": "The evidence an auditor wants is the completed review with reviewer, date, and the revocations that resulted. A review that never removes anything invites the question of whether it happened.",
+      "maps": [
+        ["soc2", "CC6.2", "partial", "Credential removal when access is no longer required."],
+        ["soc2", "CC6.3", "partial", "Periodic confirmation that least privilege still holds."],
+        ["soc2", "CC4.1", "supporting", "A recurring evaluation of control operation."],
+        ["iso27001", "A.5.18", "full", "Review and modification of access rights."],
+        ["hipaa", "164.308(a)(1)(ii)(D)", "partial", "Contributes to regular review of system activity."],
+        ["hipaa", "164.308(a)(4)(ii)(C)", "partial", "Documented review of access establishment."]
+      ]
+    },
+    {
+      "key": "AC-JOINER-LEAVER",
+      "title": "Onboarding and offboarding with same-day access revocation",
+      "objective": "Access is provisioned on a documented authorisation and fully revoked on the final working day.",
+      "category": "Access control",
+      "maps": [
+        ["soc2", "CC6.2", "full", "Registration and authorisation of new users and removal when no longer required."],
+        ["iso27001", "A.5.18", "partial", "Provisioning and removal of access rights."],
+        ["iso27001", "A.5.11", "partial", "Return of organisational assets on termination."],
+        ["iso27001", "A.6.5", "partial", "Responsibilities that persist after employment ends."],
+        ["hipaa", "164.308(a)(3)(ii)(C)", "full", "Termination procedures for ending ePHI access."]
+      ]
+    },
+    {
+      "key": "CRY-TLS-TRANSIT",
+      "title": "TLS 1.2 or higher on all external interfaces",
+      "objective": "All data in transit across untrusted networks is encrypted with current protocol versions and valid certificates.",
+      "category": "Cryptography",
+      "guidance": "Continuously monitorable: enumerate public endpoints and assert negotiated version, cipher suite and certificate validity. A redirect to HTTPS is not enforcement if the plaintext port still serves content.",
+      "maps": [
+        ["soc2", "CC6.7", "full", "Protects information during transmission and movement."],
+        ["iso27001", "A.8.24", "partial", "Applies cryptography in transit; key management and at-rest use covered elsewhere."],
+        ["iso27001", "A.8.20", "partial", "Contributes to network security."],
+        ["iso27001", "A.5.14", "partial", "Secures information transfer."],
+        ["hipaa", "164.312(e)(1)", "full", "Technical measures guarding ePHI transmitted over a network."],
+        ["hipaa", "164.312(e)(2)(ii)", "full", "Encryption of transmitted ePHI."],
+        ["hipaa", "164.312(e)(2)(i)", "partial", "TLS provides transit integrity protection."],
+        ["gdpr", "Art.32", "partial", "Encryption named as an appropriate measure."]
+      ]
+    },
+    {
+      "key": "CRY-ENCRYPT-REST",
+      "title": "Encryption at rest for all data stores and backups",
+      "objective": "Persistent storage holding customer, personal or health data is encrypted, with managed keys.",
+      "category": "Cryptography",
+      "maps": [
+        ["soc2", "CC6.1", "partial", "Protects information assets from security events."],
+        ["soc2", "C1.1", "partial", "Maintains confidential information in protected form."],
+        ["iso27001", "A.8.24", "partial", "Cryptography applied at rest."],
+        ["hipaa", "164.312(a)(2)(iv)", "full", "Mechanism to encrypt and decrypt ePHI."],
+        ["gdpr", "Art.32", "partial", "Encryption named as an appropriate measure."]
+      ]
+    },
+    {
+      "key": "OPS-AUDIT-LOGGING",
+      "title": "Centralised, tamper-evident audit logging",
+      "objective": "Security-relevant events are logged with actor, action, object and time, shipped off-host, and retained per policy.",
+      "category": "Operations",
+      "guidance": "Logs that the logged party can edit are not evidence. Ship off the host and restrict deletion.",
+      "maps": [
+        ["soc2", "CC7.2", "partial", "Supplies the record that anomaly monitoring analyses."],
+        ["soc2", "CC6.1", "supporting", "Detective complement to preventive access control."],
+        ["iso27001", "A.8.15", "full", "Production, storage, protection and analysis of logs."],
+        ["iso27001", "A.8.17", "supporting", "Clock synchronisation makes correlated logs meaningful."],
+        ["hipaa", "164.312(b)", "full", "Audit controls recording and examining ePHI system activity."],
+        ["hipaa", "164.308(a)(1)(ii)(D)", "partial", "Provides the records that activity review examines."],
+        ["gdpr", "Art.32", "supporting", "Supports integrity and accountability."]
+      ]
+    },
+    {
+      "key": "OPS-VULN-MGMT",
+      "title": "Vulnerability scanning with remediation SLAs",
+      "objective": "Infrastructure and dependencies are scanned on a schedule; findings are triaged and remediated within severity-based deadlines.",
+      "category": "Operations",
+      "guidance": "Reachability matters: an unreachable critical outranks a reachable medium only if you have actually checked reachability. Record the decision either way.",
+      "maps": [
+        ["soc2", "CC7.1", "full", "Detection of configuration changes and susceptibility to new vulnerabilities."],
+        ["iso27001", "A.8.8", "full", "Management of technical vulnerabilities."],
+        ["iso27001", "A.8.9", "partial", "Detects configuration drift."],
+        ["hipaa", "164.308(a)(1)(ii)(B)", "partial", "Reduces risks to a reasonable and appropriate level."],
+        ["gdpr", "Art.32", "supporting", "Ongoing assurance of security of processing."]
+      ]
+    },
+    {
+      "key": "OPS-MALWARE",
+      "title": "Malware protection on endpoints and servers",
+      "objective": "Managed anti-malware is deployed, updating, and reporting centrally.",
+      "category": "Operations",
+      "maps": [
+        ["soc2", "CC6.8", "full", "Prevention and detection of unauthorised or malicious software."],
+        ["iso27001", "A.8.7", "full", "Protection against malware."],
+        ["hipaa", "164.308(a)(5)(ii)(B)", "full", "Procedures for guarding against, detecting and reporting malicious software."]
+      ]
+    },
+    {
+      "key": "OPS-BACKUP-RESTORE",
+      "title": "Encrypted backups with periodic restore testing",
+      "objective": "Backups run on schedule, are encrypted, and are proven recoverable by an actual restore into an isolated environment.",
+      "category": "Operations",
+      "guidance": "A backup that has never been restored is an assumption. Assert on restored row counts against the source, not on the exit code of the backup job - a job that silently skipped a database exits zero.",
+      "maps": [
+        ["soc2", "A1.2", "full", "Data backup processes and recovery infrastructure."],
+        ["soc2", "A1.3", "partial", "Restore testing is part of testing recovery procedures."],
+        ["soc2", "CC9.1", "partial", "Mitigates business disruption risk."],
+        ["iso27001", "A.8.13", "full", "Backup copies maintained and regularly tested."],
+        ["hipaa", "164.308(a)(7)(ii)(A)", "full", "Retrievable exact copies of ePHI."],
+        ["hipaa", "164.308(a)(7)(ii)(B)", "partial", "Supports the disaster recovery plan."],
+        ["hipaa", "164.310(d)(2)(iv)", "partial", "Backup before equipment movement."],
+        ["gdpr", "Art.32", "partial", "Ability to restore availability and access after an incident."]
+      ]
+    },
+    {
+      "key": "OPS-BCDR",
+      "title": "Business continuity and disaster recovery plan, tested annually",
+      "objective": "Documented plans with defined RTO and RPO, exercised at least annually with results recorded.",
+      "category": "Operations",
+      "maps": [
+        ["soc2", "CC9.1", "full", "Risk mitigation activities for business disruptions."],
+        ["soc2", "A1.3", "full", "Testing of recovery plan procedures."],
+        ["iso27001", "A.5.29", "full", "Information security during disruption."],
+        ["iso27001", "A.5.30", "full", "ICT readiness for business continuity."],
+        ["iso27001", "A.8.14", "partial", "Redundancy supports availability objectives."],
+        ["hipaa", "164.308(a)(7)(i)", "full", "Contingency plan for emergencies damaging ePHI systems."],
+        ["hipaa", "164.308(a)(7)(ii)(C)", "full", "Emergency mode operation plan."],
+        ["hipaa", "164.308(a)(7)(ii)(D)", "full", "Periodic testing and revision of contingency plans."],
+        ["hipaa", "164.308(a)(7)(ii)(E)", "partial", "Criticality analysis informs plan scope."]
+      ]
+    },
+    {
+      "key": "OPS-MONITORING",
+      "title": "Infrastructure and application monitoring with alerting",
+      "objective": "Availability, capacity and anomalous behaviour are monitored with alerts routed to an on-call owner.",
+      "category": "Operations",
+      "maps": [
+        ["soc2", "CC7.2", "full", "Monitoring of components for anomalies indicative of malicious acts or errors."],
+        ["soc2", "A1.1", "partial", "Capacity monitoring and evaluation."],
+        ["iso27001", "A.8.16", "full", "Monitoring activities for anomalous behaviour."],
+        ["iso27001", "A.8.6", "partial", "Capacity management."],
+        ["hipaa", "164.308(a)(1)(ii)(D)", "partial", "Contributes to information system activity review."]
+      ]
+    },
+    {
+      "key": "IR-INCIDENT-RESPONSE",
+      "title": "Incident response plan with defined roles and severity levels",
+      "objective": "Security events are triaged, escalated, contained and post-mortemed under a documented procedure.",
+      "category": "Incident response",
+      "maps": [
+        ["soc2", "CC7.3", "full", "Evaluation of security events to determine impact."],
+        ["soc2", "CC7.4", "full", "Response to identified incidents under a defined programme."],
+        ["soc2", "CC7.5", "full", "Recovery activities following incidents."],
+        ["iso27001", "A.5.24", "full", "Incident management planning and preparation."],
+        ["iso27001", "A.5.25", "full", "Assessment and decision on security events."],
+        ["iso27001", "A.5.26", "full", "Response to incidents per documented procedures."],
+        ["iso27001", "A.5.27", "full", "Learning from incidents."],
+        ["iso27001", "A.6.8", "partial", "Event reporting channel feeds the process."],
+        ["hipaa", "164.308(a)(6)(i)", "full", "Policies and procedures addressing security incidents."],
+        ["hipaa", "164.308(a)(6)(ii)", "full", "Identification, response, mitigation and documentation."],
+        ["gdpr", "Art.33", "partial", "Supplies the detection and assessment the notification duty depends on."]
+      ]
+    },
+    {
+      "key": "IR-BREACH-NOTIFICATION",
+      "title": "Breach assessment and statutory notification procedure",
+      "objective": "A documented procedure determines notifiability and meets every applicable statutory clock.",
+      "category": "Incident response",
+      "guidance": "GDPR allows 72 hours to the supervisory authority; HIPAA allows a business associate 60 days to the covered entity. One incident touching both populations runs both clocks, and the plan must be built to the shorter one.",
+      "maps": [
+        ["soc2", "P6.6", "full", "Notification of breaches to affected subjects and regulators."],
+        ["soc2", "P6.3", "partial", "Record of detected unauthorised disclosures."],
+        ["iso27001", "A.5.26", "partial", "Notification is part of incident response."],
+        ["iso27001", "A.5.28", "partial", "Evidence preservation supports the determination."],
+        ["hipaa", "164.404", "full", "Notification to individuals within 60 days of discovery."],
+        ["hipaa", "164.406", "full", "Media notification above the 500-resident threshold."],
+        ["hipaa", "164.408", "full", "Notification to the Secretary."],
+        ["hipaa", "164.410", "full", "Business associate notification to the covered entity."],
+        ["hipaa", "164.414", "full", "Burden of proof and documented four-factor risk assessment."],
+        ["gdpr", "Art.33", "full", "72-hour notification to the supervisory authority and breach register."],
+        ["gdpr", "Art.34", "full", "Communication to data subjects where high risk."]
+      ]
+    },
+    {
+      "key": "CM-CHANGE-MGMT",
+      "title": "Peer-reviewed, tested and approved change management",
+      "objective": "Changes to production are reviewed, tested, approved and traceable to a request.",
+      "category": "Change management",
+      "maps": [
+        ["soc2", "CC8.1", "full", "Authorisation, design, testing, approval and implementation of changes."],
+        ["iso27001", "A.8.32", "full", "Change management procedures."],
+        ["iso27001", "A.8.9", "partial", "Configuration is controlled through change."],
+        ["iso27001", "A.8.19", "partial", "Governs software installation on operational systems."],
+        ["hipaa", "164.308(a)(8)", "partial", "Supports periodic evaluation in response to operational change."]
+      ]
+    },
+    {
+      "key": "CM-SDLC",
+      "title": "Secure development lifecycle with security testing",
+      "objective": "Security requirements, secure coding standards, code review and pre-release security testing are part of development.",
+      "category": "Change management",
+      "maps": [
+        ["soc2", "CC8.1", "partial", "Covers the development and testing elements of change."],
+        ["soc2", "CC5.2", "partial", "General controls over technology."],
+        ["iso27001", "A.8.25", "full", "Secure development lifecycle rules."],
+        ["iso27001", "A.8.26", "full", "Application security requirements."],
+        ["iso27001", "A.8.27", "partial", "Secure architecture and engineering principles."],
+        ["iso27001", "A.8.28", "full", "Secure coding."],
+        ["iso27001", "A.8.29", "full", "Security testing in development and acceptance."],
+        ["iso27001", "A.8.4", "partial", "Access to source code is governed."],
+        ["gdpr", "Art.25", "partial", "Data protection by design in the build process."]
+      ]
+    },
+    {
+      "key": "CM-ENV-SEPARATION",
+      "title": "Separated environments; no production data in development or test",
+      "objective": "Development, test and production are segregated, and production personal data is never copied into lower environments.",
+      "category": "Change management",
+      "guidance": "The usual failure is a convenience restore of a production dump into staging. That single act puts real PHI or personal data into an environment with weaker access control.",
+      "maps": [
+        ["soc2", "CC8.1", "partial", "Controlled promotion between environments."],
+        ["soc2", "C1.1", "partial", "Limits where confidential information exists."],
+        ["iso27001", "A.8.31", "full", "Separation of development, test and production environments."],
+        ["iso27001", "A.8.33", "full", "Selection and protection of test information."],
+        ["iso27001", "A.8.11", "partial", "Masking where representative data is needed."],
+        ["hipaa", "164.312(a)(1)", "partial", "Limits the systems in which ePHI must be access-controlled."],
+        ["gdpr", "Art.5", "partial", "Supports purpose limitation and minimisation."]
+      ]
+    },
+    {
+      "key": "GOV-POLICY-SET",
+      "title": "Approved policy set, reviewed annually and acknowledged",
+      "objective": "A complete information security and privacy policy set is approved, version-controlled, reviewed at least annually, and acknowledged by personnel.",
+      "category": "Governance",
+      "maps": [
+        ["soc2", "CC5.3", "full", "Deployment of control activities through policies and procedures."],
+        ["soc2", "CC1.1", "partial", "Codifies commitment to integrity and ethical values."],
+        ["soc2", "CC2.2", "partial", "Internal communication of responsibilities."],
+        ["iso27001", "5.2", "full", "Information security policy established and communicated."],
+        ["iso27001", "A.5.1", "full", "Policies defined, approved, published and reviewed."],
+        ["iso27001", "A.5.37", "partial", "Documented operating procedures."],
+        ["iso27001", "7.5", "partial", "Control of documented information."],
+        ["iso27001", "A.5.4", "partial", "Management requires personnel to apply the policies."],
+        ["hipaa", "164.316(a)", "full", "Reasonable and appropriate policies and procedures."],
+        ["hipaa", "164.316(b)(1)", "full", "Policies maintained in written form."],
+        ["gdpr", "Art.24", "partial", "Organisational measures demonstrating compliance."]
+      ]
+    },
+    {
+      "key": "GOV-RISK-ASSESSMENT",
+      "title": "Documented periodic risk assessment and treatment plan",
+      "objective": "Risks to confidentiality, integrity and availability are identified, scored against defined criteria, assigned owners, and treated under an approved plan.",
+      "category": "Governance",
+      "guidance": "For HIPAA this is the control OCR asks about first, and a vulnerability scan does not satisfy it: the assessment must be organisation-wide and reach administrative and physical safeguards too.",
+      "maps": [
+        ["soc2", "CC3.1", "full", "Objectives specified with clarity sufficient to assess risk."],
+        ["soc2", "CC3.2", "full", "Identification and analysis of risks to objectives."],
+        ["soc2", "CC3.3", "partial", "Fraud risk considered within the assessment."],
+        ["soc2", "CC3.4", "partial", "Assessment of significant change."],
+        ["iso27001", "6.1.2", "full", "Repeatable risk assessment process with acceptance criteria."],
+        ["iso27001", "6.1.3", "full", "Risk treatment, Statement of Applicability and treatment plan."],
+        ["iso27001", "8.2", "full", "Risk assessments performed at planned intervals."],
+        ["iso27001", "8.3", "full", "Implementation of the risk treatment plan."],
+        ["hipaa", "164.308(a)(1)(ii)(A)", "full", "Accurate and thorough risk analysis."],
+        ["hipaa", "164.308(a)(1)(ii)(B)", "full", "Risk management reducing risk to a reasonable level."],
+        ["gdpr", "Art.35", "partial", "Feeds DPIA where high-risk processing is identified."],
+        ["gdpr", "Art.32", "supporting", "Measures appropriate to the risk presuppose assessing it."]
+      ]
+    },
+    {
+      "key": "GOV-SECURITY-OFFICER",
+      "title": "Named security officer with documented responsibilities",
+      "objective": "A single accountable individual owns the security programme, with responsibilities and authority recorded.",
+      "category": "Governance",
+      "maps": [
+        ["soc2", "CC1.3", "full", "Structures, reporting lines, authorities and responsibilities."],
+        ["soc2", "CC1.5", "partial", "Accountability for internal control responsibilities."],
+        ["iso27001", "5.3", "full", "Roles, responsibilities and authorities assigned and communicated."],
+        ["iso27001", "A.5.2", "full", "Information security roles and responsibilities defined and allocated."],
+        ["hipaa", "164.308(a)(2)", "full", "Assigned security responsibility - the identified security official."],
+        ["gdpr", "Art.37", "partial", "Where the DPO triggers apply, this is the role that must be designated."]
+      ]
+    },
+    {
+      "key": "HR-SCREENING",
+      "title": "Background screening before access to production or sensitive data",
+      "objective": "Personnel are screened proportionately before being granted access to production systems or regulated data.",
+      "category": "People",
+      "maps": [
+        ["soc2", "CC1.4", "partial", "Commitment to attracting and retaining competent individuals."],
+        ["iso27001", "A.6.1", "full", "Screening of candidates before and during employment."],
+        ["hipaa", "164.308(a)(3)(ii)(B)", "full", "Workforce clearance procedure."]
+      ]
+    },
+    {
+      "key": "HR-TRAINING",
+      "title": "Annual security and privacy awareness training, tracked",
+      "objective": "All personnel complete role-appropriate security and privacy training at hire and at least annually, with completion recorded.",
+      "category": "People",
+      "maps": [
+        ["soc2", "CC1.4", "partial", "Development of competent individuals."],
+        ["soc2", "CC2.2", "partial", "Internal communication of control responsibilities."],
+        ["iso27001", "A.6.3", "full", "Awareness, education and training with regular updates."],
+        ["iso27001", "7.2", "partial", "Competence of persons affecting security performance."],
+        ["iso27001", "7.3", "full", "Awareness of the policy and consequences of nonconformity."],
+        ["hipaa", "164.308(a)(5)(i)", "full", "Security awareness and training programme for the workforce."],
+        ["hipaa", "164.308(a)(5)(ii)(A)", "full", "Periodic security reminders."],
+        ["gdpr", "Art.32", "supporting", "Organisational measure appropriate to the risk."]
+      ]
+    },
+    {
+      "key": "HR-CONFIDENTIALITY",
+      "title": "Confidentiality agreements for personnel and contractors",
+      "objective": "Everyone with access to confidential, personal or health data is bound by a signed confidentiality agreement.",
+      "category": "People",
+      "maps": [
+        ["soc2", "C1.1", "partial", "Maintains confidentiality commitments over identified information."],
+        ["iso27001", "A.6.6", "full", "Confidentiality or non-disclosure agreements signed and reviewed."],
+        ["iso27001", "A.6.2", "partial", "Terms and conditions state security responsibilities."],
+        ["hipaa", "164.308(a)(3)(ii)(A)", "partial", "Supports authorisation and supervision of the workforce."]
+      ]
+    },
+    {
+      "key": "TP-VENDOR-MGMT",
+      "title": "Vendor risk assessment with DPA and BAA coverage",
+      "objective": "Vendors are risk-assessed before onboarding, covered by appropriate contractual terms, and reviewed periodically.",
+      "category": "Third parties",
+      "guidance": "Coverage means the right instrument for the data: a BAA where PHI is involved, a DPA with sub-processor terms where personal data is. A SOC 2 report from the vendor is assurance, not a contract.",
+      "maps": [
+        ["soc2", "CC9.2", "full", "Assessment and management of vendor and business partner risk."],
+        ["soc2", "P6.4", "partial", "Privacy commitments obtained from third parties."],
+        ["soc2", "P6.5", "partial", "Third-party breach notification commitments."],
+        ["iso27001", "A.5.19", "full", "Managing information security risk in supplier relationships."],
+        ["iso27001", "A.5.20", "full", "Security requirements agreed within supplier agreements."],
+        ["iso27001", "A.5.21", "partial", "ICT supply chain risk."],
+        ["iso27001", "A.5.22", "full", "Monitoring, review and change management of supplier services."],
+        ["iso27001", "A.5.23", "partial", "Security for use of cloud services."],
+        ["hipaa", "164.308(b)(1)", "full", "Business associate contracts and satisfactory assurances."],
+        ["hipaa", "164.314(a)(1)", "full", "Required content of business associate contracts."],
+        ["gdpr", "Art.28", "full", "Processor contracts and sub-processor authorisation."]
+      ]
+    },
+    {
+      "key": "DP-ROPA",
+      "title": "Records of processing activities maintained",
+      "objective": "Every processing activity is recorded with purpose, lawful basis, data categories, recipients, transfers and retention.",
+      "category": "Data protection",
+      "maps": [
+        ["soc2", "P1.1", "partial", "Underpins the accuracy of the privacy notice."],
+        ["soc2", "P3.1", "partial", "Evidences that collection is consistent with stated objectives."],
+        ["iso27001", "A.5.34", "partial", "Privacy and protection of PII."],
+        ["iso27001", "A.5.31", "partial", "Identification of legal and regulatory requirements."],
+        ["gdpr", "Art.30", "full", "Records of processing activities."],
+        ["gdpr", "Art.5", "partial", "Demonstrates accountability for the processing principles."],
+        ["gdpr", "Art.6", "partial", "Records the lawful basis relied on for each activity."]
+      ]
+    },
+    {
+      "key": "DP-DSAR",
+      "title": "Data subject request intake and fulfilment within statutory deadlines",
+      "objective": "Requests to access, rectify, erase, restrict, port or object are logged, tracked against the statutory clock, and fulfilled or lawfully refused with reasons.",
+      "category": "Data protection",
+      "maps": [
+        ["soc2", "P5.1", "full", "Subject access to stored personal information and copies on request."],
+        ["soc2", "P5.2", "full", "Correction, amendment or appending of personal information."],
+        ["soc2", "P6.7", "partial", "Accounting of information held and disclosures."],
+        ["iso27001", "A.5.34", "partial", "Meeting PII protection requirements in law and contract."],
+        ["gdpr", "Art.12", "full", "Transparent modalities and the one-month response deadline."],
+        ["gdpr", "Art.15", "full", "Right of access."],
+        ["gdpr", "Art.16", "full", "Right to rectification."],
+        ["gdpr", "Art.17", "full", "Right to erasure."],
+        ["gdpr", "Art.18", "full", "Right to restriction."],
+        ["gdpr", "Art.19", "partial", "Notification of rectification or erasure to recipients."],
+        ["gdpr", "Art.20", "full", "Right to data portability."],
+        ["gdpr", "Art.21", "full", "Right to object."]
+      ]
+    },
+    {
+      "key": "DP-RETENTION",
+      "title": "Retention schedule and secure disposal",
+      "objective": "Data classes have defined retention periods, and expiry triggers verified secure deletion across primary stores, backups and third parties.",
+      "category": "Data protection",
+      "guidance": "Deletion that stops at the primary database is incomplete while backups still hold the record. State how the backup window interacts with an erasure obligation.",
+      "maps": [
+        ["soc2", "P4.2", "full", "Retention of personal information consistent with objectives."],
+        ["soc2", "P4.3", "full", "Secure disposal of personal information."],
+        ["soc2", "C1.2", "full", "Disposal of confidential information."],
+        ["soc2", "CC6.5", "partial", "Removal of data before protections are discontinued."],
+        ["iso27001", "A.8.10", "full", "Information deletion when no longer required."],
+        ["iso27001", "A.5.33", "partial", "Protection of records over their life."],
+        ["iso27001", "A.7.14", "partial", "Secure disposal or re-use of equipment."],
+        ["iso27001", "A.7.10", "partial", "Storage media managed through disposal."],
+        ["hipaa", "164.310(d)(2)(i)", "full", "Final disposition of ePHI and the media holding it."],
+        ["hipaa", "164.310(d)(2)(ii)", "full", "Removal of ePHI before media re-use."],
+        ["hipaa", "164.316(b)(2)(i)", "partial", "Six-year documentation retention."],
+        ["gdpr", "Art.5", "partial", "Storage limitation."],
+        ["gdpr", "Art.17", "partial", "Technical means to effect erasure."]
+      ]
+    },
+    {
+      "key": "DP-ASSET-INVENTORY",
+      "title": "Asset and information inventory with owners and classification",
+      "objective": "Systems, data stores and information assets are inventoried, classified, and assigned an owner.",
+      "category": "Data protection",
+      "guidance": "Everything downstream depends on this being complete. An asset absent from the inventory is absent from the risk assessment, the access review and the backup schedule - and nothing will report it missing.",
+      "maps": [
+        ["soc2", "CC6.1", "supporting", "Defines the protected information assets in scope."],
+        ["soc2", "CC3.2", "supporting", "Bounds the risk identification exercise."],
+        ["soc2", "C1.1", "partial", "Identification of confidential information."],
+        ["iso27001", "A.5.9", "full", "Inventory of information and other associated assets with owners."],
+        ["iso27001", "A.5.12", "full", "Classification of information."],
+        ["iso27001", "A.5.13", "partial", "Labelling follows from classification."],
+        ["iso27001", "A.5.10", "partial", "Acceptable use rules per asset class."],
+        ["hipaa", "164.308(a)(1)(ii)(A)", "partial", "A risk analysis requires knowing where ePHI resides."]
+      ]
+    },
+    {
+      "key": "GOV-INTERNAL-AUDIT",
+      "title": "Internal audit and independent review programme",
+      "objective": "Controls are tested independently of the people who operate them, on a planned programme, with findings tracked to closure.",
+      "category": "Governance",
+      "maps": [
+        ["soc2", "CC4.1", "full", "Ongoing and separate evaluations of internal control."],
+        ["soc2", "CC4.2", "full", "Evaluation and communication of deficiencies for corrective action."],
+        ["iso27001", "9.2", "full", "Internal audit at planned intervals against an audit programme."],
+        ["iso27001", "A.5.35", "full", "Independent review of information security."],
+        ["iso27001", "A.5.36", "full", "Compliance review against policies, rules and standards."],
+        ["iso27001", "10.2", "partial", "Corrective action on nonconformities found."],
+        ["hipaa", "164.308(a)(8)", "full", "Periodic technical and nontechnical evaluation."]
+      ]
+    },
+    {
+      "key": "GOV-MGMT-REVIEW",
+      "title": "Periodic management review of the security programme",
+      "objective": "Leadership reviews programme performance, risks, incidents and audit findings at least annually, with decisions recorded.",
+      "category": "Governance",
+      "maps": [
+        ["soc2", "CC1.2", "full", "Board or equivalent oversight of internal control performance."],
+        ["soc2", "CC4.2", "partial", "Communication of deficiencies to senior management."],
+        ["soc2", "CC2.1", "partial", "Use of relevant quality information to support internal control."],
+        ["iso27001", "9.3", "full", "Management review at planned intervals with defined inputs."],
+        ["iso27001", "5.1", "partial", "Demonstration of leadership and commitment."],
+        ["iso27001", "10.1", "partial", "Continual improvement driven by review outcomes."]
+      ]
+    },
+    {
+      "key": "NET-BOUNDARY",
+      "title": "Network segmentation and boundary protection",
+      "objective": "Network boundaries are defined and enforced; management interfaces and data stores are not exposed to untrusted networks.",
+      "category": "Operations",
+      "maps": [
+        ["soc2", "CC6.6", "full", "Measures protecting against threats from outside the system boundary."],
+        ["soc2", "CC6.1", "partial", "Infrastructure element of logical access security."],
+        ["iso27001", "A.8.20", "full", "Networks and network devices secured, managed and controlled."],
+        ["iso27001", "A.8.21", "full", "Security of network services."],
+        ["iso27001", "A.8.22", "full", "Segregation of networks."],
+        ["hipaa", "164.312(e)(1)", "partial", "Guards against unauthorised network access to ePHI."]
+      ]
+    },
+    {
+      "key": "PHY-FACILITY",
+      "title": "Physical access controls at facilities and hosting providers",
+      "objective": "Physical access to systems processing regulated data is restricted and monitored, whether operated directly or inherited from a provider.",
+      "category": "Physical",
+      "guidance": "For cloud-hosted systems this is largely inherited, and the evidence is the provider's current assurance report mapped to your scope - which makes it a vendor-management dependency, not a dismissal.",
+      "maps": [
+        ["soc2", "CC6.4", "full", "Restriction of physical access to facilities and protected assets."],
+        ["iso27001", "A.7.1", "full", "Physical security perimeters."],
+        ["iso27001", "A.7.2", "full", "Physical entry controls."],
+        ["iso27001", "A.7.3", "partial", "Securing offices, rooms and facilities."],
+        ["iso27001", "A.7.4", "partial", "Physical security monitoring."],
+        ["iso27001", "A.7.11", "partial", "Supporting utilities."],
+        ["hipaa", "164.310(a)(1)", "full", "Facility access controls limiting physical access."],
+        ["hipaa", "164.310(a)(2)(ii)", "full", "Facility security plan."],
+        ["hipaa", "164.310(a)(2)(iii)", "full", "Access control and validation procedures."]
+      ]
+    },
+    {
+      "key": "GOV-EXTERNAL-COMMS",
+      "title": "External communication of security commitments and obligations",
+      "objective": "Security commitments, incident contacts and relevant changes are communicated to customers, authorities and other external parties, through a defined channel.",
+      "category": "Governance",
+      "guidance": "Covers the security page or trust centre, the contractual security commitments in customer agreements, the route by which an outsider reports a vulnerability, and the register of regulator and authority contacts. Auditors ask who outside the company is told what, and how.",
+      "maps": [
+        ["soc2", "CC2.3", "full", "Communication with external parties on matters affecting internal control."],
+        ["soc2", "P1.1", "partial", "The privacy notice is one of these external communications."],
+        ["iso27001", "7.4", "full", "Determines the external communications relevant to the ISMS."],
+        ["iso27001", "A.5.5", "full", "Contact with authorities established and maintained."],
+        ["iso27001", "A.5.6", "partial", "Contact with special interest groups and security forums."],
+        ["hipaa", "164.308(a)(6)(ii)", "supporting", "External reporting is part of incident response and reporting."],
+        ["gdpr", "Art.13", "partial", "Information provided to data subjects at collection."]
+      ]
+    },
+    {
+      "key": "GOV-CONTROL-DESIGN",
+      "title": "Risk-to-control mapping and control design review",
+      "objective": "Controls are selected and designed against identified risks, the link between each risk and the controls treating it is documented, and the design is reviewed when risks change.",
+      "category": "Governance",
+      "guidance": "This is the step between having a risk register and having controls: showing that the control set was chosen to treat the assessed risks rather than copied from a template. ISO calls the output the Statement of Applicability.",
+      "maps": [
+        ["soc2", "CC5.1", "full", "Selection and development of control activities that mitigate risks to acceptable levels."],
+        ["soc2", "CC5.2", "partial", "General controls over technology are selected the same way."],
+        ["soc2", "CC3.2", "supporting", "Closes the loop from analysed risk to chosen treatment."],
+        ["iso27001", "6.1.3", "partial", "Control selection and the Statement of Applicability."],
+        ["iso27001", "A.5.36", "partial", "Review of compliance with the standards the controls implement."],
+        ["hipaa", "164.308(a)(1)(ii)(B)", "partial", "Security measures chosen to reduce identified risk."],
+        ["gdpr", "Art.24", "partial", "Measures implemented and reviewed to ensure and demonstrate compliance."],
+        ["gdpr", "Art.32", "supporting", "Measures must be appropriate to the assessed risk."]
+      ]
+    },
+    {
+      "key": "EP-ENDPOINT-HARDENING",
+      "title": "Endpoint hardening and configuration baselines",
+      "objective": "Workstations and servers are built from hardened baselines with disk encryption, screen lock and centrally enforced configuration.",
+      "category": "Operations",
+      "maps": [
+        ["soc2", "CC6.1", "partial", "Infrastructure configuration element of access security."],
+        ["soc2", "CC5.2", "partial", "General controls over technology."],
+        ["iso27001", "A.8.1", "full", "Protection of information on user endpoint devices."],
+        ["iso27001", "A.8.9", "partial", "Configuration management against a baseline."],
+        ["iso27001", "A.7.7", "partial", "Clear screen enforcement."],
+        ["hipaa", "164.310(b)", "full", "Workstation use policies and procedures."],
+        ["hipaa", "164.310(c)", "full", "Physical safeguards for workstations accessing ePHI."],
+        ["hipaa", "164.312(a)(2)(iii)", "full", "Automatic logoff after inactivity."]
+      ]
+    }
+  ]
+}

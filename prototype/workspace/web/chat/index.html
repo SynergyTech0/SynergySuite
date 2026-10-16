@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Chat</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  .thread { flex: 1; overflow-y: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 2px; }
+  .cm { display: flex; gap: 12px; padding: 6px 0; align-items: flex-start; }
+  .cm:hover { background: var(--surface-c-low); border-radius: var(--r-md); }
+  .cm .who { font-weight: 500; font-size: 14px; }
+  .cm .when { font-size: 11px; color: var(--on-surface-variant); margin-left: 8px; }
+  .cm .txt { font-size: 14px; white-space: pre-wrap; line-height: 1.45; }
+  .cm.cont { padding-top: 1px; }
+  .composer-bar { flex: none; padding: 12px 24px 20px; }
+  .composer-box { display: flex; align-items: flex-end; gap: 8px; border: 1px solid var(--outline-variant);
+    border-radius: var(--r-2xl); padding: 6px 8px 6px 16px; background: var(--surface); }
+  .composer-box textarea { flex: 1; border: none; outline: none; resize: none; font-size: 14px;
+    font-family: var(--font-body); background: transparent; color: var(--on-surface); max-height: 160px; padding: 9px 0; }
+  .sp-head { height: 64px; flex: none; display: flex; align-items: center; gap: 12px;
+             padding: 0 24px; border-bottom: 1px solid var(--divider); }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav" id="nav" style="width:280px"></nav>
+    <main class="app-main col" id="main" style="display:flex;flex-direction:column"></main>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

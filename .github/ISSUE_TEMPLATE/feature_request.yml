@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest a new feature or an improvement to an existing one.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. For anything bigger than a small improvement, we'd like to agree on the approach here before anyone writes code, as [CONTRIBUTING.md](https://github.com/SynergyTech0/SynergySuite/blob/main/CONTRIBUTING.md) explains. Open-ended ideas and questions are welcome in [Discussions](https://github.com/SynergyTech0/SynergySuite/discussions).
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app, add-on or part of the suite?
+      options:
+        - auth (Account / sign-in)
+        - mail
+        - calendar
+        - chat
+        - meet
+        - office
+        - drive
+        - forms
+        - planner
+        - photo
+        - cad
+        - sites
+        - notes
+        - sign (add-on)
+        - campaigns (add-on)
+        - portal (add-on)
+        - people (add-on)
+        - Suite home / app launcher
+        - Shared packages (identity, db, server, config, shell, ai)
+        - Deploy (Docker Compose, Caddy, oauth2-proxy, quickstart)
+        - Mobile (synergy-ui)
+        - Suite-wide / several apps
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you are trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: What a user would notice once this exists. If the Microsoft 365 product this app stands in for already does it, say how.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other ways to solve the problem, including workarounds you use today.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this myself.

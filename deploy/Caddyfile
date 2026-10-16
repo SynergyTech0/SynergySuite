@@ -1,0 +1,289 @@
+# Routes https://<app>.{$SUITE_DOMAIN} to each app. Every app except auth and the
+# public paths below requires a SynergyAuth session, checked by oauth2-proxy.
+
+{
+	# Empty in production (certificates from Let's Encrypt). deploy/quickstart.sh sets it to
+	# local_certs, so Caddy signs certificates with its own CA for a domain that only resolves
+	# to this machine.
+	{$CADDY_GLOBAL_OPTIONS}
+}
+
+(signed_in) {
+	# Never trust identity headers sent by the browser; only the gateway may set them.
+	# forward_auth replaces the X-Auth-Request-* headers itself (and drops any the browser
+	# sent that the gateway didn't return); these are the other headers apps read identity from.
+	# request_header runs after forward_auth, so it must not list the copied headers.
+	request_header -X-Forwarded-Email
+	request_header -X-Forwarded-User
+	request_header -X-Forwarded-Preferred-Username
+	request_header -X-Dev-User
+	forward_auth oauth2-proxy:4180 {
+		uri /oauth2/auth
+		copy_headers X-Auth-Request-Email X-Auth-Request-User X-Auth-Request-Preferred-Username
+		@signed_out status 401
+		handle_response @signed_out {
+			redir * https://sso.{$SUITE_DOMAIN}/oauth2/start?rd={scheme}://{host}{uri}
+		}
+	}
+}
+
+# For apps that also serve people without an account (meeting guests): a signed-in user's
+# identity is passed on, and anyone else continues with none instead of being sent to sign in.
+(maybe_signed_in) {
+	request_header -X-Forwarded-Email
+	request_header -X-Forwarded-User
+	request_header -X-Forwarded-Preferred-Username
+	request_header -X-Dev-User
+	forward_auth oauth2-proxy:4180 {
+		uri /oauth2/auth
+		copy_headers X-Auth-Request-Email X-Auth-Request-User X-Auth-Request-Preferred-Username
+		@signed_out status 401
+		handle_response @signed_out {
+			request_header -X-Auth-Request-Email
+			request_header -X-Auth-Request-User
+			request_header -X-Auth-Request-Preferred-Username
+		}
+	}
+}
+
+# Proves to the app that the request came through this gateway (see @synergy/identity).
+(to_app) {
+	reverse_proxy {args[0]} {
+		header_up X-Proxy-Auth-Secret {$PROXY_SHARED_SECRET}
+	}
+}
+
+auth.{$SUITE_DOMAIN} {
+	reverse_proxy auth:3500
+}
+
+sso.{$SUITE_DOMAIN} {
+	reverse_proxy oauth2-proxy:4180
+}
+
+calendar.{$SUITE_DOMAIN} {
+	# Machine API, authenticated by bearer token inside the app.
+	handle /api/svc/* {
+		import to_app calendar:3130
+	}
+	handle {
+		import signed_in
+		import to_app calendar:3130
+	}
+}
+
+chat.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app chat:3080
+}
+
+forms.{$SUITE_DOMAIN} {
+	# Published forms are public so anyone can respond.
+	handle /f/* {
+		import to_app forms:3110
+	}
+	handle {
+		import signed_in
+		import to_app forms:3110
+	}
+}
+
+notes.{$SUITE_DOMAIN} {
+	import signed_in
+	handle /collab* {
+		import to_app notes-collab:3136
+	}
+	handle {
+		import to_app notes:3135
+	}
+}
+
+sites.{$SUITE_DOMAIN} {
+	# Published sites are public.
+	handle /s/* {
+		import to_app sites:3170
+	}
+	handle {
+		import signed_in
+		import to_app sites:3170
+	}
+}
+
+people.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app people:3140
+}
+
+portal.{$SUITE_DOMAIN} {
+	# Client portal links carry their own secret token.
+	handle /c/* {
+		import to_app portal:3155
+	}
+	handle {
+		import signed_in
+		import to_app portal:3155
+	}
+}
+
+mail.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app mail:3200
+}
+
+meet.{$SUITE_DOMAIN} {
+	# LiveKit signalling and server API go straight to the media server.
+	@livekit path /rtc* /twirp*
+	handle @livekit {
+		reverse_proxy {$LIVEKIT_UPSTREAM:livekit:7880}
+	}
+	handle {
+		import maybe_signed_in
+		import to_app meet:3420
+	}
+}
+
+office.{$SUITE_DOMAIN} {
+	import signed_in
+	handle /collab* {
+		import to_app office-collab:3071
+	}
+	handle {
+		import to_app office:3070
+	}
+}
+
+books.{$SUITE_DOMAIN} {
+	# The customer portal (invoices by access token) and payment webhooks need no suite account.
+	@public path /api/portal/* /api/webhooks/payments/*
+	handle @public {
+		import to_app books:3055
+	}
+	handle {
+		import signed_in
+		import to_app books:3055
+	}
+}
+
+trust.{$SUITE_DOMAIN} {
+	# The public trust centre (and the build assets its page loads), and the collector
+	# agents (bearer tokens checked in the app), need no suite account.
+	@public path /trust/* /api/agent/* /_next/static/*
+	handle @public {
+		import to_app trust:3670
+	}
+	handle {
+		import signed_in
+		import to_app trust:3670
+	}
+}
+
+planner.{$SUITE_DOMAIN} {
+	# Automation API, authenticated by MIND_TOKEN inside the app.
+	handle /api/mind* {
+		import to_app planner:3600
+	}
+	handle {
+		import signed_in
+		import to_app planner:3600
+	}
+}
+
+base.{$SUITE_DOMAIN} {
+	# Data links read a table or query as CSV for Sheets without signing in; the token in the
+	# address is the key, and Base never reads identity on this path.
+	handle /api/feed/* {
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		import to_app base:3680
+	}
+	handle {
+		import signed_in
+		import to_app base:3680
+	}
+}
+
+photo.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app photo:3650
+}
+
+contacts.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app contacts:3190
+}
+
+admin.{$SUITE_DOMAIN} {
+	# The policy feed apps read (/api/svc/policy) stays on the compose network, never public.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app admin:3700
+	}
+}
+
+search.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app search:3710
+}
+
+crm.{$SUITE_DOMAIN} {
+	# Web-to-lead forms post here with CRM_API_TOKEN, checked in the app.
+	handle /api/intake/lead {
+		import to_app crm:3095
+	}
+	handle {
+		import signed_in
+		import to_app crm:3095
+	}
+}
+
+desk.{$SUITE_DOMAIN} {
+	# The public help center and its build assets, and the intake and Portal feeds (bearer
+	# DESK_API_TOKEN, checked in the app), need no suite account.
+	@shared path /kb /kb/* /api/kb/public /api/intake /api/svc/* /_next/* /favicon.ico /icon.svg
+	handle @shared {
+		import maybe_signed_in
+		import to_app desk:3105
+	}
+	handle {
+		import signed_in
+		import to_app desk:3105
+	}
+}
+
+todo.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app todo:3195
+}
+
+drive.{$SUITE_DOMAIN} {
+	# View links open without an account: the link page, its API and the build assets the page
+	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.
+	@shared path /s/* /api/shared/* /_next/* /favicon.ico /icon.svg
+	handle @shared {
+		import maybe_signed_in
+		import to_app drive:3180
+	}
+	handle {
+		import signed_in
+		import to_app drive:3180
+	}
+}
+
+cad.{$SUITE_DOMAIN} {
+	# Share links open without an account: the review page, its API, and the engines and
+	# scripts it loads. A signed-in viewer is still known, so the owner can manage comments.
+	@shared path /s/* /api/shared/* /engine/* /engine3d/* /dwg/* /dwg-worker.js /_next/* /favicon.ico
+	handle @shared {
+		import maybe_signed_in
+		import to_app cad:3660
+	}
+	handle {
+		import signed_in
+		import to_app cad:3660
+	}
+}

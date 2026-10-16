@@ -1,0 +1,15 @@
+{
+  "name": "synergyportal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergyPortal - customer-facing portal aggregating invoices, tickets, and documents",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/server": "*",
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "synergynotes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergyNotes - team wiki: page tree, markdown, search",
+  "scripts": {
+    "start": "node server/index.js",
+    "collab": "node server/collab.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "2.15.2",
+    "@synergy/compliance": "*",
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/server": "*",
+    "express": "^4.19.2",
+    "html-to-docx": "1.8.0",
+    "yjs": "13.6.20"
+  }
+}

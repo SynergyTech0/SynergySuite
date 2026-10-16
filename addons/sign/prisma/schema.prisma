@@ -1,0 +1,607 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  token    String   @unique
+  expires  DateTime
+  attempts Int      @default(0)
+  id       String   @id @default(cuid())
+  used     Boolean  @default(false)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([id, token])
+}
+
+model AccountAuditLog {
+  id        String       @id @default(cuid())
+  userId    String
+  event     AccountEvent
+  timestamp DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id])
+
+  @@map("account_audit_log")
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  name               String?
+  email              String               @unique
+  emailVerified      DateTime?
+  image              String?
+  password           String?
+  firstName          String?
+  lastName           String?
+  companyName        String?
+  role               UserRole             @default(SENDER)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  documentsThisMonth Int                  @default(0)
+  signersThisMonth   Int                  @default(0)
+  lastResetDate      DateTime             @default(now())
+  enterpriseId       String?
+  pricingOverride    Boolean              @default(false)
+  referralCode       String               @unique @default(cuid())
+  referredById       String?
+  totalEarnings      Float                @default(0)
+  pendingEarnings    Float                @default(0)
+  payoutEmail        String?
+  payoutMethod       String?
+  stripeAccountId    String?
+  accounts           Account[]
+  sessions           Session[]
+  VerificationToken  VerificationToken[]
+  AccountAuditLog    AccountAuditLog[]
+  affiliateEarnings  AffiliateEarning[]
+  payouts            AffiliatePayout[]
+  auditLogs          AuditLog[]
+  signedDocuments    DocumentSigner[]
+  sentDocuments      Document[]           @relation("DocumentSender")
+  administratorOf    EnterpriseAccount?   @relation("EnterpriseAdmin")
+  EnterpriseAuditLog EnterpriseAuditLog[]
+  EnterpriseRequests EnterpriseRequests[]
+  notifications      Notification[]
+  subscription       Subscription?
+  templates          Template[]
+  enterprise         EnterpriseAccount?   @relation("EnterpriseMembers", fields: [enterpriseId], references: [id])
+  referredBy         User?                @relation("Referrals", fields: [referredById], references: [id])
+  referrals          User[]               @relation("Referrals")
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  tier                 SubscriptionTier   @default(FREE)
+  status               SubscriptionStatus @default(TRIAL)
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  trialEndsAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  pendingTier          SubscriptionTier?
+  enterprise           EnterpriseAccount?
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Document {
+  invoice          Invoice?
+  id                 String           @id @default(cuid())
+  title              String
+  description        String?
+  cloudStoragePath   String
+  originalFileName   String
+  fileType           String
+  fileSize           Int
+  status             DocumentStatus   @default(DRAFT)
+  signingOrder       SigningOrder     @default(PARALLEL)
+  deadline           DateTime?
+  completedAt        DateTime?
+  senderId           String
+  templateId         String?
+  summary            String?
+  suggestedFields    Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  aiAnalysis         String?
+  aiAnalyzedAt       DateTime?
+  aiKeywords         String[]
+  aiSummary          String?
+  aiDetectedAt       DateTime?
+  aiFullAnalysis     String?
+  cloudProvider      CloudProvider    @default(LOCAL)
+  archived           Boolean          @default(false)
+  documentHash       String?
+  signedAt           DateTime?
+  signedDocumentPath String?
+  /// CRM deal id for pipeline-created contracts; echoed back in every contract.event.
+  dealRef            String?
+  /// The CRM's idempotency key for the create call (draft-<dealId>-<crmJobId>). Unique per dealRef
+  /// via the PARTIAL index documents_dealRef_requestKey_key (WHERE "requestKey" IS NOT NULL), which
+  /// lives only in migration 20261010120000: Prisma 6 cannot declare a partial index in the schema.
+  requestKey         String?
+  auditLogs          AuditLog[]
+  fields             DocumentField[]
+  fieldCorrections   FieldCorrection[]
+  signers            DocumentSigner[]
+  sender             User             @relation("DocumentSender", fields: [senderId], references: [id])
+  template           Template?        @relation(fields: [templateId], references: [id])
+  notifications      Notification[]
+
+  @@index([dealRef])
+  @@map("documents")
+}
+
+model DocumentSigner {
+  id             String       @id @default(cuid())
+  documentId     String
+  userId         String?
+  email          String
+  name           String
+  order          Int          @default(0)
+  status         SignerStatus @default(PENDING)
+  signedAt       DateTime?
+  declinedAt     DateTime?
+  reminderCount  Int          @default(0)
+  lastReminder   DateTime?
+  signatureData  Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  token          String?      @unique
+  tokenExpiresAt DateTime?
+  auditLogs      AuditLog[]
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
+
+  @@unique([documentId, email])
+  @@map("document_signers")
+}
+
+model DocumentField {
+  id              String            @id @default(cuid())
+  documentId      String
+  fieldType       FieldType
+  label           String
+  required        Boolean           @default(true)
+  pageNumber      Int?
+  x               Float
+  y               Float
+  width           Float
+  height          Float
+  value           String?
+  options         Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  assignedToId    String?
+  signerId        String?
+  // OCR Detection tracking
+  detectionMethod DetectionMethod   @default(MANUAL)
+  confidence      Float?            // OCR confidence score (0.0-1.0)
+  ocrSourceText   String?           // Original text detected by OCR
+  originalX       Float?            // Original X position from OCR
+  originalY       Float?            // Original Y position from OCR
+  originalWidth   Float?            // Original width from OCR
+  originalHeight  Float?            // Original height from OCR
+  document        Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  corrections     FieldCorrection[]
+
+  @@map("document_fields")
+}
+
+model FieldCorrection {
+  id                  String          @id @default(cuid())
+  fieldId             String
+  documentId          String
+  // What OCR originally detected
+  originalFieldType   FieldType
+  originalLabel       String
+  originalX           Float
+  originalY           Float
+  originalWidth       Float
+  originalHeight      Float
+  ocrConfidence       Float?
+  ocrSourceText       String?
+  // What user corrected it to
+  correctedFieldType  FieldType
+  correctedLabel      String
+  correctedX          Float
+  correctedY          Float
+  correctedWidth      Float
+  correctedHeight     Float
+  // Metadata
+  correctedBy         String?         // User ID who made correction
+  correctedAt         DateTime        @default(now())
+  // Relations
+  field               DocumentField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  document            Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([fieldId])
+  @@map("field_corrections")
+}
+
+model Template {
+  id               String        @id @default(cuid())
+  name             String
+  description      String?
+  cloudStoragePath String
+  originalFileName String
+  creatorId        String
+  isPublic         Boolean       @default(false)
+  usageCount       Int           @default(0)
+  fields           Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  cloudProvider    CloudProvider @default(LOCAL)
+  fileSize         Int           @default(0)
+  fileType         String        @default("")
+  documents        Document[]
+  creator          User          @relation(fields: [creatorId], references: [id])
+
+  @@map("templates")
+}
+
+model AuditLog {
+  id               String          @id @default(cuid())
+  documentId       String?
+  documentSignerId String?
+  userId           String?
+  action           AuditAction
+  details          Json?
+  ipAddress        String?
+  userAgent        String?
+  timestamp        DateTime        @default(now())
+  document         Document?       @relation(fields: [documentId], references: [id])
+  documentSigner   DocumentSigner? @relation(fields: [documentSignerId], references: [id])
+  user             User?           @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id           String             @id @default(cuid())
+  documentId   String?
+  userId       String?
+  email        String
+  type         NotificationType
+  status       NotificationStatus @default(PENDING)
+  subject      String
+  message      String
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  errorMessage String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  read         Boolean            @default(false)
+  redirectURL  String?
+  document     Document?          @relation(fields: [documentId], references: [id])
+  user         User?              @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model EnterpriseAccount {
+  id                String                 @id @default(cuid())
+  name              String
+  domain            String?
+  contactEmail      String
+  contactName       String
+  contactPhone      String?
+  userLimit         Int                    @default(25)
+  currentUserCount  Int                    @default(0)
+  contractStartDate DateTime?
+  contractEndDate   DateTime?
+  isActive          Boolean                @default(true)
+  notes             String?
+  customPricing     String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  administratorId   String?                @unique
+  subscriptionId    String?                @unique
+  administrator     User?                  @relation("EnterpriseAdmin", fields: [administratorId], references: [id])
+  subscription      Subscription?          @relation(fields: [subscriptionId], references: [id])
+  invitations       EnterpriseInvitation[]
+  users             User[]                 @relation("EnterpriseMembers")
+
+  @@map("enterprise_accounts")
+}
+
+model EnterpriseInvitation {
+  id           String            @id @default(cuid())
+  token        String            @unique
+  email        String
+  enterpriseId String
+  invitedBy    String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  userId       String?
+  createdAt    DateTime          @default(now())
+  enterprise   EnterpriseAccount @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([email, enterpriseId])
+  @@index([email, enterpriseId], map: "enterprise_inv_email_idx")
+  @@index([token], map: "enterprise_inv_token_idx")
+  @@map("enterprise_invitations")
+}
+
+model AffiliateEarning {
+  id             String           @id @default(cuid())
+  affiliateId    String
+  referredUserId String
+  amount         Float
+  isPaid         Boolean          @default(false)
+  payoutId       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  monthEnd       DateTime
+  monthStart     DateTime
+  affiliate      User             @relation(fields: [affiliateId], references: [id])
+  payout         AffiliatePayout? @relation(fields: [payoutId], references: [id])
+
+  @@unique([affiliateId, referredUserId, monthStart])
+  @@map("affiliate_earnings")
+}
+
+model AffiliatePayout {
+  id            String             @id @default(cuid())
+  userId        String
+  amount        Float
+  weekStart     DateTime
+  weekEnd       DateTime
+  payoutMethod  String?
+  status        PayoutStatus       @default(PENDING)
+  failureReason String?
+  transactionId String?
+  notes         String?
+  processedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  earnings      AffiliateEarning[]
+  user          User               @relation(fields: [userId], references: [id])
+
+  @@map("affiliate_payouts")
+}
+
+model EnterpriseRequests {
+  id                    String               @id @default(cuid())
+  companyName           String
+  message               String?
+  status                EnterpriseStatus     @default(PENDING)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @default(now())
+  contactEmail          String
+  contactName           String
+  submitter             String
+  teamSize              String
+  customerRequestId     String?              @unique
+  stripeCustomerId      String?              @unique
+  paymentToken          String?              @unique
+  paymentTokenExpiresAt DateTime?
+  EnterpriseAuditLog    EnterpriseAuditLog[]
+  submitUser            User                 @relation(fields: [submitter], references: [id])
+
+  @@map("enterprise_requests")
+}
+
+model EnterpriseAuditLog {
+  id        String             @id @default(cuid())
+  requestId String
+  userId    String
+  action    String
+  timestamp DateTime           @default(now())
+  notes     String?
+  request   EnterpriseRequests @relation(fields: [requestId], references: [id])
+  user      User               @relation(fields: [userId], references: [id])
+
+  @@map("enterprise_audit_log")
+}
+
+enum UserRole {
+  SENDER
+  SIGNER
+  ADMIN
+  CORPORATE
+  SYSTEM_ADMIN
+}
+
+enum CloudProvider {
+  LOCAL
+  AWS
+  AZURE
+  GOOGLE
+}
+
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+  TRIAL
+}
+
+enum DocumentStatus {
+  DRAFT
+  SENT
+  COMPLETED
+  DECLINED
+  EXPIRED
+}
+
+enum SigningOrder {
+  SEQUENTIAL
+  PARALLEL
+}
+
+enum SignerStatus {
+  PENDING
+  COMPLETED
+  DECLINED
+}
+
+enum FieldType {
+  SIGNATURE
+  INITIALS
+  TEXT
+  DATE
+  CHECKBOX
+  DROPDOWN
+}
+
+enum DetectionMethod {
+  MANUAL      // User manually placed the field
+  OCR_GPU     // Detected by FastAPI GPU OCR
+  OCR_LOCAL   // Detected by local Tesseract OCR
+  AI          // Placed by the document-intelligence model (lib/ai) from the real layout
+}
+
+enum AuditAction {
+  DOCUMENT_CREATED
+  DOCUMENT_SENT
+  DOCUMENT_VIEWED
+  DOCUMENT_SIGNED
+  DOCUMENT_COMPLETED
+  DOCUMENT_DECLINED
+  SIGNER_ADDED
+  SIGNER_REMOVED
+  FIELD_ADDED
+  FIELD_UPDATED
+  REMINDER_SENT
+  TEMPLATE_CREATED
+  TEMPLATE_USED
+  DOCUMENT_UPDATED
+  FILE_ACCESSED
+  DOCUMENT_ACCESS_DENIED
+}
+
+enum NotificationType {
+  DOCUMENT_SENT
+  SIGNATURE_REQUESTED
+  DOCUMENT_SIGNED
+  DOCUMENT_COMPLETED
+  DOCUMENT_DECLINED
+  REMINDER
+  DEADLINE_APPROACHING
+  OTHER
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum EnterpriseStatus {
+  PENDING
+  DISCUSSION
+  APPROVED
+  REJECTED
+  ACTIVATED
+}
+
+enum AccountEvent {
+  LOGGED_IN
+  LOGGED_OUT
+  REGISTERED
+  VERIFIED
+  FAILED_LOG_IN
+  FAILED_VERIFICATION
+  TOKEN_DEACTIVATED
+}
+
+model Invoice {
+  id                   String    @id @default(cuid())
+  documentId           String    @unique
+  token                String    @unique
+  clientLegalName      String
+  customerEmail        String
+  monthlyCents         Int
+  setupCents           Int       @default(0)
+  currency             String    @default("usd")
+  status               String    @default("AWAITING_SIGNATURES")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  createdAt            DateTime  @default(now())
+  paidAt               DateTime?
+  document             Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+/// Outbox for contract.event deliveries to the CRM (lib/contract-events.ts). A row is written in the
+/// same request that changes the document, then delivered with retries, so a CRM outage delays an
+/// event instead of losing it. `ref` is the idempotency key the CRM dedupes on.
+model ContractEventOutbox {
+  id            String    @id @default(cuid())
+  ref           String    @unique
+  documentId    String
+  payload       Json
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  deliveredAt   DateTime?
+  failedAt      DateTime?
+  lastStatus    Int?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([deliveredAt, failedAt, nextAttemptAt])
+  @@index([documentId])
+  @@map("contract_event_outbox")
+}

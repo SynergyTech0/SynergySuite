@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Sheets</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  body { background: var(--surface); overflow: hidden; }
+  .doc-bar { display: flex; align-items: center; gap: 4px; padding: 8px 12px 0; }
+  .doc-title {
+    font-family: var(--font); font-size: 18px; border: 1px solid transparent;
+    background: transparent; padding: 2px 6px; border-radius: var(--r-sm);
+    color: var(--on-surface); outline: none; min-width: 120px;
+  }
+  .doc-title:hover { border-color: var(--outline-variant); }
+  .doc-title:focus { border-color: var(--blue-700); }
+  .menubar { display: flex; gap: 2px; padding: 0 12px 4px 56px; }
+  .menubar button {
+    background: none; border: none; font-size: 14px; color: var(--on-surface);
+    padding: 4px 8px; border-radius: var(--r-sm); cursor: pointer; font-family: var(--font-body);
+  }
+  .menubar button:hover { background: var(--surface-c); }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 2px; padding: 4px 8px;
+    margin: 0 12px 6px; background: var(--surface-c); border-radius: var(--r-full);
+    flex-wrap: nowrap; overflow-x: auto;
+  }
+  .toolbar .sep { width: 1px; height: 22px; background: var(--outline-variant); margin: 0 6px; flex: none; }
+  .tb-btn {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; border-radius: var(--r-sm); cursor: pointer;
+    color: var(--on-surface-variant); flex: none;
+  }
+  .tb-btn:hover { background: var(--surface-c-max); }
+  .tb-btn.on { background: var(--blue-100); color: var(--blue-900); }
+  .tb-btn .mi { font-size: 18px; }
+  .tb-sel { height: 30px; border: none; background: transparent; border-radius: var(--r-sm);
+            font-size: 13px; cursor: pointer; color: var(--on-surface); padding: 0 4px; flex: none; }
+  .tb-sel:hover { background: var(--surface-c-max); }
+
+  .fbar {
+    display: flex; align-items: center; height: 30px; border-top: 1px solid var(--divider);
+    border-bottom: 1px solid var(--divider); background: var(--surface);
+  }
+  .namebox {
+    width: 120px; flex: none; border-right: 1px solid var(--divider); height: 100%;
+    display: flex; align-items: center; padding: 0 10px; font-size: 13px; gap: 6px;
+  }
+  .namebox input { border: none; outline: none; width: 100%; font-size: 13px; background: transparent; color: var(--on-surface); }
+  .fx { width: 36px; text-align: center; color: var(--on-surface-variant); font-style: italic; font-size: 14px; flex: none; }
+  .fbar input.formula {
+    flex: 1; border: none; outline: none; height: 100%; font-size: 14px;
+    font-family: 'Roboto Mono', Consolas, monospace; background: transparent; color: var(--on-surface);
+  }
+
+  .grid-wrap { flex: 1; overflow: auto; position: relative; background: var(--surface); }
+  table.grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  table.grid th, table.grid td {
+    border-right: 1px solid var(--divider); border-bottom: 1px solid var(--divider);
+    height: 21px; padding: 0; font-size: 13px; overflow: hidden; white-space: nowrap;
+  }
+  table.grid thead th {
+    background: var(--surface-c); position: sticky; top: 0; z-index: 3;
+    font-weight: 400; color: var(--on-surface-variant); text-align: center;
+    font-size: 11px; user-select: none; height: 22px;
+  }
+  table.grid thead th.sel-head { background: var(--blue-100); color: var(--blue-900); }
+  table.grid th.rowhead {
+    background: var(--surface-c); position: sticky; left: 0; z-index: 2;
+    width: 46px; min-width: 46px; text-align: center; font-weight: 400;
+    color: var(--on-surface-variant); font-size: 11px; user-select: none;
+  }
+  table.grid th.rowhead.sel-head { background: var(--blue-100); color: var(--blue-900); }
+  table.grid thead th.corner { left: 0; z-index: 4; width: 46px; min-width: 46px; }
+  table.grid td {
+    background: var(--surface); cursor: cell; padding: 0 4px;
+    text-overflow: clip; position: relative;
+  }
+  td.sel { background: var(--blue-50); }
+  td.anchor { outline: 2px solid var(--blue-700); outline-offset: -2px; z-index: 1; }
+  td.err { color: var(--red); }
+  td .ed {
+    position: absolute; inset: -1px; border: 2px solid var(--blue-700);
+    background: var(--surface); outline: none; font-size: 13px; padding: 0 3px;
+    font-family: var(--font-body); z-index: 5; box-shadow: var(--elev-2);
+    min-width: 100%; color: var(--on-surface);
+  }
+  .colresize {
+    position: absolute; right: -3px; top: 0; width: 6px; height: 100%;
+    cursor: col-resize; z-index: 5;
+  }
+
+  .sheet-tabs {
+    display: flex; align-items: center; gap: 2px; height: 36px; flex: none;
+    border-top: 1px solid var(--divider); background: var(--surface); padding: 0 8px;
+  }
+  .stab {
+    height: 28px; padding: 0 14px; display: flex; align-items: center; gap: 6px;
+    border-radius: var(--r-sm); font-size: 13px; cursor: pointer; color: var(--on-surface-variant);
+  }
+  .stab:hover { background: var(--surface-c); }
+  .stab.on { background: var(--blue-100); color: var(--blue-900); font-weight: 500; }
+  .statusbar { margin-left: auto; display: flex; gap: 16px; font-size: 12px; color: var(--on-surface-variant); padding-right: 12px; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="doc-bar">
+    <input class="doc-title" id="title" value="Untitled spreadsheet">
+    <button class="icon-btn" id="starBtn" data-tip="Star"><span class="mi">star_border</span></button>
+    <div class="spacer"></div>
+    <span class="muted" id="saveState" style="font-size:12px;margin-right:8px"></span>
+    <button class="btn btn-tonal" id="shareBtn"><span class="mi s18">lock</span>Share</button>
+  </div>
+  <div class="menubar" id="menubar"></div>
+  <div class="toolbar" id="toolbar"></div>
+  <div class="fbar">
+    <div class="namebox"><input id="namebox" value="A1"></div>
+    <div class="fx">fx</div>
+    <input class="formula" id="formula" spellcheck="false">
+  </div>
+  <div class="grid-wrap" id="gridWrap"></div>
+  <div class="sheet-tabs" id="tabs"></div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

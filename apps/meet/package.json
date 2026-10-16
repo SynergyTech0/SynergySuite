@@ -1,0 +1,36 @@
+{
+  "name": "synergymeet",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3420",
+    "build": "next build",
+    "start": "next start -p 3420",
+    "lint": "next lint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@livekit/components-react": "^2.9.9",
+    "@livekit/components-styles": "^1.1.6",
+    "@livekit/track-processors": "^0.5.8",
+    "@synergy/identity": "*",
+    "@synergy/shell": "*",
+    "livekit-client": "^2.9.0",
+    "livekit-server-sdk": "^2.9.0",
+    "lucide-react": "^0.475.0",
+    "next": "^15.5.20",
+    "nodemailer": "^6.10.1",
+    "pg": "^8.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

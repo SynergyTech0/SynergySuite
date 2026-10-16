@@ -1,0 +1,65 @@
+{
+ "title": "Synergy Slides",
+ "navItems": [],
+ "menuBar": [
+  "File",
+  "Edit",
+  "View",
+  "Insert",
+  "Slide",
+  "Help"
+ ],
+ "toolbar": [
+  "addNew slide",
+  "Layout",
+  "Theme",
+  "Text box",
+  "Image",
+  "Rectangle",
+  "Rounded shape",
+  "Bold",
+  "Italic",
+  "Underline",
+  "Increase font size",
+  "Decrease font size",
+  "Align left",
+  "Align center",
+  "Align right",
+  "Delete element"
+ ],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "slideshowSlideshow",
+  "lockShare",
+  "addNew slide"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": null,
+ "iconButtons": [
+  "Main menu",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Star"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 5,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

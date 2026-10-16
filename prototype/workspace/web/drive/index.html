@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Drive</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  .drive-nav { width: 256px; padding: 8px 0 8px 8px; display: flex; flex-direction: column; }
+  .new-btn { margin: 8px 8px 16px 12px; align-self: flex-start; }
+  .storage { margin-top: auto; padding: 16px 24px; font-size: 12px; color: var(--on-surface-variant); }
+  .storage-bar { height: 4px; background: var(--surface-c-max); border-radius: 2px; margin: 8px 0 6px; overflow: hidden; }
+  .storage-bar i { display: block; height: 100%; background: var(--blue-600); }
+
+  .drive-head { display: flex; align-items: center; gap: 8px; padding: 16px 24px 8px; }
+  .crumb { font-family: var(--font); font-size: 22px; display: flex; align-items: center; gap: 4px; }
+  .crumb a { color: var(--on-surface); text-decoration: none; padding: 4px 8px; border-radius: var(--r-sm); }
+  .crumb a:hover { background: var(--surface-c); }
+  .crumb .sep { color: var(--on-surface-variant); font-size: 18px; }
+  .filters { display: flex; gap: 8px; padding: 0 24px 12px; align-items: center; }
+
+  table.files { width: 100%; border-collapse: collapse; }
+  table.files thead th {
+    text-align: left; font-size: 12px; font-weight: 500; color: var(--on-surface-variant);
+    padding: 8px 16px; border-bottom: 1px solid var(--divider); position: sticky; top: 0;
+    background: var(--surface); z-index: 2; cursor: pointer; user-select: none;
+  }
+  table.files thead th:hover { color: var(--on-surface); }
+  table.files td { padding: 0 16px; height: 44px; font-size: 14px; border-bottom: 1px solid var(--surface-c-low); }
+  table.files tbody tr { cursor: pointer; }
+  table.files tbody tr:hover { background: var(--surface-c-low); }
+  table.files tbody tr.sel { background: var(--blue-50); }
+  table.files tbody tr.sel:hover { background: var(--blue-100); }
+  .fname { display: flex; align-items: center; gap: 12px; }
+  .fname .mi { font-size: 20px; flex: none; }
+  .col-owner, .col-size { color: var(--on-surface-variant); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 0 24px 24px; }
+  .ftile {
+    border: 1px solid var(--divider); border-radius: var(--r-lg); background: var(--surface);
+    cursor: pointer; overflow: hidden; transition: background .12s, border-color .12s;
+  }
+  .ftile:hover { background: var(--surface-c-low); }
+  .ftile.sel { background: var(--blue-50); border-color: var(--blue-600); }
+  .ftile .head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-size: 14px; font-weight: 500; }
+  .ftile .head .mi { font-size: 20px; flex: none; }
+  .ftile .prev {
+    height: 140px; background: var(--surface-c-low); margin: 0 8px 8px; border-radius: var(--r-md);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ftile .prev .mi { font-size: 56px; opacity: .4; }
+
+  .details { width: 320px; border-left: 1px solid var(--divider); padding: 16px; overflow-y: auto; flex: none; }
+  .details h3 { font-family: var(--font); font-weight: 400; font-size: 16px; margin: 0 0 4px; }
+  .detail-row { display: flex; padding: 8px 0; font-size: 13px; gap: 12px; }
+  .detail-row b { width: 100px; flex: none; font-weight: 500; color: var(--on-surface-variant); }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav drive-nav" id="nav"></nav>
+    <main class="app-main" id="main"></main>
+    <aside class="details hidden" id="details"></aside>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

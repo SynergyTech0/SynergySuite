@@ -1,0 +1,147 @@
+diff --git a/apps/photocraft-web/Cargo.toml b/apps/photocraft-web/Cargo.toml
+index a4ded64..f1f9177 100644
+--- a/apps/photocraft-web/Cargo.toml
++++ b/apps/photocraft-web/Cargo.toml
+@@ -34,7 +34,7 @@ rfd = { workspace = true }
+ wasm-bindgen = "0.2"
+ wasm-bindgen-futures = "0.4"
+ js-sys = "0.3"
+-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbCursor", "IdbCursorWithValue", "RequestInit", "Navigator"] }
++web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "Location", "CssStyleDeclaration", "Storage", "Event", "EventTarget", "MouseEvent", "PointerEvent", "BeforeUnloadEvent", "AbortController", "AbortSignal", "DomException", "Response", "IdbFactory", "IdbOpenDbRequest", "IdbDatabase", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbCursor", "IdbCursorWithValue", "RequestInit", "Navigator", "MessageEvent"] }
+ 
+ [dev-dependencies]
+ serde_json = { workspace = true }
+diff --git a/apps/photocraft-web/src/host.rs b/apps/photocraft-web/src/host.rs
+new file mode 100644
+index 0000000..ae1727b
+--- /dev/null
++++ b/apps/photocraft-web/src/host.rs
+@@ -0,0 +1,81 @@
++//! Host bridge: lets a same-origin page that embeds PhotoCraft in an iframe hand it files and
++//! receive what the user saves, in place of the browser's file picker and downloads.
++//!
++//! Off unless the page is opened with `?host` inside a parent frame. Messages are only accepted
++//! from, and only sent to, the page's own origin.
++//!
++//! Parent → app: `{type: "photocraft:open", name: string, bytes: ArrayBuffer}` opens a document.
++//! App → parent: `{type: "photocraft:ready"}` once the app runs, and
++//! `{type: "photocraft:save", name: string, bytes: ArrayBuffer}` for each save or export.
++
++use js_sys::{Object, Reflect, Uint8Array};
++use wasm_bindgen::closure::Closure;
++use wasm_bindgen::{JsCast as _, JsValue};
++
++use crate::web::Inbox;
++
++/// The parent frame, when the page was opened with `?host` and is embedded.
++fn parent() -> Option<web_sys::Window> {
++    let window = web_sys::window()?;
++    let search = window.location().search().ok()?;
++    if !search.trim_start_matches('?').split('&').any(|p| p == "host" || p.starts_with("host=")) {
++        return None;
++    }
++    let parent = window.parent().ok().flatten()?;
++    (!Object::is(&parent, &window)).then_some(parent)
++}
++
++pub fn enabled() -> bool {
++    parent().is_some()
++}
++
++fn origin() -> Option<String> {
++    web_sys::window()?.location().origin().ok()
++}
++
++fn message(kind: &str) -> Object {
++    let msg = Object::new();
++    let _ = Reflect::set(&msg, &"type".into(), &kind.into());
++    msg
++}
++
++/// Delivers files the parent sends into `inbox` (they open like dropped files), then tells the
++/// parent the app is ready.
++pub fn listen(inbox: Inbox, ctx: egui::Context) {
++    let (Some(window), Some(parent), Some(origin)) = (web_sys::window(), parent(), origin()) else { return };
++    let own = origin.clone();
++    let cb = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |e: web_sys::MessageEvent| {
++        if e.origin() != own {
++            return;
++        }
++        let data = e.data();
++        let field = |k: &str| Reflect::get(&data, &JsValue::from_str(k)).ok();
++        if field("type").and_then(|v| v.as_string()).as_deref() != Some("photocraft:open") {
++            return;
++        }
++        let Some(bytes) = field("bytes").filter(|b| b.is_instance_of::<js_sys::ArrayBuffer>()) else {
++            log::error!("host: open message without an ArrayBuffer");
++            return;
++        };
++        let name = field("name").and_then(|v| v.as_string()).unwrap_or_else(|| "image".into());
++        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, Uint8Array::new(&bytes).to_vec()));
++        ctx.request_repaint();
++    });
++    if window.add_event_listener_with_callback("message", cb.as_ref().unchecked_ref()).is_ok() {
++        cb.forget();
++    }
++    if let Err(e) = parent.post_message(&message("photocraft:ready"), &origin) {
++        log::error!("host: couldn't signal ready: {e:?}");
++    }
++}
++
++/// Sends a saved or exported file to the parent, named after the last component of `path`.
++pub fn save(path: &str, bytes: &[u8]) -> Result<(), String> {
++    let parent = parent().ok_or("not embedded in a host page")?;
++    let origin = origin().ok_or("no origin")?;
++    let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "photocraft".into());
++    let msg = message("photocraft:save");
++    let _ = Reflect::set(&msg, &"name".into(), &name.into());
++    let _ = Reflect::set(&msg, &"bytes".into(), &Uint8Array::from(bytes).buffer());
++    parent.post_message(&msg, &origin).map_err(|e| format!("{e:?}"))
++}
+diff --git a/apps/photocraft-web/src/main.rs b/apps/photocraft-web/src/main.rs
+index 5ba75f5..9a5d799 100644
+--- a/apps/photocraft-web/src/main.rs
++++ b/apps/photocraft-web/src/main.rs
+@@ -22,6 +22,9 @@ mod preset_bridge;
+ #[cfg(target_arch = "wasm32")]
+ mod indexed_presets;
+ 
++#[cfg(target_arch = "wasm32")]
++mod host;
++
+ #[cfg(target_arch = "wasm32")]
+ mod web;
+ 
+diff --git a/apps/photocraft-web/src/web.rs b/apps/photocraft-web/src/web.rs
+index a5c9d8a..40d4b34 100644
+--- a/apps/photocraft-web/src/web.rs
++++ b/apps/photocraft-web/src/web.rs
+@@ -12,7 +12,7 @@ use photocraft_ui_egui::theme::ThemeKind;
+ use photocraft_ui_egui::{FileDialogAnswer, FileDialogRequest, PhotocraftApp, Services};
+ use wasm_bindgen::JsCast as _;
+ 
+-type Inbox = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
++pub(crate) type Inbox = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+ 
+ /// Everything File › Open reads: PhotoCraft, Photoshop, OpenRaster, Krita and Affinity documents, flat images, and
+ /// Photoshop brushes (.abr), gradients (.grd) and swatches (.aco, .ase), which go to the preset libraries.
+@@ -80,6 +80,9 @@ pub fn start() {
+                     PhotocraftApp::setup_context(&cc.egui_ctx, ThemeKind::Pro);
+                     let inbox: Inbox = Arc::default();
+                     let served: Served = Arc::default();
++                    if crate::host::enabled() {
++                        crate::host::listen(inbox.clone(), cc.egui_ctx.clone());
++                    }
+                     load_font_manifest(served.clone(), cc.egui_ctx.clone());
+                     let (session, warnings) = crate::preset_bridge::session(presets.clone());
+                     preset_warnings.extend(warnings);
+@@ -391,7 +394,8 @@ fn services(inbox: Inbox) -> Services {
+                 reply.send(Some(FileDialogAnswer::SaveTo(name)));
+             }
+         })),
+-        write: Some(Box::new(|path: &str, bytes: &[u8]| download(path, bytes))),
++        // Embedded in a host page, saves go to the host; otherwise they download.
++        write: Some(Box::new(|path: &str, bytes: &[u8]| if crate::host::enabled() { crate::host::save(path, bytes) } else { download(path, bytes) })),
+         encode_png: Some(Box::new(|w, h, rgba| {
+             let img = Image::from_u8(w, h, ChannelLayout::Rgba, rgba.to_vec()).map_err(|e| e.to_string())?;
+             photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &EncodeOptions::default()).map_err(|e| e.to_string())

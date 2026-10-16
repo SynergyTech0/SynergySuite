@@ -1,0 +1,9 @@
+# Files that run or are read inside Linux containers keep LF line endings on every checkout,
+# including Windows with core.autocrlf=true: a CRLF patch doesn't apply, and a CRLF shell script
+# fails with "$'\r': command not found".
+*.sh                text eol=lf
+*.patch             text eol=lf
+*Dockerfile*        text eol=lf
+.dockerignore       text eol=lf
+deploy/**           text=auto eol=lf
+apps/*/engine/**    text=auto eol=lf

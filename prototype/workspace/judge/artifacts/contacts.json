@@ -1,0 +1,51 @@
+{
+ "title": "Synergy Contacts",
+ "navItems": [
+  "personContacts7",
+  "starStarred3"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addCreate contact"
+ ],
+ "tableHeaders": [
+  "Name",
+  "Email",
+  "Phone number",
+  "Job title & company"
+ ],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search contacts",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Star",
+  "Edit",
+  "Delete"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 7,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

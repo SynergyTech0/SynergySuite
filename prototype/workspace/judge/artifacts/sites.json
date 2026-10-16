@@ -1,0 +1,40 @@
+{
+ "title": "Synergy Sites",
+ "navItems": [
+  "webAll sites"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addCreate"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": null,
+ "iconButtons": [
+  "Main menu",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "emptyState": "No sites yet",
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

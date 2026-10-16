@@ -1,0 +1,45 @@
+{
+  "name": "synergy-suite",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Open source, self-hosted productivity suite modeled on Microsoft 365.",
+  "workspaces": [
+    "packages/*",
+    "apps/books/api",
+    "apps/books/web",
+    "apps/admin",
+    "apps/search",
+    "apps/base",
+    "apps/cad",
+    "apps/calendar",
+    "apps/chat",
+    "apps/contacts",
+    "apps/crm",
+    "apps/desk",
+    "apps/drive",
+    "apps/forms",
+    "apps/mail",
+    "apps/meet",
+    "apps/notes",
+    "apps/office",
+    "apps/planner",
+    "apps/photo",
+    "apps/sites",
+    "apps/todo",
+    "apps/trust",
+    "addons/people",
+    "addons/portal"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @synergy/config -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/db -w @synergy/server -w @synergy/shell",
+    "test:packages": "npm test -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/db -w @synergy/server -w @synergy/config",
+    "ports": "node -e \"for (const a of require('@synergy/config').apps) console.log(String(a.port).padEnd(6), a.id.padEnd(10), a.m365)\""
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.3"
+  }
+}

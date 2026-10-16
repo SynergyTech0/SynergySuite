@@ -1,0 +1,12 @@
+# LiveKit Egress config. Keys filled in on the box (never committed).
+redis:
+  address: 127.0.0.1:6379
+api_key: __LIVEKIT_API_KEY__
+api_secret: __LIVEKIT_API_SECRET__
+# Local ws to the engine on the same host (no TLS needed internally).
+ws_url: ws://127.0.0.1:7880
+insecure: true
+log_level: info
+
+# Where recorded files land inside the container (mapped to /opt/synergymeet/recordings on the host).
+# The app then hands these to SynergyDrive.

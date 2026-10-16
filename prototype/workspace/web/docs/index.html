@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Docs</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  body { background: var(--surface-c-low); overflow: hidden; }
+  .doc-bar { display: flex; align-items: center; gap: 4px; padding: 8px 12px 0; background: var(--surface); }
+  .doc-title {
+    font-family: var(--font); font-size: 18px; border: 1px solid transparent;
+    background: transparent; padding: 2px 6px; border-radius: var(--r-sm);
+    color: var(--on-surface); outline: none; min-width: 160px;
+  }
+  .doc-title:hover { border-color: var(--outline-variant); }
+  .doc-title:focus { border-color: var(--blue-700); }
+  .menubar { display: flex; gap: 2px; padding: 0 12px 4px 56px; background: var(--surface); }
+  .menubar button {
+    background: none; border: none; font-size: 14px; color: var(--on-surface);
+    padding: 4px 8px; border-radius: var(--r-sm); cursor: pointer; font-family: var(--font-body);
+  }
+  .menubar button:hover { background: var(--surface-c); }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 2px; padding: 4px 8px; margin: 0 12px 8px;
+    background: var(--surface-c); border-radius: var(--r-full); overflow-x: auto;
+  }
+  .toolbar .sep { width: 1px; height: 22px; background: var(--outline-variant); margin: 0 6px; flex: none; }
+  .tb-btn {
+    width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; border-radius: var(--r-sm); cursor: pointer;
+    color: var(--on-surface-variant); flex: none;
+  }
+  .tb-btn:hover { background: var(--surface-c-max); }
+  .tb-btn.on { background: var(--blue-100); color: var(--blue-900); }
+  .tb-btn .mi { font-size: 18px; }
+  .tb-sel { height: 30px; border: none; background: transparent; border-radius: var(--r-sm);
+            font-size: 13px; cursor: pointer; color: var(--on-surface); padding: 0 4px; flex: none; }
+  .tb-sel:hover { background: var(--surface-c-max); }
+
+  .doc-body { flex: 1; display: flex; min-height: 0; }
+  .outline {
+    width: 260px; flex: none; padding: 16px; overflow-y: auto;
+    border-right: 1px solid var(--divider); background: var(--surface);
+  }
+  .outline h4 { font-family: var(--font); font-weight: 500; font-size: 13px;
+                color: var(--on-surface-variant); margin: 0 0 12px; letter-spacing: .8px; }
+  .outline a { display: block; padding: 6px 8px; border-radius: var(--r-sm);
+               color: var(--on-surface-variant); text-decoration: none; font-size: 14px; }
+  .outline a:hover { background: var(--surface-c); color: var(--on-surface); }
+
+  .page-scroll { flex: 1; overflow-y: auto; padding: 32px 0 80px; }
+  .page {
+    width: 816px; min-height: 1056px; margin: 0 auto; background: var(--surface);
+    box-shadow: var(--elev-1); padding: 96px; outline: none;
+    font-family: 'Times New Roman', Georgia, serif; font-size: 11pt; line-height: 1.5;
+    color: var(--on-surface);
+  }
+  .page:focus { outline: none; }
+  .page h1 { font-size: 20pt; font-weight: 400; margin: 20px 0 6px; }
+  .page h2 { font-size: 16pt; font-weight: 400; margin: 18px 0 4px; color: #434343; }
+  .page h3 { font-size: 14pt; font-weight: 400; margin: 16px 0 4px; color: #666; }
+  .page p { margin: 0 0 11px; }
+  .page ul, .page ol { margin: 0 0 11px; padding-left: 36px; }
+  .page table { border-collapse: collapse; margin: 12px 0; }
+  .page table td { border: 1px solid var(--outline-variant); padding: 6px 10px; min-width: 60px; }
+  .page blockquote { border-left: 3px solid var(--outline-variant); margin: 12px 0; padding-left: 16px; color: #5f6368; }
+  .page a { color: var(--blue-600); }
+
+  .cmt-pane { width: 300px; flex: none; border-left: 1px solid var(--divider);
+              background: var(--surface); overflow-y: auto; padding: 12px; }
+  .cmt { border: 1px solid var(--divider); border-radius: var(--r-md); padding: 12px; margin-bottom: 10px; background: var(--surface); }
+  .cmt.resolved { opacity: .5; }
+  .statusline { height: 28px; display: flex; align-items: center; gap: 16px;
+                padding: 0 16px; font-size: 12px; color: var(--on-surface-variant);
+                border-top: 1px solid var(--divider); background: var(--surface); flex: none; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="doc-bar">
+    <input class="doc-title" id="title" value="Untitled document">
+    <button class="icon-btn" data-tip="Star"><span class="mi">star_border</span></button>
+    <div class="spacer"></div>
+    <span class="muted" id="saveState" style="font-size:12px;margin-right:8px"></span>
+    <button class="icon-btn" id="cmtToggle" data-tip="Comments"><span class="mi">comment</span></button>
+    <button class="btn btn-tonal" id="shareBtn"><span class="mi s18">lock</span>Share</button>
+  </div>
+  <div class="menubar" id="menubar"></div>
+  <div class="toolbar" id="toolbar"></div>
+  <div class="doc-body">
+    <aside class="outline" id="outline"></aside>
+    <div class="page-scroll"><div class="page" id="page" contenteditable="true" spellcheck="true"></div></div>
+    <aside class="cmt-pane hidden" id="cmtPane"></aside>
+  </div>
+  <div class="statusline"><span id="wordcount"></span><span id="modeLabel">Editing</span></div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

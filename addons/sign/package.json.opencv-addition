@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@u4/opencv4nodejs": "^8.1.0"
+  },
+  "optionalDependencies": {
+    "@u4/opencv4nodejs": "^8.1.0"
+  }
+}

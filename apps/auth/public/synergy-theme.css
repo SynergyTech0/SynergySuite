@@ -1,0 +1,292 @@
+/*
+ * Synergy suite theme — the Google-familiar look, shared by every app.
+ *
+ * WHY THIS FILE EXISTS
+ * The Hub sets the visual language; this ships that same language to Drive,
+ * Chat, Sign, Boards, Routes, Books and Exec so the suite feels like one product
+ * to someone who already knows Google Workspace.
+ *
+ * HOW IT IS DELIVERED
+ * Same channel the waffle already uses — one nginx line per app vhost, so no app
+ * source changes and it survives redeploys:
+ *
+ *   sub_filter '</head>'
+ *     '<link rel="stylesheet" href="https://auth.example.com/synergy-theme.css"></head>';
+ *   sub_filter_once on;
+ *   proxy_set_header Accept-Encoding "";     # required, or sub_filter sees gzip
+ *
+ * ⚠️ The font is loaded cross-origin (the CSS lives on auth.*, the page does not),
+ * so the /fonts/ location MUST send CORS or the browser silently refuses the file
+ * and every app falls back to Arial:
+ *
+ *   location /fonts/ { add_header Access-Control-Allow-Origin "*" always; }
+ *
+ * SCOPE — deliberately narrow.
+ * This layer only sets typography, colour, radius, elevation and focus. It never
+ * sets position, display, width, height, float or grid/flex properties, so it
+ * cannot break an app's layout. Anything structural belongs in that app's own
+ * stylesheet, not here.
+ */
+
+/* Roboto v51 variable — Apache-2.0, self-hosted, no fonts.googleapis.com at runtime. */
+@font-face {
+  font-family: 'Roboto Local';
+  src: url('/fonts/roboto-var.woff2') format('woff2-variations'),
+       url('/fonts/roboto-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --sy-font: 'Roboto Local', Roboto, Arial, Helvetica, sans-serif;
+  --sy-font-mono: Consolas, 'SF Mono', Menlo, 'Courier New', monospace;
+
+  /* Surfaces */
+  --sy-surface: #ffffff;
+  --sy-bg: #f8fafd;
+  --sy-container: #f0f4f9;
+  --sy-container-high: #e9eef6;
+  --sy-container-max: #dde3ea;
+
+  /* Content */
+  --sy-on: #1f1f1f;
+  --sy-on-variant: #444746;
+  --sy-outline: #747775;
+  --sy-outline-variant: #c4c7c5;
+  --sy-divider: #dadce0;
+
+  /* Primary */
+  --sy-primary: #0b57d0;
+  --sy-primary-hover: #0842a0;
+  --sy-on-primary: #ffffff;
+  --sy-primary-subtle: #e8f0fe;
+  --sy-secondary-container: #d3e3fd;
+  --sy-on-secondary-container: #062e6f;
+  /* #1a73e8 is 4.31:1 on --sy-bg, under 4.5. Google's own M3 chrome uses
+     the primary blue for links; it is 6.11:1 here. */
+  --sy-link: #0b57d0;
+
+  /* Status */
+  --sy-green: #188038;
+  --sy-yellow: #f9ab00;
+  --sy-red: #d93025;
+
+  /* Elevation — Google's two-part shadow, not a flat drop shadow. */
+  --sy-elev-1: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+  --sy-elev-2: 0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15);
+  --sy-elev-3: 0 4px 8px 3px rgba(60,64,67,.15), 0 1px 3px rgba(60,64,67,.30);
+
+  --sy-r-sm: 8px; --sy-r-md: 12px; --sy-r-lg: 16px; --sy-r-full: 9999px;
+}
+
+/* color-scheme is NOT set on bare :root. This file is injected into apps that
+   never asked for it, and some of them render dark natively — forcing
+   `color-scheme: light` on those gave them light scrollbars and light native
+   form controls on their own dark pages. It applies only once an app has
+   declared a theme. */
+:root[data-sy-theme='light'] { color-scheme: light; }
+
+/* Dark tokens apply ONLY when the app says it is dark (or explicitly defers to
+   the OS with data-sy-theme="auto"). Keying on prefers-color-scheme alone put
+   #8ab4f8 links on the white pages of apps that never went dark — 2.11:1, an AA
+   failure across the whole suite. An app opts in by stamping the attribute on
+   <html>; waffle.js reads the same attribute. */
+@media (prefers-color-scheme: dark) {
+  :root[data-sy-theme='auto'] {
+    --sy-surface: #1f1f1f;
+    --sy-bg: #131314;
+    --sy-container: #282a2c;
+    --sy-container-high: #303134;
+    --sy-container-max: #3c4043;
+    --sy-on: #e3e3e3;
+    --sy-on-variant: #c4c7c5;
+    --sy-outline: #8e918f;
+    --sy-outline-variant: #444746;
+    --sy-divider: #3c4043;
+    --sy-primary: #a8c7fa;
+    --sy-primary-hover: #c2d7f8;
+    --sy-on-primary: #062e6f;
+    --sy-primary-subtle: #1f3760;
+    --sy-secondary-container: #0842a0;
+    --sy-on-secondary-container: #d3e3fd;
+    --sy-link: #8ab4f8;
+    --sy-elev-1: 0 1px 2px 0 rgba(0,0,0,.5), 0 1px 3px 1px rgba(0,0,0,.3);
+    --sy-elev-2: 0 1px 2px 0 rgba(0,0,0,.5), 0 2px 6px 2px rgba(0,0,0,.3);
+    --sy-elev-3: 0 4px 8px 3px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.5);
+    /* Without this an auto-dark app gets light scrollbars and light native form
+       controls on a dark page. */
+    color-scheme: dark;
+  }
+}
+
+:root[data-sy-theme='dark'] {
+  --sy-surface: #1f1f1f;
+  --sy-bg: #131314;
+  --sy-container: #282a2c;
+  --sy-container-high: #303134;
+  --sy-container-max: #3c4043;
+  --sy-on: #e3e3e3;
+  --sy-on-variant: #c4c7c5;
+  --sy-outline: #8e918f;
+  --sy-outline-variant: #444746;
+  --sy-divider: #3c4043;
+  --sy-primary: #a8c7fa;
+  --sy-primary-hover: #c2d7f8;
+  --sy-on-primary: #062e6f;
+  --sy-primary-subtle: #1f3760;
+  --sy-secondary-container: #0842a0;
+  --sy-on-secondary-container: #d3e3fd;
+  --sy-link: #8ab4f8;
+  --sy-elev-1: 0 1px 2px 0 rgba(0,0,0,.5), 0 1px 3px 1px rgba(0,0,0,.3);
+  --sy-elev-2: 0 1px 2px 0 rgba(0,0,0,.5), 0 2px 6px 2px rgba(0,0,0,.3);
+  --sy-elev-3: 0 4px 8px 3px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------- typography
+   Google's UI is Roboto at 14px with 400/500 as the working weights. Apps keep
+   their own sizes; this only changes the face and smoothing. */
+body {
+  font-family: var(--sy-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+h1, h2, h3, h4, h5, h6,
+button, input, select, textarea, table, .btn {
+  font-family: var(--sy-font);
+}
+/* Google sets headings in regular weight, not bold — a large part of why its UI
+   reads calm rather than shouty. Scoped, because silently re-weighting every
+   heading in an app is not something a drop-in theme should do uninvited. */
+.sy-themed h1, .sy-themed h2, .sy-themed h3 { font-weight: 400; letter-spacing: 0; }
+code, pre, kbd, samp { font-family: var(--sy-font-mono); }
+
+/* Scoped for the same reason: an app that has its own link colour keeps it. */
+.sy-themed a { color: var(--sy-link); }
+
+/* ---------------------------------------------------------------- controls
+   Attribute selectors rather than bare tags where possible, so an app's own
+   more-specific rules still win. */
+/* Pill buttons are a real visual change — an app with square icon buttons would
+   have every one of them rounded without asking. Opt-in. */
+.sy-themed button, .sy-themed .btn,
+.sy-themed input[type='submit'], .sy-themed input[type='button'] {
+  border-radius: var(--sy-r-full);
+  font-weight: 500;
+  letter-spacing: .0107em;
+  transition: background-color .15s, box-shadow .15s;
+}
+
+input[type='text'], input[type='email'], input[type='password'],
+input[type='search'], input[type='number'], input[type='tel'],
+input[type='url'], input[type='date'], input[type='time'],
+textarea, select {
+  border-radius: var(--sy-r-sm);
+  font-family: var(--sy-font);
+}
+
+/* One visible focus ring across the whole suite. Keyboard users in Google's
+   products always know where they are; :focus-visible keeps it off mouse clicks. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--sy-primary);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- scrollbars
+   Google's thin, inset, rounded thumb. */
+/* The thumb is a control, not a divider, so WCAG 1.4.11 wants 3:1.
+   --sy-outline-variant is 1.63:1 against --sy-bg (#f8fafd) and 1.70:1 on plain
+   white; --sy-outline is 4.33:1 and 4.53:1 respectively. Both figures here were
+   previously quoted as the on-white pair while saying "on the page", which is a
+   different background — the conclusion held, the numbers did not. */
+/* COLOUR is in scope everywhere; SIZE is not. `scrollbar-width: thin` and a
+   12px ::-webkit-scrollbar change the gutter every scroll container reserves,
+   in seven apps this file does not own — that is a layout change, and this
+   stylesheet promises not to make those. The sizing is opt-in via .sy-themed;
+   the colour applies everywhere because it cannot move anything. */
+* { scrollbar-color: var(--sy-outline) transparent; }
+.sy-themed, .sy-themed * { scrollbar-width: thin; }
+.sy-themed ::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--sy-outline);
+  border-radius: var(--sy-r-sm);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--sy-on-variant); background-clip: content-box; }
+
+/* ---------------------------------------------------------------- opt-in helpers
+   Apps that want the full Google chrome can use these class names directly.
+   Nothing below applies unless an app opts in. */
+.sy-topbar {
+  height: 64px; display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; background: var(--sy-bg); color: var(--sy-on);
+}
+.sy-search {
+  height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  background: var(--sy-container); border-radius: var(--sy-r-full);
+  transition: background .15s, box-shadow .15s, border-radius .15s;
+}
+/* hub.css states as policy that this radius does NOT change on focus —
+   Gmail only squares its corners when a suggestion list opens, and there is
+   none here. The suite copy was doing the opposite, so the same gesture
+   behaved differently depending on which half of the suite you were in. */
+.sy-search:focus-within {
+  background: var(--sy-surface); box-shadow: var(--sy-elev-2); border-radius: var(--sy-r-md);
+}
+.sy-search input { border: 0; background: transparent; outline: none; font: inherit; flex: 1; }
+
+/* Nav rail item: the Gmail/Drive pill, square on the left, rounded on the right. */
+.sy-nav-item {
+  height: 40px; display: flex; align-items: center; gap: 18px;
+  padding: 0 12px 0 20px; margin-right: 8px;
+  border-radius: 0 var(--sy-r-full) var(--sy-r-full) 0;
+  color: var(--sy-on-variant); font-weight: 500; font-size: 14px;
+  cursor: pointer; text-decoration: none; position: relative;
+}
+/* State layer rather than a background swap, so hover reads correctly on the
+   already-tinted selected item instead of erasing its tint. */
+.sy-nav-item::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: currentColor; opacity: 0; transition: opacity .12s; pointer-events: none;
+}
+.sy-nav-item:hover::before { opacity: .08; }
+.sy-nav-item:active::before { opacity: .12; }
+.sy-nav-item.is-active {
+  background: var(--sy-secondary-container);
+  color: var(--sy-on-secondary-container);
+}
+
+.sy-btn-filled {
+  background: var(--sy-primary); color: var(--sy-on-primary);
+  border: 0; height: 36px; padding: 0 24px; cursor: pointer;
+}
+.sy-btn-filled:hover { background: var(--sy-primary-hover); box-shadow: var(--sy-elev-1); }
+.sy-btn-outline {
+  background: transparent; color: var(--sy-primary);
+  /* A control boundary, not a divider. --sy-outline-variant is 1.70:1 on white
+     (1.63:1 on --sy-bg), below WCAG 1.4.11's 3:1. --sy-outline is 4.53:1 on
+     white, 4.33:1 on --sy-bg. */
+  border: 1px solid var(--sy-outline); height: 36px; padding: 0 24px; cursor: pointer;
+}
+.sy-btn-outline:hover { background: var(--sy-primary-subtle); }
+
+.sy-card {
+  background: var(--sy-surface); border: 1px solid var(--sy-divider);
+  border-radius: var(--sy-r-lg);
+}
+.sy-elev { box-shadow: var(--sy-elev-1); border-color: transparent; }
+
+/* Scoped to what THIS stylesheet animates. A global `animation-duration: .01ms
+   !important` on `*` freezes every app's loading spinner mid-turn, which reads
+   as a hung page — an accessibility regression wearing an accessibility rule's
+   clothes. A theme layer may neutralise its own motion; it may not neutralise
+   the host app's. */
+@media (prefers-reduced-motion: reduce) {
+  .sy-themed, .sy-themed *, .sy-themed *::before, .sy-themed *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

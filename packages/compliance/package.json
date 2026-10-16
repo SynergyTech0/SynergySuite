@@ -1,0 +1,10 @@
+{
+  "name": "@synergy/compliance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "eDiscovery, legal hold and retention: the protocol between the Admin center and every app that keeps people's content.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "node --test test/*.test.js" }
+}

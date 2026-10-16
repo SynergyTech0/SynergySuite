@@ -1,0 +1,45 @@
+{
+ "title": "Synergy Forms",
+ "navItems": [],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addAdd question"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [
+  "Questions",
+  "Responses (0)",
+  "Preview"
+ ],
+ "searchPlaceholder": null,
+ "iconButtons": [
+  "Main menu",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Duplicate",
+  "Delete",
+  "close"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 5,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

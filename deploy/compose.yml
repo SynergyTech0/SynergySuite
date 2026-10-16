@@ -1,0 +1,613 @@
+# Synergy Suite: one-command self-host for the apps that use the shared packages.
+#   deploy/quickstart.sh                 # try it on your machine (writes deploy/.env for you)
+# or, on a server:
+#   cp deploy/.env.example deploy/.env   # fill it in
+#   docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build
+# More apps join this file as they move onto the shared packages.
+
+# Each app's image is published to the GitHub Container Registry by .github/workflows/images.yml
+# (see deploy/README.md); deploy/quickstart.sh pulls them and builds here only what it can't pull.
+# SYNERGY_REGISTRY and SYNERGY_IMAGE_TAG pick another registry or a commit's images.
+x-app: &app
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-express: &express
+  <<: *app
+  build: &express-build
+    context: ..
+    dockerfile: deploy/express-app.Dockerfile
+
+x-next: &next
+  <<: *app
+  build: &next-build
+    context: ..
+    dockerfile: deploy/next-app.Dockerfile
+
+x-app-env: &app-env
+  PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:?set PROXY_SHARED_SECRET}
+  SUITE_DOMAIN: ${SUITE_DOMAIN:?set SUITE_DOMAIN}
+  # Bring your own AI model: one setting for every app's AI features (see .env.example).
+  AI_PROVIDER: ${AI_PROVIDER:-}
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-}
+  AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
+  # Public demo instance (see .env.example): mail and meet then send nothing outside the suite.
+  DEMO_MODE: ${DEMO_MODE:-}
+  # eDiscovery and legal hold: apps answer the Admin center's searches and ask it who is on hold.
+  # Without COMPLIANCE_TOKEN there is no Admin center link: no holds, no retention, no searches.
+  COMPLIANCE_TOKEN: ${COMPLIANCE_TOKEN:-}
+  ADMIN_INTERNAL_URL: ${COMPLIANCE_TOKEN:+http://admin:3700}
+
+# Demo mode's shared login, read by auth (shown on the sign-in page) and the demo service.
+x-demo-env: &demo-env
+  DEMO_MODE: ${DEMO_MODE:-}
+  DEMO_EMAIL: ${DEMO_EMAIL:-demo@${MAIL_DOMAIN:-${SUITE_DOMAIN}}}
+  DEMO_PASSWORD: ${DEMO_PASSWORD:-SynergyDemo1}
+  DEMO_RESET_MINUTES: ${DEMO_RESET_MINUTES:-60}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Identity provider (Entra ID equivalent). Public: it is the login page.
+  auth:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-auth:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build: ../apps/auth
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/auth
+      ISSUER_URL: https://auth.${SUITE_DOMAIN}
+      SA_RP_ID: auth.${SUITE_DOMAIN}
+      SA_ENCRYPTION_KEY: ${SA_ENCRYPTION_KEY:?set SA_ENCRYPTION_KEY}
+      SUITE_DOMAIN: ${SUITE_DOMAIN}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      <<: *demo-env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3500/api/oidc/jwks').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  # Runs once per `up`, then exits: creates the first admin if there is none and registers
+  # (or updates) the gateway's OIDC client from OIDC_CLIENT_ID/OIDC_CLIENT_SECRET. Idempotent.
+  auth-init:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-auth:${SYNERGY_IMAGE_TAG:-latest}
+    build: ../apps/auth
+    command: ["node", "scripts/bootstrap.mjs"]
+    restart: "no"
+    depends_on:
+      auth: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/auth
+      AUTH_INTERNAL_URL: http://auth:3500
+      SUITE_DOMAIN: ${SUITE_DOMAIN}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      # Only used when the admin is created. Empty: a random one is printed in this service's log.
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      GATEWAY_REDIRECT_URI: https://sso.${SUITE_DOMAIN}/oauth2/callback
+
+  # Demo mode: seeds a fictional company (deploy/demo/content.mjs) into calendar, chat, notes,
+  # planner and mail, and puts everything back every DEMO_RESET_MINUTES (deploy/demo/reset.mjs).
+  # Uses the auth image for its Postgres driver. With DEMO_MODE unset it exits at once.
+  demo:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-auth:${SYNERGY_IMAGE_TAG:-latest}
+    build: ../apps/auth
+    command: ["node", "demo/reset.mjs"]
+    restart: on-failure
+    depends_on:
+      auth-init: { condition: service_completed_successfully }
+    volumes:
+      - ./demo:/app/demo:ro
+    environment:
+      <<: *demo-env
+      SUITE_DOMAIN: ${SUITE_DOMAIN}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      PG_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432
+      MAIL_IMAP_HOST: stalwart
+      MAIL_IMAP_PORT: "993"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+
+  # Sign-in gateway: one OIDC client for the whole suite, session cookie on .SUITE_DOMAIN.
+  # The browser signs in at https://auth.SUITE_DOMAIN; the gateway's own calls to auth (code
+  # redemption, signing keys) stay on the compose network, so it needs neither DNS for the
+  # suite domain nor to trust Caddy's certificate. ID tokens are still checked against the
+  # public issuer.
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://auth.${SUITE_DOMAIN}
+      OAUTH2_PROXY_SKIP_OIDC_DISCOVERY: "true"
+      OAUTH2_PROXY_LOGIN_URL: https://auth.${SUITE_DOMAIN}/api/oidc/authorize
+      OAUTH2_PROXY_REDEEM_URL: http://auth:3500/api/oidc/token
+      OAUTH2_PROXY_OIDC_JWKS_URL: http://auth:3500/api/oidc/jwks
+      OAUTH2_PROXY_SCOPE: openid email profile
+      OAUTH2_PROXY_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET:?set OAUTH2_COOKIE_SECRET}
+      OAUTH2_PROXY_COOKIE_DOMAINS: .${SUITE_DOMAIN}
+      OAUTH2_PROXY_WHITELIST_DOMAINS: .${SUITE_DOMAIN}
+      OAUTH2_PROXY_REDIRECT_URL: https://sso.${SUITE_DOMAIN}/oauth2/callback
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_REFRESH: "1h"
+      OAUTH2_PROXY_COOKIE_EXPIRE: "168h"
+      OAUTH2_PROXY_UPSTREAMS: static://202
+    depends_on:
+      auth: { condition: service_healthy }
+      auth-init: { condition: service_completed_successfully }
+
+  # The only service with published ports. TLS certificates are automatic: Let's Encrypt by
+  # default, or Caddy's own local CA when CADDY_GLOBAL_OPTIONS=local_certs (deploy/quickstart.sh).
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["${HTTP_PUBLISH:-80}:80", "${HTTPS_PUBLISH:-443}:443"]
+    environment:
+      SUITE_DOMAIN: ${SUITE_DOMAIN}
+      CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+      LIVEKIT_UPSTREAM: ${LIVEKIT_UPSTREAM:-livekit:7880}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [oauth2-proxy]
+
+  calendar:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-calendar:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: calendar } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/calendar
+      CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
+
+  chat:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-chat:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: chat } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/chat
+
+  forms:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-forms:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: forms } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/forms
+
+  notes:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-notes:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: notes } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/notes
+
+  notes-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-notes:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: notes } }
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/notes
+      COLLAB_PORT: "3136"
+      COLLAB_ADDRESS: 0.0.0.0
+
+  sites:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-sites:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: sites } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sites
+      SITES_BOOKING_URL: ${SITES_BOOKING_URL:-}
+      SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
+
+  # ---- add-ons ----
+  people:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-people:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: people, APP_DIR: addons/people } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/people
+      ADMIN_EMAILS: ${PEOPLE_ADMIN_EMAILS:-}
+
+  portal:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-portal:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *express
+    build: { <<: *express-build, args: { APP: portal, APP_DIR: addons/portal } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/portal
+      ALLOWED_EMAILS: ${PORTAL_ALLOWED_EMAILS:-}
+      # Clients see their invoices from Books and their tickets from Desk.
+      INVOICE_SVC_URL: ${INVOICE_SVC_URL:-http://books:3055}
+      INVOICE_SVC_TOKEN: ${INVOICE_SVC_TOKEN:-${BOOKS_SVC_TOKEN:-}}
+      DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
+      DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
+
+  # Word, Excel and PowerPoint equivalents, plus their real-time co-editing server.
+  meet:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-meet:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build:
+      <<: *next-build
+      args:
+        APP: meet
+        NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/meet
+      NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
+      # The LiveKit media server itself runs from apps/meet/deploy; these must match its keys.
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+
+  office:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-office:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build:
+      <<: *next-build
+      args:
+        APP: office
+        NEXT_PUBLIC_COLLAB_URL: wss://office.${SUITE_DOMAIN}/collab
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/office
+      # Read at run time too, so an image built without the build argument (the published
+      # images are built once for every domain) still finds the collaboration server.
+      NEXT_PUBLIC_COLLAB_URL: wss://office.${SUITE_DOMAIN}/collab
+
+  office-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-office:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build:
+      <<: *next-build
+      args:
+        APP: office
+        NEXT_PUBLIC_COLLAB_URL: wss://office.${SUITE_DOMAIN}/collab
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/office
+      COLLAB_ADDRESS: 0.0.0.0
+      COLLAB_PORT: "3071"
+
+  # Books (Dynamics 365 Business Central equivalent): API and web app in one container.
+  books:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-books:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/books.Dockerfile
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/books
+      REDIS_HOST: redis
+      # 64 hex characters; encrypts stored bank account numbers and filing PINs.
+      ENCRYPTION_KEY: ${BOOKS_ENCRYPTION_KEY:-}
+      BOOKS_COMPANY_NAME: ${BOOKS_COMPANY_NAME:-}
+      EMAIL_FROM: ${BOOKS_EMAIL_FROM:-}
+      # Lets the Portal add-on list a client's invoices (/api/svc/invoices). Empty turns the feed off.
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+
+  # Job queue for Books (background tax and bank classification).
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  planner:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-planner:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: planner } }
+    # Apply pending schema migrations, then serve.
+    command: ["sh", "-c", "npx drizzle-kit migrate && npm run start"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/planner
+      ATTACHMENT_DIR: /data/attachments
+      MIND_TOKEN: ${MIND_TOKEN:-}
+    volumes:
+      - planner-attachments:/data/attachments
+
+  # Compliance readiness (Purview Compliance Manager equivalent): SOC 2, ISO 27001, HIPAA, GDPR.
+  # Applies its migrations and the framework catalog on every start, then serves.
+  trust:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-trust:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: trust } }
+    command: ["sh", "-c", "node scripts/migrate.mjs && node scripts/seed.mjs && npm run start"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/trust
+      # Names the organisation created for the first user who opens Trust (default My Company).
+      TRUST_COMPANY_NAME: ${TRUST_COMPANY_NAME:-}
+
+  # Databases and lists (Access and Lists equivalent). Makes its catalog on first use; each
+  # database it holds is a schema of its own in this Postgres database.
+  base:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-base:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: base } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/base
+
+  # Image editing (Photoshop/Designer equivalent): the PhotoCraft engine compiled to WebAssembly.
+  photo:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-photo:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/photo.Dockerfile
+    environment:
+      <<: *app-env
+      PHOTO_DIR: /data/photos
+    volumes:
+      - photo-files:/data/photos
+
+  # 2D drafting (AutoCAD equivalent): the CADCraft engine compiled to WebAssembly, with DWG and DXF.
+  cad:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-cad:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/cad.Dockerfile
+    environment:
+      <<: *app-env
+      CAD_DIR: /data/drawings
+    volumes:
+      - cad-files:/data/drawings
+
+  # OneDrive equivalent: files, folders, sharing, view links, shared libraries and version history.
+  # File contents live in the drive-files volume; back it up together with Postgres.
+  drive:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-drive:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: drive } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/drive
+      DRIVE_DIR: /data/drive
+      DRIVE_QUOTA_MB: ${DRIVE_QUOTA_MB:-}
+      DRIVE_MAX_FILE_MB: ${DRIVE_MAX_FILE_MB:-}
+      DRIVE_TRASH_DAYS: ${DRIVE_TRASH_DAYS:-}
+      DRIVE_VERSIONS: ${DRIVE_VERSIONS:-}
+    volumes:
+      - drive-files:/data/drive
+
+  # Outlook People equivalent: each person's address book and the organization directory.
+  # The directory lists every suite account when DIRECTORY_SCIM_TOKEN holds a SCIM token from
+  # the auth admin console; without one it lists the people who have opened Contacts.
+  contacts:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-contacts:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: contacts } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/contacts
+      AUTH_INTERNAL_URL: http://auth:3500
+      DIRECTORY_SCIM_TOKEN: ${DIRECTORY_SCIM_TOKEN:-}
+
+  # Microsoft To Do equivalent: lists, My Day, due dates, reminders, repeating and shared tasks.
+  todo:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-todo:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: todo } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/todo
+
+  # Microsoft 365 admin center and Purview eDiscovery equivalent: people (through the sign-in
+  # service's SCIM API), app health, matters, legal holds, retention and cross-app search and export.
+  admin:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-admin:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: admin } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/admin
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      AUTH_INTERNAL_URL: http://auth:3500
+      ADMIN_SCIM_TOKEN: ${ADMIN_SCIM_TOKEN:-${DIRECTORY_SCIM_TOKEN:-}}
+      ADMIN_EXPORT_DIR: /data/admin
+    volumes:
+      - admin-exports:/data/admin
+
+  # Microsoft Search and Copilot equivalent: one search box across the content apps for the
+  # signed-in person (each app answers only with what that person can open), and an assistant
+  # that answers from those results. It uses the suite's AI_* model (SEARCH_AI_* to give it its own).
+  search:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-search:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    depends_on: []
+    build: { <<: *next-build, args: { APP: search } }
+    environment:
+      <<: *app-env
+      SEARCH_AI_PROVIDER: ${SEARCH_AI_PROVIDER:-}
+      SEARCH_AI_BASE_URL: ${SEARCH_AI_BASE_URL:-}
+      SEARCH_AI_API_KEY: ${SEARCH_AI_API_KEY:-}
+      SEARCH_AI_MODEL: ${SEARCH_AI_MODEL:-}
+      SEARCH_APP_URLS: ${SEARCH_APP_URLS:-}
+
+  # Dynamics 365 Sales equivalent: accounts, contacts, leads, the opportunity pipeline and
+  # activities. Lead scoring uses the suite's AI_* model (CRM_AI_* to give CRM its own).
+  crm:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-crm:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: crm } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/crm
+      CRM_API_TOKEN: ${CRM_API_TOKEN:-}
+      CRM_INTAKE_OWNER: ${CRM_INTAKE_OWNER:-}
+      CRM_AI_PROVIDER: ${CRM_AI_PROVIDER:-}
+      CRM_AI_BASE_URL: ${CRM_AI_BASE_URL:-}
+      CRM_AI_API_KEY: ${CRM_AI_API_KEY:-}
+      CRM_AI_MODEL: ${CRM_AI_MODEL:-}
+
+  # Dynamics 365 Customer Service equivalent: tickets from email, the web and the API, canned
+  # replies and a public knowledge base at /kb. Email intake and replies are off until the
+  # DESK_IMAP_* and DESK_SMTP_* settings point at a support mailbox.
+  desk:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-desk:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: desk } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/desk
+      DESK_API_TOKEN: ${DESK_API_TOKEN:-}
+      DESK_IMAP_HOST: ${DESK_IMAP_HOST:-}
+      DESK_IMAP_PORT: ${DESK_IMAP_PORT:-}
+      DESK_IMAP_USER: ${DESK_IMAP_USER:-}
+      DESK_IMAP_PASSWORD: ${DESK_IMAP_PASSWORD:-}
+      DESK_IMAP_FOLDER: ${DESK_IMAP_FOLDER:-}
+      DESK_IMAP_POLL_SECONDS: ${DESK_IMAP_POLL_SECONDS:-}
+      DESK_SMTP_HOST: ${DESK_SMTP_HOST:-}
+      DESK_SMTP_PORT: ${DESK_SMTP_PORT:-}
+      DESK_SMTP_USER: ${DESK_SMTP_USER:-}
+      DESK_SMTP_PASSWORD: ${DESK_SMTP_PASSWORD:-}
+      DESK_SMTP_FROM: ${DESK_SMTP_FROM:-}
+
+  # Outlook equivalent: the web mailbox, backed by the Stalwart mail server below.
+  mail:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-mail:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: mail } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      stalwart-init: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/mail
+      # Demo mode only lets mail go to this domain.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      # Encrypts the passwords of outside accounts users connect. openssl rand -base64 32
+      MAIL_ENCRYPTION_KEY: ${MAIL_ENCRYPTION_KEY:?set MAIL_ENCRYPTION_KEY}
+      MAIL_IMAP_HOST: stalwart
+      MAIL_IMAP_PORT: "993"
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      # Stalwart's certificate is self-signed until you give it a real one; this hop stays on the compose network.
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_SUITE_AUTH: master
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:?set MAIL_MASTER_PASSWORD}
+      # Creates each user's mailbox the first time they open Mail.
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:?set STALWART_ADMIN_PASSWORD}
+      # Suggests recipients from Contacts as you type; Mail works without it.
+      CONTACTS_INTERNAL_URL: http://contacts:3190
+
+  # Mail server (SMTP, IMAP, JMAP). Settings live in its database; deploy/stalwart/plan.template.ndjson
+  # is applied on every start by stalwart-init. Its admin UI is on 127.0.0.1:8080 (log in as admin).
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16.26
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME:-mx.${SUITE_DOMAIN}}
+    environment:
+      STALWART_HOSTNAME: ${MAIL_HOSTNAME:-mx.${SUITE_DOMAIN}}
+      STALWART_RECOVERY_ADMIN: admin:${STALWART_ADMIN_PASSWORD:?set STALWART_ADMIN_PASSWORD}
+    volumes:
+      - ./stalwart/config.json:/etc/stalwart/config.json:ro
+      - stalwart-data:/var/lib/stalwart
+    ports:
+      - "${MAIL_SMTP_PUBLISH:-25}:25"      # incoming mail from the internet
+      - "${MAIL_SUBMISSION_PUBLISH:-465}:465"  # sending from desktop and phone clients (TLS)
+      - "${MAIL_IMAPS_PUBLISH:-993}:993"   # reading from desktop and phone clients (TLS)
+      - "127.0.0.1:${MAIL_ADMIN_PUBLISH:-8080}:8080"  # admin UI and API; keep private
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # Fills in the setup plan from .env, then applies it. Both run once per `up` and exit.
+  stalwart-plan:
+    image: stalwartlabs/stalwart:v0.16.26
+    user: "0"
+    # Read with any CR stripped, so a CRLF checkout on Windows still runs.
+    entrypoint: ["sh", "-c", "tr -d '\\r' < /stalwart/render.sh | sh"]
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mx.${SUITE_DOMAIN}}
+      STALWART_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD}
+      # 1: also refuse relaying and keep every message on this server (stalwart/plan.demo.ndjson).
+      DEMO_MODE: ${DEMO_MODE:-}
+    volumes:
+      - ./stalwart:/stalwart:ro
+      - stalwart-plan:/plan
+    restart: "no"
+
+  stalwart-init:
+    image: stalwartlabs/cli:1.0.13
+    depends_on:
+      stalwart: { condition: service_healthy }
+      stalwart-plan: { condition: service_completed_successfully }
+    environment:
+      STALWART_URL: http://stalwart:8080
+      STALWART_USER: admin
+      STALWART_PASSWORD: ${STALWART_ADMIN_PASSWORD}
+    volumes:
+      - stalwart-plan:/plan:ro
+    command: ["apply", "--file", "/plan/plan.ndjson", "--no-color"]
+    restart: "no"
+
+volumes:
+  pgdata: {}
+  planner-attachments: {}
+  photo-files: {}
+  cad-files: {}
+  drive-files: {}
+  admin-exports: {}
+  caddy-data: {}
+  stalwart-data: {}
+  stalwart-plan: {}

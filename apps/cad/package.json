@@ -1,0 +1,28 @@
+{
+  "name": "synergy-cad",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy CAD: 2D drafting with DWG and DXF drawings (CADCraft) and 3D modeling (Chili3D) in the suite, both WebAssembly, with an AI modeling assistant on the suite's own model.",
+  "scripts": {
+    "dev": "next dev -p 3660",
+    "build": "next build",
+    "start": "next start -p 3660",
+    "engine": "sh engine/build.sh",
+    "test": "vitest run",
+    "engine:3d": "sh engine/build-3d.sh"
+  },
+  "dependencies": {
+    "@synergy/ai": "*",
+    "@synergy/identity": "*",
+    "@synergy/shell": "*",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.1"
+  }
+}

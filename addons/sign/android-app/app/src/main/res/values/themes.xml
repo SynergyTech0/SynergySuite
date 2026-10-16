@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SynergySign" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/blue_500</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowBackground">@color/gray_50</item>
+    </style>
+
+    <style name="Theme.SynergySign.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/blue_500</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/blue_500</item>
+        <item name="postSplashScreenTheme">@style/Theme.SynergySign</item>
+    </style>
+</resources>

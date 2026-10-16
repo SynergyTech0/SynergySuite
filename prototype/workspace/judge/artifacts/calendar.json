@@ -1,0 +1,60 @@
+{
+ "title": "Synergy Calendar",
+ "navItems": [
+  "checkShane Ansel",
+  "checkEngineering",
+  "checkOut of office"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Today",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addCreate"
+ ],
+ "tableHeaders": [
+  "S",
+  "M",
+  "T",
+  "W",
+  "F"
+ ],
+ "chips": [
+  "Day",
+  "Week",
+  "Month"
+ ],
+ "tabs": [],
+ "searchPlaceholder": "Search calendar",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Today",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "chevron_left",
+  "chevron_right",
+  "Previous",
+  "Next"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 6,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 24,
+  "events": 8,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

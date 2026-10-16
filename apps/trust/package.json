@@ -1,0 +1,40 @@
+{
+  "name": "@synergy/trust",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synergy Trust: compliance readiness for SOC 2, ISO 27001, HIPAA and GDPR (Purview Compliance Manager equivalent).",
+  "scripts": {
+    "dev": "next dev -p 3670",
+    "build": "next build",
+    "start": "next start -p 3670",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "db:setup": "node scripts/migrate.mjs && node scripts/seed.mjs",
+    "collect": "node scripts/collect.mjs",
+    "collect:due": "node scripts/collect.mjs --due",
+    "verify": "node scripts/verify.mjs",
+    "verify:access": "node scripts/verify-access.ts",
+    "verify:api": "node scripts/verify-api.mjs",
+    "verify:collectors": "node scripts/verify-collectors.mjs",
+    "verify:contrast": "node scripts/verify-contrast.mjs"
+  },
+  "dependencies": {
+    "@synergy/config": "*",
+    "@synergy/identity": "*",
+    "@synergy/shell": "*",
+    "next": "16.3.5",
+    "postgres": "^3.4.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.0"
+  }
+}

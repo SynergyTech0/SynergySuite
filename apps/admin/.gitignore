@@ -1,0 +1,2 @@
+# eDiscovery exports written in development (ADMIN_EXPORT_DIR defaults to ./exports)
+/exports/

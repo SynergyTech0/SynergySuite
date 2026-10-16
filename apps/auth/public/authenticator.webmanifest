@@ -1,0 +1,14 @@
+{
+  "name": "Synergy Authenticator",
+  "short_name": "Synergy Auth",
+  "description": "Generate SynergyAuth two-factor codes on your device",
+  "start_url": "/authenticator",
+  "scope": "/authenticator/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    { "src": "/authenticator-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

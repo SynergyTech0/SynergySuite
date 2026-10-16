@@ -1,0 +1,28 @@
+# DWG <-> DXF conversion for Synergy CAD, built to its own wasm module that runs in a Web Worker
+# beside the CADCraft editor (see ../../public/dwg-worker.js). It is CADCraft's own DWG bridge with
+# the `wasm` feature from ../dwg-wasm.patch; engine/build.sh lays out ../.cadcraft for the path.
+[package]
+name = "synergy-cad-dwg"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+cadcraft-dwg = { path = "../.cadcraft/crates/dwg", features = ["wasm"] }
+# Pinned to the version CADCraft's lockfile uses; the wasm-bindgen CLI in build.sh must match it.
+wasm-bindgen = "=0.2.129"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = 0
+
+# Not part of CADCraft's workspace.
+[workspace]

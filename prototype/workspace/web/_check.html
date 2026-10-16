@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Suite runtime check</title>
+<style>
+ body{font:13px/1.5 monospace;padding:16px;background:#111;color:#ddd}
+ .ok{color:#6f6}.bad{color:#f66}.warn{color:#fd6}
+ iframe{width:1280px;height:800px;border:0;position:absolute;left:-9999px}
+ table{border-collapse:collapse}td{padding:2px 12px 2px 0;vertical-align:top}
+</style></head>
+<body>
+<h3>Synergy Workspace — runtime check</h3>
+<div id="out">running…</div>
+<script>
+const APPS = ['mail','drive','docs','sheets','slides','forms','calendar','keep',
+              'tasks','contacts','chat','meet','sites','groups','vault','admin'];
+// Per-app DOM assertions: the app is "up" only if its real content rendered.
+const ASSERT = {
+  mail:     d => d.querySelectorAll('.msg').length >= 8,
+  drive:    d => (d.querySelectorAll('table.files tbody tr').length + d.querySelectorAll('.ftile').length) >= 5,
+  docs:     d => d.querySelectorAll('#page h1, #page p').length >= 1,
+  sheets:   d => d.querySelectorAll('td[data-r]').length > 1000,
+  slides:   d => d.querySelectorAll('#filmstrip .thumb').length >= 3,
+  forms:    d => d.querySelectorAll('.card-q').length >= 3,
+  calendar: d => d.querySelectorAll('.trow').length === 24,
+  keep:     d => d.querySelectorAll('.note').length >= 4,
+  tasks:    d => d.querySelectorAll('.task').length >= 3,
+  contacts: d => d.querySelectorAll('table.ct tbody tr').length >= 6,
+  chat:     d => d.querySelectorAll('.cm').length >= 2,
+  meet:     d => !!d.querySelector('.preview'),
+  sites:    d => !!d.querySelector('#main'),
+  groups:   d => d.querySelectorAll('table.adm tbody tr').length >= 2,
+  vault:    d => d.querySelectorAll('table.adm tbody tr').length >= 3,
+  admin:    d => d.querySelectorAll('.stat-card').length >= 6,
+};
+// Every app must render the shared chrome identically.
+function shellOk(d){
+  return !!d.querySelector('.topbar')
+      && d.querySelectorAll('.waffle-item').length === 16
+      && !!d.querySelector('#waffleBtn')
+      && !!d.querySelector('.avatar');
+}
+
+const results = [];
+async function run(app){
+  return new Promise(resolve => {
+    const errs = [];
+    const f = document.createElement('iframe');
+    f.src = '/' + app + '/';
+    f.onload = () => {
+      const w = f.contentWindow, d = f.contentDocument;
+      w.addEventListener('error', e => errs.push(String(e.message)));
+      w.addEventListener('unhandledrejection', e => errs.push('promise: ' + (e.reason && e.reason.message || e.reason)));
+      // give async boot() a moment to paint
+      setTimeout(() => {
+        let content = false, shell = false;
+        try { content = !!ASSERT[app](d); } catch (e) { errs.push('assert threw: ' + e.message); }
+        try { shell = shellOk(d); } catch (e) { errs.push('shell threw: ' + e.message); }
+        results.push({ app, content, shell, errs });
+        f.remove();
+        resolve();
+      }, 1400);
+    };
+    // catch parse-time errors too
+    f.addEventListener('error', () => errs.push('iframe failed to load'));
+    document.body.appendChild(f);
+  });
+}
+
+(async () => {
+  for (const a of APPS) await run(a);
+  const bad = results.filter(r => !r.content || !r.shell || r.errs.length);
+  document.getElementById('out').innerHTML =
+    '<table>' + results.map(r =>
+      `<tr><td>${r.app}</td>
+           <td class="${r.content?'ok':'bad'}">content ${r.content?'OK':'FAIL'}</td>
+           <td class="${r.shell?'ok':'bad'}">shell ${r.shell?'OK':'FAIL'}</td>
+           <td class="${r.errs.length?'bad':'ok'}">${r.errs.length?r.errs.join(' | '):'no errors'}</td></tr>`
+    ).join('') + '</table>' +
+    `<p class="${bad.length?'bad':'ok'}">${results.length - bad.length}/${results.length} apps clean</p>`;
+  window.__RESULTS__ = results;
+  window.__DONE__ = true;
+})();
+</script>
+</body>
+</html>

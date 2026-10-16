@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Calendar</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  .cal-nav { width: 256px; flex: none; padding: 8px; overflow-y: auto; }
+  .mini { padding: 8px 4px; }
+  .mini-head { display: flex; align-items: center; gap: 4px; padding: 0 4px 8px; font-size: 14px; font-weight: 500; }
+  .mini table { width: 100%; border-collapse: collapse; }
+  .mini th { font-size: 10px; font-weight: 400; color: var(--on-surface-variant); padding: 4px 0; }
+  .mini td { text-align: center; padding: 1px; }
+  .mini td span {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: var(--r-full); font-size: 12px; cursor: pointer;
+  }
+  .mini td span:hover { background: var(--surface-c-high); }
+  .mini td span.today { background: var(--blue-700); color: #fff; }
+  .mini td span.sel { background: var(--blue-100); color: var(--blue-900); }
+  .mini td span.other { color: var(--outline); }
+
+  .cal-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex: none; }
+  .cal-head h2 { font-family: var(--font); font-size: 22px; font-weight: 400; margin: 0; }
+
+  .grid-head { display: flex; border-bottom: 1px solid var(--divider); flex: none; }
+  .grid-head .gutter { width: 60px; flex: none; }
+  .grid-head .dcol { flex: 1; text-align: center; padding: 6px 0 8px; }
+  .grid-head .dcol .dow { font-size: 11px; color: var(--on-surface-variant); text-transform: uppercase; letter-spacing: .8px; }
+  .grid-head .dcol .dnum {
+    font-family: var(--font); font-size: 26px; font-weight: 400; margin-top: 2px;
+    width: 46px; height: 46px; line-height: 46px; border-radius: var(--r-full);
+    display: inline-block; cursor: pointer;
+  }
+  .grid-head .dcol.today .dnum { background: var(--blue-700); color: #fff; }
+  .grid-head .dcol.today .dow { color: var(--blue-700); }
+
+  .tgrid { flex: 1; overflow-y: auto; position: relative; }
+  .trow { display: flex; height: 48px; }
+  .trow .gutter {
+    width: 60px; flex: none; text-align: right; padding-right: 8px;
+    font-size: 10px; color: var(--on-surface-variant); transform: translateY(-6px);
+  }
+  .trow .cell { flex: 1; border-left: 1px solid var(--divider); border-top: 1px solid var(--divider); position: relative; }
+  .trow:first-child .cell { border-top: none; }
+  .daycol { position: absolute; top: 0; bottom: 0; }
+  .ev {
+    position: absolute; left: 2px; right: 2px; border-radius: var(--r-sm);
+    padding: 2px 6px; font-size: 12px; color: #fff; overflow: hidden; cursor: pointer;
+    line-height: 1.25; box-shadow: 0 0 0 1px var(--surface);
+  }
+  .ev b { font-weight: 500; display: block; }
+  .nowline { position: absolute; left: 60px; right: 0; height: 2px; background: var(--red); z-index: 5; }
+  .nowline::before { content:''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--red); }
+
+  .mgrid { flex: 1; display: grid; grid-template-rows: auto repeat(6, 1fr); overflow: hidden; }
+  .mrow { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .mdow { text-align: center; font-size: 11px; color: var(--on-surface-variant); padding: 6px 0; text-transform: uppercase; letter-spacing: .8px; }
+  .mcell { border-left: 1px solid var(--divider); border-top: 1px solid var(--divider); padding: 2px 4px; overflow: hidden; min-height: 0; }
+  .mcell .n { font-size: 12px; text-align: center; width: 24px; height: 24px; line-height: 24px; border-radius: 50%; margin: 2px auto; }
+  .mcell.today .n { background: var(--blue-700); color: #fff; }
+  .mcell.other { background: var(--surface-c-low); }
+  .mcell.other .n { color: var(--outline); }
+  .mev { font-size: 11px; border-radius: 4px; padding: 1px 5px; margin-bottom: 2px; color: #fff;
+         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav cal-nav" id="nav"></nav>
+    <main class="app-main col" id="main" style="display:flex;flex-direction:column"></main>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

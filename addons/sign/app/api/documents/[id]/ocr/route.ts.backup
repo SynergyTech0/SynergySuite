@@ -1,0 +1,548 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { FieldType } from "@prisma/client";
+import { runOCRWithOpenCV } from "@/lib/ocr-utils-opencv";
+import path from "path";
+import fs from "fs/promises";
+
+export const dynamic = "force-dynamic";
+
+// ------------------------------
+// Types
+// ------------------------------
+interface OCRWord {
+  text: string;
+  confidence: number;
+  bbox: {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  };
+  pageWidth: number;
+  pageHeight: number;
+}
+
+interface DetectedField {
+  fieldType: FieldType;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  required: boolean;
+}
+
+// ------------------------------
+// Utility Functions
+// ------------------------------
+async function ensureTempDir() {
+  await fs.mkdir(OCR_TEMP_DIR, { recursive: true });
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolvePdfPath(cloudStoragePath: string): Promise<string> {
+  const cwd = process.cwd();
+
+  // List of potential paths to check
+  const candidates = [
+    // Direct path if absolute
+    cloudStoragePath,
+    // uploads/<id>.pdf pattern
+    path.join(cwd, "uploads", cloudStoragePath),
+    // uploads/documents/<filename> pattern
+    path.join(cwd, "uploads", "documents", path.basename(cloudStoragePath)),
+    // Just the filename in uploads
+    path.join(cwd, "uploads", path.basename(cloudStoragePath)),
+    // Direct documents folder
+    path.join(cwd, "documents", path.basename(cloudStoragePath)),
+  ];
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) {
+      console.log(`✅ Found PDF at: ${candidate}`);
+      return candidate;
+    }
+  }
+
+  throw new Error(`PDF not found. Tried: ${candidates.join(", ")}`);
+}
+
+// ------------------------------
+// PDF to Images Conversion
+// ------------------------------
+async function convertPdfToImages(
+  pdfPath: string
+): Promise<{ pageNumber: number; imagePath: string; width: number; height: number }[]> {
+  await ensureTempDir();
+
+  const timestamp = Date.now();
+  const outputPrefix = path.join(OCR_TEMP_DIR, `page_${timestamp}`);
+
+  try {
+    // Use pdftoppm (Poppler) - preferred method
+    await exec("pdftoppm", [
+      "-png",
+      "-r", String(PDF_DPI),
+      pdfPath,
+      outputPrefix,
+    ]);
+  } catch (err) {
+    console.warn("pdftoppm failed, trying ImageMagick convert...");
+    try {
+      await exec("convert", [
+        "-density", String(PDF_DPI),
+        pdfPath,
+        `${outputPrefix}-%03d.png`,
+      ]);
+    } catch (convertErr) {
+      throw new Error(`PDF conversion failed: ${convertErr}`);
+    }
+  }
+
+  // Collect generated images
+  const files = await fs.readdir(OCR_TEMP_DIR);
+  const prefix = path.basename(outputPrefix);
+
+  const images: { pageNumber: number; imagePath: string; width: number; height: number }[] = [];
+
+  for (const file of files) {
+    if (!file.startsWith(prefix) || !file.endsWith(".png")) continue;
+
+    // Extract page number from filename (pdftoppm uses -1, -2, etc.)
+    const match = file.match(/-(\d+)\.png$/);
+    const pageNumber = match ? parseInt(match[1], 10) : 1;
+    const imagePath = path.join(OCR_TEMP_DIR, file);
+
+    // Get image dimensions using identify (ImageMagick)
+    let width = 612; // Default PDF width in points
+    let height = 792; // Default PDF height in points
+
+    try {
+      const { stdout } = await exec("identify", ["-format", "%w %h", imagePath]);
+      const [w, h] = stdout.trim().split(" ").map(Number);
+      if (w && h) {
+        width = w;
+        height = h;
+      }
+    } catch {
+      console.warn(`Could not get dimensions for ${file}, using defaults`);
+    }
+
+    images.push({ pageNumber, imagePath, width, height });
+  }
+
+  return images.sort((a, b) => a.pageNumber - b.pageNumber);
+}
+
+// ------------------------------
+// OCR Processing with Bounding Boxes
+// ------------------------------
+async function runOcrOnImage(
+  imagePath: string,
+  imageWidth: number,
+  imageHeight: number
+): Promise<OCRWord[]> {
+  const timestamp = Date.now();
+  const tsvBase = path.join(OCR_TEMP_DIR, `ocr_${timestamp}`);
+  const tsvOutput = `${tsvBase}.tsv`;
+
+  try {
+    await exec("tesseract", [
+      imagePath,
+      tsvBase,
+      "-l", OCR_LANG,
+      "--psm", "3", // Fully automatic page segmentation
+      "tsv",
+    ]);
+  } catch (err) {
+    console.error("Tesseract OCR failed:", err);
+    return [];
+  }
+
+  const tsvData = await fs.readFile(tsvOutput, "utf-8");
+  const lines = tsvData.split("\n").slice(1); // Skip header
+
+  const words: OCRWord[] = [];
+
+  for (const line of lines) {
+    const cols = line.split("\t");
+
+    // TSV columns: level, page_num, block_num, par_num, line_num, word_num,
+    // left, top, width, height, conf, text
+    if (cols.length < 12) continue;
+
+    const text = cols[11]?.trim();
+    if (!text) continue;
+
+    const confidence = parseFloat(cols[10]) || 0;
+    const left = parseFloat(cols[6]) || 0;
+    const top = parseFloat(cols[7]) || 0;
+    const width = parseFloat(cols[8]) || 0;
+    const height = parseFloat(cols[9]) || 0;
+
+    words.push({
+      text,
+      confidence,
+      bbox: {
+        x0: left,
+        y0: top,
+        x1: left + width,
+        y1: top + height,
+      },
+      pageWidth: imageWidth,
+      pageHeight: imageHeight,
+    });
+  }
+
+  // Clean up TSV file
+  try {
+    await fs.unlink(tsvOutput);
+  } catch {}
+
+  return words;
+}
+
+// ------------------------------
+// Field Type Detection
+// ------------------------------
+function detectFieldType(text: string): FieldType | null {
+  const lowerText = text.toLowerCase();
+
+  // SIGNATURE detection
+  if (/sign(ature)?|signed?\s*by|sign\s*here/i.test(lowerText)) {
+    return "SIGNATURE";
+  }
+
+  // INITIALS detection
+  if (/initial(s)?|init\.|initials?\s*here/i.test(lowerText)) {
+    return "INITIALS";
+  }
+
+  // DATE detection - regex for date patterns
+  if (
+    /date|dd\/mm|mm\/dd|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2}/i.test(lowerText) ||
+    /month|year|day/i.test(lowerText)
+  ) {
+    return "DATE";
+  }
+
+  // CHECKBOX detection
+  if (/\[\s*\]|☐|☑|checkbox|check\s*box/i.test(lowerText)) {
+    return "CHECKBOX";
+  }
+
+  // TEXT detection for common form fields
+  if (/name|print|full\s*name|address|email|phone|title|company/i.test(lowerText)) {
+    return "TEXT";
+  }
+
+  return null;
+}
+
+function detectFieldLabel(text: string, fieldType: FieldType): string {
+  const lowerText = text.toLowerCase();
+
+  if (fieldType === "SIGNATURE") {
+    if (/sign here/i.test(lowerText)) return "Sign Here";
+    if (/signature/i.test(lowerText)) return "Signature";
+    return "Signature";
+  }
+
+  if (fieldType === "INITIALS") {
+    if (/initials here/i.test(lowerText)) return "Initials Here";
+    return "Initials";
+  }
+
+  if (fieldType === "DATE") {
+    return "Date";
+  }
+
+  if (fieldType === "CHECKBOX") {
+    return "Checkbox";
+  }
+
+  if (fieldType === "TEXT") {
+    if (/full\s*name/i.test(lowerText)) return "Full Name";
+    if (/name/i.test(lowerText)) return "Name";
+    if (/address/i.test(lowerText)) return "Address";
+    if (/email/i.test(lowerText)) return "Email";
+    if (/phone/i.test(lowerText)) return "Phone";
+    if (/title/i.test(lowerText)) return "Title";
+    if (/company/i.test(lowerText)) return "Company";
+    return "Text Field";
+  }
+
+  return "Field";
+}
+
+// ------------------------------
+// Detect Fields from OCR Output
+// ------------------------------
+function detectFieldsFromOcr(
+  words: OCRWord[],
+  pageNumber: number
+): DetectedField[] {
+  const detected: DetectedField[] = [];
+  const processedAreas: { x: number; y: number }[] = [];
+
+  // Minimum distance to avoid duplicate fields
+  const MIN_DISTANCE = 50;
+
+  for (const word of words) {
+    // Skip low confidence words
+    if (word.confidence < 30) continue;
+
+    const fieldType = detectFieldType(word.text);
+    if (!fieldType) continue;
+
+    // Convert pixel coordinates to PDF coordinates (normalize)
+    // Standard PDF is 72 DPI, we rendered at PDF_DPI
+    const scale = 72 / PDF_DPI;
+
+    const x = word.bbox.x0 * scale;
+    const y = word.bbox.y0 * scale;
+
+    // Check if we already have a field nearby
+    const isDuplicate = processedAreas.some(
+      (area) => Math.abs(area.x - x) < MIN_DISTANCE && Math.abs(area.y - y) < MIN_DISTANCE
+    );
+
+    if (isDuplicate) continue;
+    processedAreas.push({ x, y });
+
+    // Create field positioned below/right of the label
+    const fieldWidth = fieldType === "SIGNATURE" ? 200 :
+                       fieldType === "INITIALS" ? 80 :
+                       fieldType === "CHECKBOX" ? 20 : 150;
+    const fieldHeight = fieldType === "SIGNATURE" ? 50 :
+                        fieldType === "INITIALS" ? 30 :
+                        fieldType === "CHECKBOX" ? 20 : 25;
+
+    detected.push({
+      fieldType,
+      label: detectFieldLabel(word.text, fieldType),
+      x: x,
+      y: y + 15, // Position field below label
+      width: fieldWidth,
+      height: fieldHeight,
+      required: fieldType === "SIGNATURE" || fieldType === "INITIALS",
+    });
+  }
+
+  return detected;
+}
+
+// ------------------------------
+// Summarize extracted text
+// ------------------------------
+function summarizeText(fullText: string, maxChars = 600): string {
+  if (!fullText) return "";
+
+  const sentences = fullText.split(/(?<=[.?!])\s+/);
+  const wordFreq: Record<string, number> = {};
+
+  for (const s of sentences) {
+    for (const w of s.toLowerCase().split(/\W+/)) {
+      if (w.length > 3) wordFreq[w] = (wordFreq[w] || 0) + 1;
+    }
+  }
+
+  const sentenceScores = sentences.map((s) => ({
+    s,
+    score: s
+      .toLowerCase()
+      .split(/\W+/)
+      .reduce((acc, w) => acc + (wordFreq[w] || 0), 0),
+  }));
+
+  sentenceScores.sort((a, b) => b.score - a.score);
+
+  let summary = "";
+  for (const { s } of sentenceScores) {
+    if ((summary + " " + s).length > maxChars) break;
+    summary += " " + s;
+  }
+
+  return summary.trim();
+}
+
+// ------------------------------
+// Main API Handler
+// ------------------------------
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id: documentId } = await context.params;
+
+    // Fetch document
+    const document = await prisma.document.findUnique({
+      where: { id: documentId },
+      include: { sender: true },
+    });
+
+    if (!document) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+    }
+
+    // Authorization check
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true },
+    });
+
+    if (document.senderId !== user?.id && user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Resolve PDF path
+    console.log(`🔍 Starting OCR for document ${documentId}...`);
+    let pdfPath: string;
+    try {
+      pdfPath = await resolvePdfPath(document.cloudStoragePath);
+    } catch (err) {
+      console.error("PDF resolution failed:", err);
+      return NextResponse.json(
+        { error: "PDF file not found on server" },
+        { status: 404 }
+      );
+    }
+
+    // Convert PDF to images
+    console.log(`📄 Converting PDF to images...`);
+    let images;
+    try {
+      images = await convertPdfToImages(pdfPath);
+    } catch (err) {
+      console.error("PDF conversion failed:", err);
+      return NextResponse.json(
+        { error: "Failed to process PDF file" },
+        { status: 500 }
+      );
+    }
+
+    if (!images || images.length === 0) {
+      return NextResponse.json(
+        { error: "No pages extracted from PDF" },
+        { status: 400 }
+      );
+    }
+
+    // Process each page
+    let fullText = "";
+    const allFields: Prisma.DocumentFieldCreateManyInput[] = [];
+
+    console.log(`📝 Running OCR on ${images.length} pages...`);
+    for (const { pageNumber, imagePath, width, height } of images) {
+      try {
+        // Run OCR
+        const words = await runOcrOnImage(imagePath, width, height);
+
+        // Collect text for summary
+        fullText += words.map((w) => w.text).join(" ") + "\n";
+
+        // Detect fields
+        const fields = detectFieldsFromOcr(words, pageNumber);
+
+        for (const field of fields) {
+          allFields.push({
+            documentId,
+            fieldType: field.fieldType,
+            label: field.label,
+            required: field.required,
+            pageNumber,
+            x: field.x,
+            y: field.y,
+            width: field.width,
+            height: field.height,
+            value: null,
+            assignedToId: null,
+          });
+        }
+
+        // Clean up image file
+        try {
+          await fs.unlink(imagePath);
+        } catch {}
+      } catch (pageErr) {
+        console.error(`Error processing page ${pageNumber}:`, pageErr);
+      }
+    }
+
+    // Delete existing unassigned fields
+    await prisma.documentField.deleteMany({
+      where: {
+        documentId,
+        assignedToId: null,
+      },
+    });
+
+    // Create new fields
+    if (allFields.length > 0) {
+      await prisma.documentField.createMany({
+        data: allFields,
+      });
+    }
+
+    // Generate and save summary
+    const summary = summarizeText(fullText.trim(), 600);
+
+    await prisma.document.update({
+      where: { id: documentId },
+      data: {
+        summary,
+        aiDetectedAt: new Date(),
+      },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        documentId,
+        userId: user!.id,
+        action: "FIELD_ADDED",
+        details: {
+          source: "OCR",
+          fieldsDetected: allFields.length,
+          pagesProcessed: images.length,
+        },
+      },
+    });
+
+    console.log(`✅ OCR completed: ${allFields.length} fields detected across ${images.length} pages`);
+
+    return NextResponse.json({
+      success: true,
+      message: `Detected ${allFields.length} fields across ${images.length} pages`,
+      fieldsDetected: allFields.length,
+      pagesProcessed: images.length,
+      summary,
+    });
+  } catch (error) {
+    console.error("❌ OCR failed:", error);
+    return NextResponse.json(
+      {
+        error: "OCR processing failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}

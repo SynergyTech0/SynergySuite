@@ -1,0 +1,51 @@
+{
+ "title": "Synergy Admin",
+ "navItems": [
+  "homeHome",
+  "groupDirectory",
+  "appsApps",
+  "securitySecurity",
+  "analyticsReporting",
+  "settingsAccount"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [],
+ "tableHeaders": [
+  "When",
+  "Actor",
+  "App",
+  "Action",
+  "Target"
+ ],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search admin",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 12,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 7,
+  "tasks": 0
+ }
+}

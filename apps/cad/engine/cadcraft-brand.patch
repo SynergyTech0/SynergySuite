@@ -1,0 +1,202 @@
+diff --git a/apps/cadcraft-web/index.html b/apps/cadcraft-web/index.html
+index c8e2e96..89a48bd 100644
+--- a/apps/cadcraft-web/index.html
++++ b/apps/cadcraft-web/index.html
+@@ -3,7 +3,7 @@
+ <head>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+-  <title>CADCraft</title>
++  <title>Synergy CAD</title>
+   <link data-trunk rel="rust" data-bin="cadcraft-web" data-wasm-opt="z" data-weak-refs />
+   <style>
+     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #22282f; }
+@@ -14,6 +14,6 @@
+ </head>
+ <body>
+   <canvas id="cadcraft_canvas"></canvas>
+-  <div id="cadcraft_loading">Loading CADCraft&hellip;</div>
++  <div id="cadcraft_loading">Loading Synergy CAD&hellip;</div>
+ </body>
+ </html>
+diff --git a/apps/cadcraft-web/src/main.rs b/apps/cadcraft-web/src/main.rs
+index 5b4873e..7428375 100644
+--- a/apps/cadcraft-web/src/main.rs
++++ b/apps/cadcraft-web/src/main.rs
+@@ -163,7 +163,7 @@ mod web {
+                 match result {
+                     Ok(()) => el.remove(),
+                     Err(e) => {
+-                        el.set_inner_html(&format!("<p>CADCraft failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>"))
++                        el.set_inner_html(&format!("<p>{} failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>", cadcraft_ui_egui::brand::NAME))
+                     }
+                 }
+             }
+diff --git a/crates/ui-egui/src/autosave.rs b/crates/ui-egui/src/autosave.rs
+index c7ea384..ccb2000 100644
+--- a/crates/ui-egui/src/autosave.rs
++++ b/crates/ui-egui/src/autosave.rs
+@@ -141,7 +141,7 @@ pub fn show(app: &mut CadApp, ctx: &egui::Context) {
+         ui.set_width(460.0);
+         ui.label(RichText::new("Drawing Recovery").strong());
+         ui.add_space(4.0);
+-        ui.label("CADCraft did not close normally. These drawings were autosaved:");
++        ui.label(crate::brand::branded("CADCraft did not close normally. These drawings were autosaved:"));
+         ui.add_space(6.0);
+         egui::Grid::new("cc_recovery_list").num_columns(4).spacing(vec2(12.0, 6.0)).show(ui, |ui| {
+             for (i, item) in app.recovery.items.iter().enumerate() {
+@@ -198,10 +198,10 @@ pub fn gpu_notice(app: &mut CadApp, ctx: &egui::Context) {
+         .show(ctx, |ui| {
+             ui.set_width(440.0);
+             if n.fault.lost {
+-                ui.label("The graphics device stopped working (a driver reset or a GPU that stopped responding). CADCraft can't draw again until it restarts.");
++                ui.label(crate::brand::branded("The graphics device stopped working (a driver reset or a GPU that stopped responding). CADCraft can't draw again until it restarts."));
+             } else {
+                 let times = if n.fault.errors == 1 { String::new() } else { format!(" ({} times)", n.fault.errors) };
+-                ui.label(format!("The graphics driver reported an error{times}. CADCraft kept running, but the drawing may not display correctly."));
++                ui.label(crate::brand::branded(&format!("The graphics driver reported an error{times}. CADCraft kept running, but the drawing may not display correctly.")));
+             }
+             ui.add_space(4.0);
+             match n.autosaved {
+@@ -209,7 +209,7 @@ pub fn gpu_notice(app: &mut CadApp, ctx: &egui::Context) {
+                 1 => ui.label("A recovery copy of the open drawing with unsaved changes was autosaved."),
+                 k => ui.label(format!("Recovery copies of {k} drawings with unsaved changes were autosaved.")),
+             };
+-            ui.label(RichText::new("Save your work and restart CADCraft. Recovery copies are offered at the next start if needed.").strong());
++            ui.label(RichText::new(crate::brand::branded("Save your work and restart CADCraft. Recovery copies are offered at the next start if needed.")).strong());
+             ui.add_space(4.0);
+             ui.collapsing("Details", |ui| {
+                 ui.label(RichText::new(&n.fault.message).color(t.text_dim).monospace());
+diff --git a/crates/ui-egui/src/brand.rs b/crates/ui-egui/src/brand.rs
+new file mode 100644
+index 0000000..43353d5
+--- /dev/null
++++ b/crates/ui-egui/src/brand.rs
+@@ -0,0 +1,21 @@
++//! The name the app shows: Synergy CAD, the suite's CAD app that embeds this editor
++//! (engine/cadcraft-brand.patch in Synergy). The About dialog still credits CADCraft and its licence.
++
++use std::{cell::RefCell, collections::HashMap};
++
++pub const UPSTREAM: &str = "CADCraft";
++pub const NAME: &str = "Synergy CAD";
++
++pub fn rebranded() -> bool {
++    NAME != UPSTREAM
++}
++
++/// `text` with CADCraft replaced by the brand name. Each distinct text is rewritten once and kept,
++/// so labels drawn every frame don't allocate.
++pub fn branded(text: &str) -> &str {
++    if !rebranded() || !text.contains(UPSTREAM) {
++        return text;
++    }
++    thread_local!(static CACHE: RefCell<HashMap<String, &'static str>> = RefCell::new(HashMap::new()));
++    CACHE.with(|c| *c.borrow_mut().entry(text.to_owned()).or_insert_with(|| Box::leak(text.replace(UPSTREAM, NAME).into_boxed_str())))
++}
+diff --git a/crates/ui-egui/src/chrome.rs b/crates/ui-egui/src/chrome.rs
+index 3e0860e..f86043f 100644
+--- a/crates/ui-egui/src/chrome.rs
++++ b/crates/ui-egui/src/chrome.rs
+@@ -70,8 +70,8 @@ pub fn title_and_toolbar(app: &mut CadApp, ui: &mut egui::Ui) {
+         let r = ui.max_rect();
+         if title_h > 0.0 {
+             let title = match app.session.state() {
+-                Ok(st) if !app.ui.start_tab => format!("CADCraft      {}{}", st.title, if st.title.contains('.') { "" } else { ".dwg" }),
+-                _ => format!("CADCraft      {}", crate::tl!("Start")),
++                Ok(st) if !app.ui.start_tab => format!("{}      {}{}", crate::brand::NAME, st.title, if st.title.contains('.') { "" } else { ".dwg" }),
++                _ => format!("{}      {}", crate::brand::NAME, crate::tl!("Start")),
+             };
+             // Centred on the traffic lights' centre line (the row's middle): with the system font
+             // the capitals' middle is the text box's middle, so no optical nudge.
+diff --git a/crates/ui-egui/src/closing.rs b/crates/ui-egui/src/closing.rs
+index d03fafa..8f28a36 100644
+--- a/crates/ui-egui/src/closing.rs
++++ b/crates/ui-egui/src/closing.rs
+@@ -206,7 +206,7 @@ pub fn prompt(app: &mut CadApp, ctx: &egui::Context) {
+     let mut choice = None;
+     egui::Modal::new(egui::Id::new("cc_close_prompt")).show(ctx, |ui| {
+         ui.set_width(360.0);
+-        ui.label(RichText::new("CADCraft").strong());
++        ui.label(RichText::new(crate::brand::NAME).strong());
+         ui.add_space(4.0);
+         ui.label(format!("Save changes to {title}?"));
+         ui.label(RichText::new("Your changes will be lost if you don't save them.").color(t.text_dim));
+diff --git a/crates/ui-egui/src/dialogs.rs b/crates/ui-egui/src/dialogs.rs
+index 914de61..9134b3e 100644
+--- a/crates/ui-egui/src/dialogs.rs
++++ b/crates/ui-egui/src/dialogs.rs
+@@ -324,7 +324,12 @@ fn about(ctx: &egui::Context, open: &mut bool) {
+                     ui.label(crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")));
+                     ui.label(crate::tl!("Computer-aided design and drafting: an open-source, clean-room CAD application written in pure Rust."));
+                     ui.add_space(6.0);
+-                    ui.label(RichText::new(crate::tl!("One of the Crafting Apps by the ArtCraft team and community.")).color(t.text_dim));
++                    if crate::brand::rebranded() {
++                        // Not translated, so the credit keeps CADCraft's own name.
++                        ui.label(RichText::new(format!("Built on {}, one of the Crafting Apps by the ArtCraft team and community.", crate::brand::UPSTREAM)).color(t.text_dim));
++                    } else {
++                        ui.label(RichText::new(crate::tl!("One of the Crafting Apps by the ArtCraft team and community.")).color(t.text_dim));
++                    }
+                     ui.hyperlink_to("getartcraft.com/apps/cadcraft", "https://getartcraft.com/apps/cadcraft");
+                     ui.hyperlink_to(crate::tl!("Join us on Discord"), "https://discord.gg/artcraft");
+                     ui.add_space(6.0);
+diff --git a/crates/ui-egui/src/i18n/mod.rs b/crates/ui-egui/src/i18n/mod.rs
+index 9c10511..b2349e5 100644
+--- a/crates/ui-egui/src/i18n/mod.rs
++++ b/crates/ui-egui/src/i18n/mod.rs
+@@ -240,7 +240,7 @@ fn catalog(language: &str) -> Option<&'static Catalog<'static>> {
+ }
+ 
+ pub fn tr<'a>(language: &str, source: &'a str) -> &'a str {
+-    catalog(language).and_then(|c| c.get(&("", source))).copied().unwrap_or(source)
++    crate::brand::branded(catalog(language).and_then(|c| c.get(&("", source))).copied().unwrap_or(source))
+ }
+ 
+ pub fn t(source: &str) -> &str {
+@@ -250,7 +250,7 @@ pub fn t(source: &str) -> &str {
+ /// Menu headings can differ from command or object labels (e.g. Czech Kótování / Kóta).
+ /// Catalogs without a `menu` entry retain their ordinary translation.
+ pub fn tr_menu<'a>(language: &str, source: &'a str) -> &'a str {
+-    catalog(language).and_then(|c| c.get(&("menu", source))).copied().unwrap_or_else(|| tr(language, source))
++    catalog(language).and_then(|c| c.get(&("menu", source))).copied().map(crate::brand::branded).unwrap_or_else(|| tr(language, source))
+ }
+ 
+ pub fn menu(source: &str) -> &str {
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+index 91c48e5..2941633 100644
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -11,6 +11,7 @@
+ pub mod animation;
+ pub mod autosave;
+ pub mod bedit;
++pub mod brand;
+ pub mod canvas;
+ pub mod chrome;
+ pub mod clipboard;
+@@ -464,9 +465,10 @@ impl CadApp {
+     pub fn open_size_error(name: &str, len: u64) -> Option<String> {
+         (len > Self::MAX_OPEN_BYTES).then(|| {
+             format!(
+-                "Open: {name} is {:.1} MB, larger than the {} MB CADCraft opens in the browser",
++                "Open: {name} is {:.1} MB, larger than the {} MB {} opens in the browser",
+                 len as f64 / 1048576.0,
+-                Self::MAX_OPEN_BYTES >> 20
++                Self::MAX_OPEN_BYTES >> 20,
++                crate::brand::NAME
+             )
+         })
+     }
+diff --git a/crates/ui-egui/src/viewcube.rs b/crates/ui-egui/src/viewcube.rs
+index 6f3ec0a..62a88d8 100644
+--- a/crates/ui-egui/src/viewcube.rs
++++ b/crates/ui-egui/src/viewcube.rs
+@@ -183,7 +183,7 @@ pub fn ucs_icon(app: &mut CadApp, ui: &mut egui::Ui, canvas: Rect) {
+ fn ucs_menu(app: &mut CadApp, popup: egui::Popup<'_>) {
+     let mut hide = false;
+     popup.show(|ui| {
+-        ui.radio(true, "World (WCS)").on_hover_text("CADCraft draws in the World Coordinate System; user coordinate systems aren't available yet.");
++        ui.radio(true, "World (WCS)").on_hover_text(crate::brand::branded("CADCraft draws in the World Coordinate System; user coordinate systems aren't available yet."));
+         ui.separator();
+         if ui.button("Hide UCS Icon").clicked() {
+             hide = true;

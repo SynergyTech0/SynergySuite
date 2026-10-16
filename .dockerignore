@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/.next
+**/dist
+.git
+**/.env
+**/.env.*
+apps/photo/public/engine
+apps/photo/engine/.photocraft
+apps/cad/public/engine
+apps/cad/public/dwg
+apps/cad/engine/.cadcraft
+apps/cad/engine/dwg/target
+apps/cad/public/engine3d
+apps/cad/engine/.chili3d

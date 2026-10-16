@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/SynergyTech0/SynergySuite/discussions
+    about: Ask how to set up or use the suite, or discuss an idea before opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/SynergyTech0/SynergySuite/blob/main/SECURITY.md
+    about: Please report security problems privately, not in a public issue. SECURITY.md explains how.

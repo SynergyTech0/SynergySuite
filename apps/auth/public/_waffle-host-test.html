@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Waffle host harness</title>
+<style>
+  body { font: 14px Arial, sans-serif; margin: 0; background: #fff; color: #1f1f1f; }
+  /* A DARK bar over a LIGHT page — the layout that used to make the widget
+     measure once and drop a dark panel onto a white page. */
+  header { height: 64px; display: flex; align-items: center; justify-content: flex-end;
+           gap: 8px; padding: 0 16px; background: #202124; }
+  main { padding: 24px; height: 2400px; }
+  h1 { font-weight: 400; }
+  .low { position: fixed; bottom: 12px; right: 16px; }
+</style>
+</head>
+<body>
+  <header><span id="synergy-waffle"></span></header>
+  <main><h1>Host app harness</h1><p>Dark bar, light page. Scroll to test anchoring.</p></main>
+  <script src="/waffle.js"></script>
+</body>
+</html>

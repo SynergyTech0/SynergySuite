@@ -1,0 +1,30 @@
+{
+  "name": "synergy-search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy Search - one search box across the suite for the signed-in person, and an assistant that answers from their own content",
+  "scripts": {
+    "dev": "next dev -p 3710",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3710",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@synergy/ai": "*",
+    "@synergy/config": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/shell": "*",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

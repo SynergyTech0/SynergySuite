@@ -1,0 +1,10 @@
+{
+  "name": "@synergy/ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bring-your-own AI model for every suite app: OpenAI-compatible servers (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Azure, Groq) or Anthropic.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "node --test test/*.test.js" }
+}

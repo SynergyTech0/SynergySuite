@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Tasks</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  .task { display: flex; gap: 12px; padding: 10px 8px; border-bottom: 1px solid var(--surface-c-low); align-items: flex-start; }
+  .task:hover { background: var(--surface-c-low); }
+  .task .mi.box { cursor: pointer; color: var(--on-surface-variant); margin-top: 1px; }
+  .task.done .title { text-decoration: line-through; color: var(--on-surface-variant); }
+  .task .title { font-size: 14px; }
+  .task .notes { font-size: 12px; color: var(--on-surface-variant); margin-top: 2px; white-space: pre-wrap; }
+  .task .due { font-size: 12px; color: var(--blue-700); margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; }
+  .task .due.overdue { color: var(--red); }
+  .tasklist-wrap { max-width: 700px; margin: 0 auto; padding: 16px 24px 60px; }
+  .add-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; color: var(--blue-700); cursor: pointer; }
+  .add-row:hover { background: var(--surface-c-low); }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav" id="nav" style="width:256px"></nav>
+    <main class="app-main" id="main"></main>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

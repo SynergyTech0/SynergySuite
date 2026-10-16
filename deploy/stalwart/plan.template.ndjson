@@ -1,0 +1,6 @@
+{"@type":"reconcile","object":"Tracer","matchOn":"*","value":{"console":{"@type":"Stdout","enable":true,"level":"info","ansi":false,"buffered":true,"multiline":false,"lossy":false,"events":{},"eventsPolicy":"exclude"}}}
+{"@type":"update","object":"SpamPyzor","value":{"enable":false}}
+{"@type":"upsert","object":"Domain","matchOn":["name"],"value":{"dom":{"name":"${MAIL_DOMAIN}","isEnabled":true}}}
+{"@type":"update","object":"SystemSettings","value":{"defaultHostname":"${MAIL_HOSTNAME}","defaultDomainId":"#dom"}}
+{"@type":"create","object":"Action","value":{"reload":{"@type":"ReloadSettings"}}}
+{"@type":"upsert","object":"Account","matchOn":["name","domainId"],"value":{"postmaster":{"@type":"User","name":"postmaster","domainId":"#dom","description":"Mail server administrator","roles":{"@type":"Admin"},"credentials":{"0":{"@type":"Password","secret":"${STALWART_ADMIN_PASSWORD}"}}},"webmail":{"@type":"User","name":"webmail","domainId":"#dom","description":"Synergy Mail service login (opens mailboxes for signed-in users)","credentials":{"0":{"@type":"Password","secret":"${MAIL_MASTER_PASSWORD}"}},"permissions":{"@type":"Merge","enabledPermissions":{"impersonate":true},"disabledPermissions":{}}}}}

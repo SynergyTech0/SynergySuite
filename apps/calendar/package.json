@@ -1,0 +1,18 @@
+{
+  "name": "synergycal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergyCal - team calendar with free/busy service API",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@synergy/compliance": "*",
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/search": "*",
+    "@synergy/server": "*",
+    "express": "^4.19.2"
+  }
+}

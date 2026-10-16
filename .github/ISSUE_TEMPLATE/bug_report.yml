@@ -1,0 +1,99 @@
+name: Bug report
+description: Something in one of the apps, add-ons or the deploy setup doesn't work as it should.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search existing issues first.
+
+        **Security problems must not be reported here.** Report them privately as [SECURITY.md](https://github.com/SynergyTech0/SynergySuite/blob/main/SECURITY.md) describes.
+
+        Don't paste secrets, `.env` files, personal hostnames or IP addresses into this form.
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app, add-on or part of the suite?
+      description: Pick the one where you saw the problem. If several are involved, pick the main one and mention the others below.
+      options:
+        - auth (Account / sign-in)
+        - mail
+        - calendar
+        - chat
+        - meet
+        - office
+        - drive
+        - forms
+        - planner
+        - photo
+        - cad
+        - sites
+        - notes
+        - sign (add-on)
+        - campaigns (add-on)
+        - portal (add-on)
+        - people (add-on)
+        - Suite home / app launcher
+        - Shared packages (identity, db, server, config, shell, ai)
+        - Deploy (Docker Compose, Caddy, oauth2-proxy, quickstart)
+        - Mobile (synergy-ui)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The release you run, or the commit (`git rev-parse --short HEAD`).
+      placeholder: "v0.1.0 or 8f80b2b"
+    validations:
+      required: true
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: How do you run the suite?
+      options:
+        - deploy/quickstart.sh on my machine
+        - Docker Compose on a server (deploy/compose.yml)
+        - One app on its own for development (node / npm run dev)
+        - Other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. Open calendar
+        2. Click + Event
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead. Screenshots help for UI problems.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant server logs (`docker compose logs <app>`) or browser console output. Remove anything secret first.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, operating system, Node and Docker versions, and anything else that might matter.
+      placeholder: "Firefox 131, Ubuntu 24.04, Docker 27, Node 22"

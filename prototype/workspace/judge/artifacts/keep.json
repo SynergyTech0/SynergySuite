@@ -1,0 +1,49 @@
+{
+ "title": "Synergy Keep",
+ "navItems": [
+  "lightbulbNotes",
+  "archiveArchive",
+  "deleteTrash"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Toggle list view",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search keep",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Toggle list view",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Unpin",
+  "Background options",
+  "Archive",
+  "Delete",
+  "Pin"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 5,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

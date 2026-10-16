@@ -1,0 +1,55 @@
+{
+ "title": "Synergy Drive",
+ "navItems": [
+  "hard_driveMy Drive",
+  "folder_sharedShared with me",
+  "scheduleRecent",
+  "starStarred",
+  "deleteTrash"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Grid view",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addNew"
+ ],
+ "tableHeaders": [],
+ "chips": [
+  "All",
+  "Folders",
+  "Documents",
+  "Spreadsheets",
+  "Presentations"
+ ],
+ "tabs": [],
+ "searchPlaceholder": "Search drive",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Grid view",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "more_vert"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

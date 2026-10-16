@@ -1,0 +1,552 @@
+/*
+ * Synergy Hub — launcher + waffle surface.
+ *
+ * Anchor: Google Workspace. Where a value here differs from Google's, that is a
+ * defect, not a preference.
+ *
+ * Scoped under .sh-root / .shw-root so it cannot disturb the navy theme used by
+ * login, consent, account and admin.
+ *
+ * Rules this file keeps on purpose:
+ *  1. The typeface is SELF-HOSTED (public/fonts/roboto-var.woff2, Apache-2.0).
+ *     Roboto is what Google's own UI falls back to. Google Sans / Product Sans
+ *     are proprietary and deliberately NOT used. Product marks are inline SVG
+ *     drawn by AppIcon.tsx — NOT the emoji in sa_apps.icon, which would render
+ *     in the viewer's system emoji font and differ on every platform. There is
+ *     no icon font to fail.
+ *  2. No literal colour outside a token definition, so dark mode cannot end up
+ *     with unreadable pairs. tools/theme-audit.mjs enforces this.
+ *  3. Hover and press are STATE LAYERS (currentColor at 8%/12% in a ::before),
+ *     never background swaps — so they read correctly on already-tinted items.
+ */
+
+/* Roboto v51 ships as a variable font: one file covers 100-900. */
+@font-face {
+  font-family: 'Roboto Local';
+  src: url('/fonts/roboto-var.woff2') format('woff2-variations'),
+       url('/fonts/roboto-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* light */
+  --sh-surface: #ffffff;
+  --sh-surface-elev: #ffffff;
+  --sh-bg: #f8fafd;
+  --sh-container: #f0f4f9;
+  --sh-panel-edge: transparent;
+  --sh-on: #1f1f1f;
+  --sh-on-variant: #444746;
+  --sh-outline: #747775;
+  --sh-divider: #dadce0;
+  /* A divider drawn on the ELEVATED surface needs its own value: the dark
+     --sh-divider is #3c4043, which is 1.28:1 on #2d2f31 — below even Google's
+     own low-contrast dividers, so the account-menu separator was invisible.
+     In light both surfaces are white, so one value serves. */
+  --sh-divider-elev: #dadce0;
+
+  --sh-primary: #0b57d0;
+  --sh-primary-hover: #0842a0;
+  --sh-on-primary: #ffffff;
+  --sh-secondary-container: #d3e3fd;
+  --sh-on-secondary-container: #062e6f;
+
+  --sh-elev-1: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+  --sh-elev-2: 0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15);
+  --sh-elev-3: 0 4px 8px 3px rgba(60,64,67,.15), 0 1px 3px rgba(60,64,67,.30);
+
+  --sh-r-sm: 8px; --sh-r-md: 12px; --sh-r-lg: 16px; --sh-r-full: 9999px;
+  --sh-font: 'Roboto Local', Roboto, Arial, Helvetica, sans-serif;
+
+  /* State layers — Material 3's 8% hover / 12% press of the content colour. */
+  --sh-state-hover: .08;
+  --sh-state-press: .12;
+
+  /* Motion. M3 duration tokens; `standard` for most things, `emphasized
+     decelerate` for entering, `accelerate` for leaving. */
+  --sh-dur-short: 100ms;
+  --sh-dur-med: 150ms;
+  --sh-dur-long: 200ms;
+  --sh-ease: cubic-bezier(.2, 0, 0, 1);
+  --sh-ease-decel: cubic-bezier(.05, .7, .1, 1);
+  --sh-ease-accel: cubic-bezier(.3, 0, .8, .15);
+
+  color-scheme: light;
+}
+
+/* Dark: every colour token above is re-mapped, including the
+   container/on-container pair — the pairing most often missed, and the reason
+   dark themes end up with unreadable selected items. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-sh-theme='light']) {
+    --sh-surface: #1f1f1f;
+    --sh-surface-elev: #2d2f31;
+    --sh-bg: #131314;
+    --sh-container: #303134;
+    --sh-panel-edge: #8e918f;
+    --sh-on: #e3e3e3;
+    --sh-on-variant: #c4c7c5;
+    --sh-outline: #8e918f;
+    --sh-divider: #3c4043;
+    --sh-divider-elev: #4a4d50;
+    --sh-primary: #a8c7fa;
+    --sh-primary-hover: #c2d7f8;
+    --sh-on-primary: #062e6f;
+    --sh-secondary-container: #0842a0;
+    --sh-on-secondary-container: #d3e3fd;
+    --sh-elev-1: 0 1px 2px 0 rgba(0,0,0,.5), 0 1px 3px 1px rgba(0,0,0,.3);
+    --sh-elev-2: 0 1px 2px 0 rgba(0,0,0,.5), 0 2px 6px 2px rgba(0,0,0,.3);
+    --sh-elev-3: 0 4px 8px 3px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+}
+:root[data-sh-theme='dark'] {
+  --sh-surface: #1f1f1f;
+  --sh-surface-elev: #2d2f31;
+  --sh-bg: #131314;
+  --sh-container: #303134;
+  --sh-panel-edge: #8e918f;
+  --sh-on: #e3e3e3;
+  --sh-on-variant: #c4c7c5;
+  --sh-outline: #8e918f;
+  --sh-divider: #3c4043;
+  --sh-divider-elev: #4a4d50;
+  --sh-primary: #a8c7fa;
+  --sh-primary-hover: #c2d7f8;
+  --sh-on-primary: #062e6f;
+  --sh-secondary-container: #0842a0;
+  --sh-on-secondary-container: #d3e3fd;
+  --sh-elev-1: 0 1px 2px 0 rgba(0,0,0,.5), 0 1px 3px 1px rgba(0,0,0,.3);
+  --sh-elev-2: 0 1px 2px 0 rgba(0,0,0,.5), 0 2px 6px 2px rgba(0,0,0,.3);
+  --sh-elev-3: 0 4px 8px 3px rgba(0,0,0,.3), 0 1px 3px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+/* A forced light choice must beat a dark OS at the root, or the scrollbar and
+   form controls stay dark behind a light page. */
+:root[data-sh-theme='light'] {
+  color-scheme: light;
+}
+
+/* ---------------------------------------------------------------- shell */
+.sh-root, .sh-root *, .sh-root *::before, .sh-root *::after,
+.shw-root, .shw-root *, .shw-root *::before, .shw-root *::after { box-sizing: border-box; }
+
+/* Stays in normal document flow: an absolutely-positioned root anchors the
+   sticky bar to itself instead of the viewport. :has() takes its argument's
+   specificity, so this beats the app-wide `body` rule. */
+html:has(.sh-root), body:has(.sh-root) { background: var(--sh-bg); margin: 0; }
+/* The waffle renders in its own document, where the UA's 8px body margin would
+   inset the panel and narrow the 3-column grid. */
+html:not(:has(.sh-root)):has(.shw-root),
+body:not(:has(.sh-root)):has(.shw-root) { background: var(--sh-surface-elev); margin: 0; }
+
+.sh-root {
+  min-height: 100vh;
+  background: var(--sh-bg); color: var(--sh-on);
+  font-family: var(--sh-font);
+  /* Google's body-medium: 14px/20px with positive tracking. Declaring leading
+     on the base matters — Roboto's `normal` is ~1.17, which sets the whole UI
+     ~18% tighter than the anchor. */
+  font-size: 14px; line-height: 20px; letter-spacing: .0178571em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.sh-root a { color: inherit; text-decoration: none; }
+
+/* One focus ring for the whole surface. Radius is NOT set here — it inherits,
+   so the ring follows each element's own corner radius. */
+.sh-root :where(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--sh-primary);
+  outline-offset: 2px;
+}
+
+/* Skip link — Google Account ships one as the first focusable element. */
+.sh-skip {
+  position: absolute; left: 8px; top: -60px; z-index: 60;
+  background: var(--sh-surface); color: var(--sh-primary);
+  padding: 10px 16px; border-radius: var(--sh-r-sm); box-shadow: var(--sh-elev-2);
+  font-weight: 500; transition: top var(--sh-dur-med) var(--sh-ease);
+}
+.sh-skip:focus-visible { top: 8px; }
+
+/* ---------------------------------------------------------------- state layers
+   currentColor at 8%/12% in a ::before, so hover reads correctly on top of an
+   already-tinted item instead of erasing its tint. */
+.sh-iconbtn, .sh-tile, .shw-tile, .sh-btn, .sh-avatar {
+  position: relative; isolation: isolate;
+}
+.sh-iconbtn::before, .sh-tile::before, .shw-tile::before,
+.sh-btn::before, .sh-avatar::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
+  background: currentColor; opacity: 0; pointer-events: none;
+  transition: opacity var(--sh-dur-short) var(--sh-ease);
+}
+.sh-iconbtn:hover::before, .sh-tile:hover::before, .shw-tile:hover::before,
+.sh-btn:hover::before, .sh-avatar:hover::before { opacity: var(--sh-state-hover); }
+.sh-iconbtn:active::before, .sh-tile:active::before, .shw-tile:active::before,
+.sh-btn:active::before, .sh-avatar:active::before { opacity: var(--sh-state-press); }
+
+/* ---------------------------------------------------------------- top bar */
+.sh-topbar {
+  height: 64px; display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; background: var(--sh-bg); position: sticky; top: 0; z-index: 20;
+  box-shadow: 0 1px 0 0 transparent;
+  transition: box-shadow var(--sh-dur-med) var(--sh-ease);
+}
+.sh-topbar[data-scrolled='true'] { box-shadow: 0 1px 0 0 var(--sh-divider); }
+
+.sh-brand { display: flex; align-items: center; gap: 10px; padding-right: 8px; }
+.sh-brand svg, .sh-brandmark { display: block; flex: none; }
+.sh-wordmark {
+  font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: 0;
+  color: var(--sh-on);
+}
+
+/* Gmail's search: filled pill at rest, lifting to an elevated white surface on
+   focus. The corner radius does NOT change — Gmail only squares its corners
+   when a suggestion list opens, and there is none here. */
+.sh-search {
+  flex: 1 1 auto; max-width: 660px; margin: 0 12px; height: 48px;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  /* --sh-container is the search chip's fill. In dark it was #1f1f1f on a
+     #131314 bar — 1.13:1, effectively invisible, and darker than Gmail's own
+     dark chip at ~1.43:1. It is #303134 now (1.43:1), which is also the suite
+     theme's --sy-container-high, so the two stylesheets stop disagreeing about
+     the same surface. Light stays near-invisible at 1.06:1 ON PURPOSE — that
+     is what Gmail does, and there the placeholder and icon carry the affordance. */
+  background: var(--sh-container); border-radius: var(--sh-r-full);
+  transition: background var(--sh-dur-med) var(--sh-ease),
+              box-shadow var(--sh-dur-med) var(--sh-ease);
+}
+.sh-search:focus-within { background: var(--sh-surface-elev); box-shadow: var(--sh-elev-2); }
+.sh-search input {
+  flex: 1; border: 0; background: transparent; outline: none;
+  font-family: inherit; color: var(--sh-on); padding: 0; width: 100%;
+  /* 16px: below that, iOS Safari zooms the page on focus. */
+  font-size: 16px; line-height: 24px; letter-spacing: .03125em;
+}
+.sh-search input::placeholder { color: var(--sh-on-variant); }
+.sh-search-icon { color: var(--sh-on-variant); flex: none; display: flex; }
+
+.sh-actions { display: flex; align-items: center; gap: 4px; position: relative; z-index: 32; }
+.sh-actions .sh-search-toggle { display: none; }
+
+
+.sh-iconbtn {
+  width: 40px; height: 40px; flex: none; border: 0; background: transparent;
+  border-radius: var(--sh-r-full); color: var(--sh-on-variant);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.sh-avatar {
+  width: 40px; height: 40px; border-radius: var(--sh-r-full); flex: none; border: 0;
+  background: transparent; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: inherit; font-size: 14px; line-height: 20px; font-weight: 500;
+  cursor: pointer; margin-left: 4px;
+}
+/* A 32px plate inside a 40px target: 32px alone is under Material's 48dp and
+   made the state layer the avatar itself rather than a halo around it. */
+.sh-avatar > .sh-avatar-plate {
+  width: 32px; height: 32px; border-radius: var(--sh-r-full);
+  background: var(--sh-primary); color: var(--sh-on-primary);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------------------------------------------------------------- account menu */
+/* FIXED, not absolute. The topbar is sticky, so an absolutely-positioned panel
+   scrolled away from the button that opened it while the button stayed put —
+   and nothing closes these panels on scroll. waffle.js has always used fixed
+   for the injected copy; this is the Hub catching up to it. */
+.sh-menu {
+  position: fixed; right: 16px; top: 68px;
+  /* min-width BEATS max-width in CSS — the used value is
+     max(min-width, min(max-width, width)) — so a flat `min-width: 300px` kept
+     this panel 300px wide below a 316px viewport and the JS clamp then put its
+     left edge off-screen (-28px on a 280px cover display), taking the avatar,
+     the greeting and part of the appearance control with it. `.sh-waffle` has
+     no min-width and was always fine; this is the same bug surviving in the
+     other panel. Wrapping the minimum in min() lets it yield. */
+  min-width: min(300px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px); overflow-wrap: anywhere;
+  background: var(--sh-surface-elev); border-radius: 28px; box-shadow: var(--sh-elev-3);
+  /* Same hairline the injected panel carries. On a dark page the elevated
+     surface is only 1.38:1 against the background and the shadow contributes
+     nothing, so without this the panel has no edge at all. */
+  border: 1px solid var(--sh-panel-edge);
+  padding: 20px; z-index: 40; text-align: center;
+  max-height: min(80vh, 560px); overflow-y: auto;
+  transform-origin: top right;
+  animation: sh-pop-in var(--sh-dur-med) var(--sh-ease-decel);
+}
+.sh-menu .sh-avatar {
+  width: 72px; height: 72px; font-size: 28px; line-height: 36px;
+  margin: 8px auto; cursor: default;
+}
+.sh-menu .sh-avatar > .sh-avatar-plate { width: 72px; height: 72px; }
+/* decorative, not a control — no state layer */
+.sh-menu .sh-avatar::before { display: none; }
+.sh-menu-name { font-size: 16px; line-height: 24px; letter-spacing: .009375em; font-weight: 400; }
+.sh-menu-mail { font-size: 14px; line-height: 20px; letter-spacing: .0178571em; color: var(--sh-on-variant); }
+.sh-menu-links { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+
+/* Appearance lives here rather than as a cycling icon in the bar: three
+   explicit choices with a visible selected state, which is how Google exposes
+   it (YouTube's account menu, Gmail's settings). */
+.sh-menu-appearance {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sh-divider-elev);
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+}
+.sh-menu-appearance-label {
+  font-size: 12px; line-height: 16px; letter-spacing: .0333em; font-weight: 500;
+  color: var(--sh-on-variant);
+}
+/* NO overflow: hidden here. The focus ring is drawn 2px OUTSIDE the button box
+   (outline-offset), so clipping to the container swallows it on every segment —
+   WCAG 2.4.11. The end caps are rounded on the buttons themselves instead. */
+.sh-seg {
+  display: inline-flex; border: 1px solid var(--sh-outline);
+  border-radius: var(--sh-r-full);
+}
+.sh-seg-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 14px; border: 0; cursor: pointer;
+  background: transparent; color: var(--sh-on-variant); font-family: inherit;
+  font-size: 14px; line-height: 20px; letter-spacing: .0071428em; font-weight: 500;
+  position: relative; isolation: isolate;
+  transition: background-color var(--sh-dur-short) var(--sh-ease),
+              color var(--sh-dur-short) var(--sh-ease);
+}
+.sh-seg-btn + .sh-seg-btn { border-left: 1px solid var(--sh-outline); }
+.sh-seg-btn:first-child { border-radius: var(--sh-r-full) 0 0 var(--sh-r-full); }
+.sh-seg-btn:last-child  { border-radius: 0 var(--sh-r-full) var(--sh-r-full) 0; }
+.sh-seg-btn svg { width: 16px; height: 16px; }
+/* The same state layer the icon buttons use, so hover feels identical. */
+.sh-seg-btn::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit;   /* or the state layer squares off the end caps */
+  background: currentColor; opacity: 0; pointer-events: none;
+  transition: opacity var(--sh-dur-short) var(--sh-ease);
+}
+.sh-seg-btn:hover::before { opacity: .08; }
+.sh-seg-btn:active::before { opacity: .12; }
+.sh-seg-btn.is-on {
+  background: var(--sh-secondary-container); color: var(--sh-on-secondary-container);
+}
+
+.sh-btn {
+  height: 36px; padding: 0 18px; border-radius: var(--sh-r-full); cursor: pointer;
+  border: 1px solid var(--sh-outline); background: transparent;
+  color: var(--sh-primary); font-family: inherit;
+  font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .0071428em;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background-color var(--sh-dur-med) var(--sh-ease),
+              box-shadow var(--sh-dur-med) var(--sh-ease);
+}
+.sh-btn-filled {
+  background: var(--sh-primary); color: var(--sh-on-primary); border-color: transparent;
+}
+.sh-btn-filled:hover { background: var(--sh-primary-hover); box-shadow: var(--sh-elev-1); }
+
+/* ---------------------------------------------------------------- waffle panel
+   Rendered in-page on the Hub itself (no iframe — it is the same app). */
+.sh-waffle {
+  position: fixed; right: 16px; top: 68px; width: 320px;   /* see .sh-menu */
+  /* 16px, matching waffle.js. The two copies used different clamps, so on a
+     narrow window the same panel had different side margins depending on which
+     surface it opened from. */
+  max-width: calc(100vw - 16px); max-height: min(70vh, 600px); overflow-y: auto;
+  background: var(--sh-surface-elev); border-radius: var(--sh-r-sm);
+  box-shadow: var(--sh-elev-3); z-index: 40; transform-origin: top right;
+  animation: sh-pop-in var(--sh-dur-med) var(--sh-ease-decel);
+  border: 1px solid var(--sh-panel-edge);
+}
+
+/* ---------------------------------------------------------------- content */
+.sh-page { max-width: 1180px; margin: 0 auto; padding: 8px 24px 72px; }
+.sh-page:focus { outline: none; }
+.sh-hello { padding: 28px 4px 4px; }
+.sh-hello h1 {
+  font-size: 32px; line-height: 40px; font-weight: 400; letter-spacing: 0; margin: 0 0 6px;
+}
+.sh-hello p { margin: 0; color: var(--sh-on-variant); font-size: 14px; line-height: 20px; }
+
+/* Section headers: Google sets no UI section header in uppercase, and 600 is
+   not in its weight set. */
+.sh-cat { padding: 32px 4px 12px; }
+.sh-cat h2 {
+  font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .0071428em;
+  text-transform: none; color: var(--sh-on); margin: 0;
+}
+
+/* Google's all-apps grid: a dense icon-and-label grid, not a card dashboard.
+   No border, no shadow, no hover lift — identity comes from the icon. */
+.sh-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 0;
+}
+.sh-tile {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 16px 8px; border-radius: var(--sh-r-md);
+  background: transparent; border: 0; color: inherit;
+}
+.sh-appicon {
+  border-radius: var(--sh-r-full); display: flex; align-items: center;
+  justify-content: center; line-height: 1; flex: none;
+  /* NO overflow: hidden. There is no background here to clip — the marks are
+     drawn, not plated — and with a full border-radius it clips them to an
+     inscribed CIRCLE, which is tighter than the SVG viewport and sliced the
+     corner off the camera lens. The viewBox already bounds the art. */
+  /* AppIcon emits both tone sets as custom properties; the cascade picks one
+     BEFORE first paint, so icons cannot flash light tones on a dark page the
+     way a JS-resolved `dark` prop did. */
+  --ic-fill: var(--ic-fill-l);
+  --ic-deep: var(--ic-deep-l);
+  --ic-pale: var(--ic-pale-l);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-sh-theme='light']) .sh-appicon {
+    --ic-fill: var(--ic-fill-d);
+    --ic-deep: var(--ic-deep-d);
+    --ic-pale: var(--ic-pale-d);
+  }
+}
+:root[data-sh-theme='dark'] .sh-appicon {
+  --ic-fill: var(--ic-fill-d);
+  --ic-deep: var(--ic-deep-d);
+  --ic-pale: var(--ic-pale-d);
+}
+/* Fallback plate for an app with no mapped shape. */
+/* A filled plate, not a naked character. With a transparent background the
+   fallback rendered as a bare coloured letter floating in the grid — Google has
+   never shipped a letter in the launcher, and one letter beside fourteen drawn
+   marks reads as a missing asset rather than a product. --ic-pale/--ic-deep are
+   the same tone pair the marks use, so the plate stays in the family. */
+/* Plate in --ic-deep with the letter in --ic-pale — Gmail's contact-avatar
+   construction. The first attempt had this the other way round, and a near-white
+   plate on a near-white panel is not a plate: it measured 1.21:1, so the user
+   still saw a bare letter floating in the grid. This way the plate is the
+   saturated tone (already required to hold 3:1 against page and panel) and the
+   letter is the light one on top of it. */
+.sh-appicon-mono { background: var(--ic-deep); color: var(--ic-pale); }
+.sh-tile .sh-appicon { margin-bottom: 8px; }
+.sh-tile-name {
+  font-size: 14px; line-height: 20px; letter-spacing: .0178571em; font-weight: 400;
+  overflow-wrap: anywhere;
+  /* Clamped like .shw-name, or a long product name makes its row taller than
+     its neighbours and the grid goes ragged. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; min-height: 40px;
+}
+
+.sh-empty { text-align: center; padding: 72px 24px; color: var(--sh-on-variant); }
+.sh-empty h3 {
+  font-size: 22px; line-height: 28px; font-weight: 400; color: var(--sh-on); margin: 0 0 6px;
+}
+.sh-empty p { margin: 0 auto; max-width: 400px; font-size: 14px; line-height: 20px; }
+.sh-empty-mark { opacity: .5; margin-bottom: 10px; color: var(--sh-on-variant); }
+/* The marks are inline SVG with width/height attributes, which font-size cannot
+   touch — size the element itself. */
+.sh-empty-mark svg { width: 45px; height: 45px; }
+
+@keyframes sh-pop-in  { from { opacity: 0; transform: scale(.96) translateY(-4px); } }
+@keyframes sh-pop-out { to   { opacity: 0; transform: scale(.96) translateY(-4px); } }
+/* Without an exit the popups vanish on a hard cut, because React unmounts them
+   synchronously. */
+.sh-menu.is-closing, .sh-waffle.is-closing {
+  animation: sh-pop-out var(--sh-dur-short) var(--sh-ease-accel) forwards;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- responsive
+   Material 3 window class breakpoints. Two are implemented — 840 (medium)
+   and 600 (compact). 1240 (expanded) is not: the grid is already fluid
+   above 840 and .sh-page caps at 1180px, so there is nothing for it to
+   change. It was named here as though it existed. */
+@media (max-width: 840px) {
+  .sh-wordmark { display: none; }
+  .sh-search { margin: 0 8px; }
+  .sh-page { padding: 8px 16px 56px; }
+}
+@media (max-width: 600px) {
+  .sh-topbar { height: 56px; padding: 0 8px; }
+  /* Gmail and Drive collapse the field to an icon around this width, and so
+     does this. The figure once quoted here — "~50px of usable width" — was
+     measured at about 320px, not at the 600px breakpoint where the field is
+     still ~361px wide. The decision matches the anchor; the arithmetic offered
+     for it did not. */
+  .sh-search { display: none; }
+  .sh-actions .sh-search-toggle { display: inline-flex; }
+  /* The hidden field was the only thing pushing the actions right, so they
+     bunched against the logo with ~100px of dead bar beside them. */
+  .sh-actions { margin-left: auto; }
+  /* Open search REPLACES the bar, as Gmail does. Overlaying it left the field
+     underneath all five buttons, with typed text running beneath them. */
+  .sh-topbar.search-open .sh-brand,
+  .sh-topbar.search-open .sh-actions { display: none; }
+  .sh-topbar.search-open .sh-search {
+    display: flex; flex: 1 1 auto; margin: 0; height: 40px;
+  }
+  .sh-hello h1 { font-size: 28px; line-height: 36px; }
+  .sh-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  /* Beats AppIcon's inline width/height, which a plain rule cannot. */
+  .sh-tile .sh-appicon { width: 48px !important; height: 48px !important; }
+  /* The monogram's size is inline too, so shrinking the plate alone left a
+     24px letter in a 48px circle, crowding its own edge. */
+  .sh-tile .sh-appicon-mono > span { font-size: 20px !important; }
+  .sh-menu, .sh-waffle { top: 60px; right: 8px; max-width: calc(100vw - 16px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sh-root *, .sh-root *::before, .sh-root *::after,
+  .shw-root *, .shw-root *::before, .shw-root *::after {
+    animation-duration: .01ms !important; transition-duration: .01ms !important;
+  }
+}
+
+/* ================================================================ waffle */
+.shw-root {
+  padding: 10px; background: var(--sh-surface-elev); color: var(--sh-on);
+  font-family: var(--sh-font); font-size: 14px; line-height: 20px;
+  /* not 100vh: inside a sized iframe that guarantees a scrollbar */
+  min-height: 0;
+}
+.shw-root a { color: inherit; text-decoration: none; }
+.shw-root :where(a, button):focus-visible {
+  outline: 2px solid var(--sh-primary); outline-offset: -2px;
+}
+.shw-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px 12px;
+  font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: .0071428em;
+  text-transform: none; color: var(--sh-on);
+}
+.shw-all { font-size: 14px; color: var(--sh-primary); font-weight: 500; }
+.shw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.shw-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  padding: 14px 6px; border-radius: var(--sh-r-md); color: inherit;
+}
+
+/* Clamped, or a long product name makes its grid row taller than its neighbours
+   and the 3-column grid goes ragged. */
+.shw-name {
+  font-size: 12px; line-height: 16px; letter-spacing: .0333333em; color: var(--sh-on);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere; min-height: 32px;
+}
+.shw-empty { padding: 26px 10px; text-align: center; font-size: 14px; color: var(--sh-on-variant); }
+.shw-empty a { color: var(--sh-primary); font-weight: 500; }
+
+/* ---------------------------------------------------------------- forced colors
+   High Contrast strips box-shadow, so the bar loses its only separator and the
+   brand plates collapse to Canvas, making every tile identical. */
+@media (forced-colors: active) {
+  .sh-topbar[data-scrolled='true'] { border-bottom: 1px solid CanvasText; }
+  .sh-appicon { border: 1px solid CanvasText; }
+  .sh-menu, .sh-waffle { border: 1px solid CanvasText; }
+  .sh-search, .sh-avatar { border: 1px solid CanvasText; }
+  .sh-root :where(a, button, input, [tabindex]):focus-visible { outline-color: Highlight; }
+}

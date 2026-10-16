@@ -1,0 +1,38 @@
+{
+ "title": "Synergy Meet",
+ "navItems": [],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "videocamNew meeting"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": null,
+ "iconButtons": [
+  "Main menu",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@synergy/search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Suite-wide search for the signed-in person: the protocol between the Search app and every app that keeps people's content.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "node --test test/*.test.js" },
+  "dependencies": { "@synergy/compliance": "*" }
+}

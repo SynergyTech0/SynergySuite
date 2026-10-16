@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"/>
+    
+    <!-- Pen/signature icon -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M70.5,37.5L64.5,31.5L35,61L30,78L47,73L76.5,43.5C77.3,42.7 77.3,41.3 76.5,40.5L70.5,37.5Z"/>
+    
+    <!-- Document lines -->
+    <path
+        android:fillColor="#2563EB"
+        android:strokeWidth="2"
+        android:pathData="M30,40H50M30,48H45M30,56H40"/>
+</vector>

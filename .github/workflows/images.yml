@@ -1,0 +1,120 @@
+# Builds the suite's app images and publishes them to the GitHub Container Registry
+# (ghcr.io/synergytech0/synergysuite-<app>, public like the repository), tagged latest and
+# with the commit. deploy/quickstart.sh downloads them instead of building every image locally.
+# Only the images a push changed are rebuilt; a manual run rebuilds them all.
+name: images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/synergytech0
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # name, Dockerfile, build context, build args, the paths that are that image's own.
+          # Images built from the repository root also change with the shared packages, the
+          # lockfile and their Dockerfile.
+          images='[
+            {"name":"auth","file":"apps/auth/Dockerfile","context":"apps/auth","args":"","paths":["apps/auth/"]},
+            {"name":"books","file":"deploy/books.Dockerfile","context":".","args":"","paths":["apps/books/"]},
+            {"name":"cad","file":"deploy/cad.Dockerfile","context":".","args":"","paths":["apps/cad/"]},
+            {"name":"photo","file":"deploy/photo.Dockerfile","context":".","args":"","paths":["apps/photo/"]},
+            {"name":"calendar","file":"deploy/express-app.Dockerfile","context":".","args":"APP=calendar","paths":["apps/calendar/"]},
+            {"name":"chat","file":"deploy/express-app.Dockerfile","context":".","args":"APP=chat","paths":["apps/chat/"]},
+            {"name":"forms","file":"deploy/express-app.Dockerfile","context":".","args":"APP=forms","paths":["apps/forms/"]},
+            {"name":"notes","file":"deploy/express-app.Dockerfile","context":".","args":"APP=notes","paths":["apps/notes/"]},
+            {"name":"sites","file":"deploy/express-app.Dockerfile","context":".","args":"APP=sites","paths":["apps/sites/"]},
+            {"name":"people","file":"deploy/express-app.Dockerfile","context":".","args":"APP=people\nAPP_DIR=addons/people","paths":["addons/people/"]},
+            {"name":"portal","file":"deploy/express-app.Dockerfile","context":".","args":"APP=portal\nAPP_DIR=addons/portal","paths":["addons/portal/"]},
+            {"name":"admin","file":"deploy/next-app.Dockerfile","context":".","args":"APP=admin","paths":["apps/admin/"]},
+            {"name":"base","file":"deploy/next-app.Dockerfile","context":".","args":"APP=base","paths":["apps/base/"]},
+            {"name":"contacts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contacts","paths":["apps/contacts/"]},
+            {"name":"crm","file":"deploy/next-app.Dockerfile","context":".","args":"APP=crm","paths":["apps/crm/"]},
+            {"name":"desk","file":"deploy/next-app.Dockerfile","context":".","args":"APP=desk","paths":["apps/desk/"]},
+            {"name":"drive","file":"deploy/next-app.Dockerfile","context":".","args":"APP=drive","paths":["apps/drive/"]},
+            {"name":"mail","file":"deploy/next-app.Dockerfile","context":".","args":"APP=mail","paths":["apps/mail/"]},
+            {"name":"meet","file":"deploy/next-app.Dockerfile","context":".","args":"APP=meet","paths":["apps/meet/"]},
+            {"name":"office","file":"deploy/next-app.Dockerfile","context":".","args":"APP=office","paths":["apps/office/"]},
+            {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
+            {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
+            {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
+            {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]}
+          ]'
+          if [ "$EVENT" = workflow_dispatch ] || [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            all=1; changed=""
+          else
+            all=0; changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+            if printf '%s\n' "$changed" | grep -qE '^(\.github/workflows/images\.yml|\.dockerignore)$'; then all=1; fi
+          fi
+          printf 'Changed files:\n%s\n' "$changed"
+          matrix=$(jq -c --argjson all "$all" --arg changed "$changed" '
+            ($changed | split("\n") | map(select(length > 0))) as $files
+            | def under($dir): . as $f | $dir | endswith("/") and ($f | startswith($dir)) or $f == $dir;
+              def shared: under("packages/") or under("package.json") or under("package-lock.json") or under("tsconfig.base.json");
+              map(. as $i | select($all == 1 or any($files[];
+                (. as $f | $i.paths | any(. as $p | $f | under($p)))
+                or . == $i.file
+                or ($i.context == "." and shared))))' <<<"$images")
+          echo "Images to build: $(jq -r 'map(.name) | join(" ")' <<<"$matrix")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "any=$(jq 'length > 0' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.image.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The images carry no domain: the browser URLs Meet and Office need are read at run time.
+      # The registry cache keeps unchanged layers (the Rust engines above all) between runs.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          build-args: ${{ matrix.image.args }}
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: |
+            ${{ env.REGISTRY }}/synergysuite-${{ matrix.image.name }}:latest
+            ${{ env.REGISTRY }}/synergysuite-${{ matrix.image.name }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/synergysuite-${{ matrix.image.name }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/synergysuite-${{ matrix.image.name }}:buildcache,mode=max

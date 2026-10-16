@@ -1,0 +1,50 @@
+{
+  "name": "synergyboards",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergyBoards â€” an AI-native Trello alternative on the Synergy stack.",
+  "scripts": {
+    "dev": "next dev -p 3600",
+    "build": "next build",
+    "start": "next start -p 3600",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:seed": "tsx db/seed.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:backfill": "tsx db/backfill-memberships.ts"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.1.0",
+    "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/shell": "*",
+    "drizzle-orm": "^0.36.0",
+    "next": "16.3.5",
+    "pg": "^8.13.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19.0.0",
+    "@types/ws": "^8.5.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "drizzle-kit": "^0.28.0",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^5.0.1"
+  }
+}

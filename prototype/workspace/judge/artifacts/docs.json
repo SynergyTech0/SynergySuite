@@ -1,0 +1,77 @@
+{
+ "title": "Synergy Docs",
+ "navItems": [],
+ "menuBar": [
+  "File",
+  "Edit",
+  "View",
+  "Insert",
+  "Format",
+  "Tools",
+  "Help"
+ ],
+ "toolbar": [
+  "Undo (Ctrl+Z)",
+  "Redo (Ctrl+Y)",
+  "Print (Ctrl+P)",
+  "Paint format",
+  "Zoom",
+  "Styles",
+  "Font",
+  "Font size",
+  "Bold (Ctrl+B)",
+  "Italic (Ctrl+I)",
+  "Underline (Ctrl+U)",
+  "Strikethrough",
+  "Text color",
+  "Highlight color",
+  "Insert link (Ctrl+K)",
+  "Add comment",
+  "Insert image",
+  "Insert table",
+  "Left align",
+  "Center align",
+  "Right align",
+  "Justify",
+  "Line spacing",
+  "Bulleted list",
+  "Numbered list",
+  "Decrease indent",
+  "Increase indent",
+  "Clear formatting"
+ ],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "lockShare"
+ ],
+ "tableHeaders": [],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": null,
+ "iconButtons": [
+  "Main menu",
+  "Support",
+  "Settings",
+  "Synergy apps",
+  "Star",
+  "Comments"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 0,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

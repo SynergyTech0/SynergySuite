@@ -1,0 +1,28 @@
+# Recording for SynergyMeet — LiveKit Egress (+ the Redis it and LiveKit coordinate through).
+#
+# Egress runs a headless Chrome that joins the room, composites the grid, and encodes an MP4. That
+# is CPU-heavy (~1-2 cores while recording), so on a small host a recording competes with the other
+# apps. Give media its own machine if recording becomes routine.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: synergymeet-redis
+    # Host network + loopback bind: LiveKit and Egress both reach it at 127.0.0.1:6379, never public.
+    network_mode: host
+    command: ["redis-server", "--bind", "127.0.0.1", "--port", "6379"]
+    restart: unless-stopped
+
+  egress:
+    image: livekit/egress:v1.8
+    container_name: synergymeet-egress
+    network_mode: host
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+      - /opt/synergymeet/recordings:/out
+    # Chrome inside egress needs a big /dev/shm or it crashes on composite rendering.
+    shm_size: "1gb"
+    cap_add: ["SYS_ADMIN"]
+    depends_on: [redis]
+    restart: unless-stopped

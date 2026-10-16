@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Forms</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  body { background: #f0ebf8; }
+  .tabs { display: flex; gap: 8px; justify-content: center; padding: 4px 0 12px; background: var(--surface); flex: none; }
+  .tabs button {
+    background: none; border: none; padding: 12px 20px; font-size: 14px; font-weight: 500;
+    color: var(--on-surface-variant); cursor: pointer; border-bottom: 3px solid transparent;
+    font-family: var(--font-body);
+  }
+  .tabs button.on { color: #7248b9; border-bottom-color: #7248b9; }
+  .form-wrap { max-width: 770px; margin: 0 auto; padding: 24px 16px 80px; }
+  .card-q {
+    background: var(--surface); border: 1px solid var(--outline-variant); border-radius: 8px;
+    padding: 24px; margin-bottom: 12px; position: relative;
+  }
+  .card-q.sel { border-left: 6px solid #7248b9; padding-left: 20px; }
+  .form-head { border-top: 10px solid #7248b9; }
+  .form-head input.t {
+    width: 100%; border: none; outline: none; font-family: var(--font); font-size: 32px;
+    font-weight: 400; background: transparent; color: var(--on-surface); padding: 4px 0;
+    border-bottom: 1px solid transparent;
+  }
+  .form-head input.d {
+    width: 100%; border: none; outline: none; font-size: 14px; background: transparent;
+    color: var(--on-surface-variant); padding: 6px 0; border-bottom: 1px solid transparent;
+  }
+  .form-head input:focus { border-bottom-color: #7248b9; }
+  .q-title { flex: 1; border: none; outline: none; font-size: 16px; background: var(--surface-c-low);
+             padding: 10px 12px; border-radius: 4px 4px 0 0; border-bottom: 1px solid var(--outline); color: var(--on-surface); }
+  .opt-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+  .opt-row input.txt { flex: 1; border: none; outline: none; border-bottom: 1px solid transparent;
+                       background: transparent; font-size: 14px; padding: 4px 0; color: var(--on-surface); }
+  .opt-row input.txt:focus { border-bottom-color: var(--outline); }
+  .q-foot { display: flex; align-items: center; gap: 8px; justify-content: flex-end;
+            border-top: 1px solid var(--divider); margin-top: 16px; padding-top: 8px; }
+  .addbar { position: sticky; top: 12px; float: right; margin-right: -64px;
+            display: flex; flex-direction: column; gap: 4px; background: var(--surface);
+            border: 1px solid var(--outline-variant); border-radius: 8px; padding: 4px; }
+  .resp-summary { background: var(--surface); border: 1px solid var(--outline-variant);
+                  border-radius: 8px; padding: 24px; margin-bottom: 12px; }
+  .bar { height: 22px; background: #7248b9; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="tabs" id="tabs"></div>
+  <main class="app-main flat" id="main" style="border-radius:0;background:#f0ebf8"></main>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

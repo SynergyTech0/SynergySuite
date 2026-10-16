@@ -1,0 +1,21 @@
+# SynergyMeet media engine — self-hosted LiveKit (Apache-2, HEADLESS: no UI, no branding).
+# This is the "MinIO for video": a bare media server. 100% of what users see is the SynergyMeet
+# app we build on the client SDK; the LiveKit name never reaches a browser.
+#
+# network_mode: host is the recommended way to run LiveKit in Docker — WebRTC needs a large UDP
+# port range bound directly to the host, and per-port docker mappings would be miserable.
+#   7880  signaling (http/ws)  -> keep it off the internet; the suite gateway proxies /rtc and /twirp to it
+#   7881  RTC over TCP fallback -> opened, for clients behind UDP-blocking firewalls
+#   50000-50100/udp  media     -> opened; LiveKit advertises the host's public IP for ICE (see livekit.template.yaml)
+services:
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: synergymeet-livekit
+    command: ["--config", "/etc/livekit.yaml"]
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      # Read-only Let's Encrypt dir so the embedded TURN/TLS server can load the meet.* cert. The
+      # whole dir (not just live/) is mounted so the live/ symlinks into archive/ resolve.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    restart: unless-stopped

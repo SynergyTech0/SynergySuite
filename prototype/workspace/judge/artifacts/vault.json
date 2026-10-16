@@ -1,0 +1,51 @@
+{
+ "title": "Synergy Vault",
+ "navItems": [
+  "folder_specialMatters",
+  "gavelHolds",
+  "scheduleRetention",
+  "searchSearch"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addNew matter"
+ ],
+ "tableHeaders": [
+  "ID",
+  "Name",
+  "Owner",
+  "State",
+  "Created"
+ ],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search vault",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 3,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

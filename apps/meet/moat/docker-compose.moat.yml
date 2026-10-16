@@ -1,0 +1,58 @@
+# SynergyMeet moat: post-meeting intelligence pipeline (runs on the media server).
+#
+#   synergymeet-ollama  — tiny local LLM for summaries/action items, used unless the suite's AI
+#                         settings point at another model (AI_PROVIDER / AI_BASE_URL / AI_MODEL).
+#   synergymeet-moat    — webhook receiver + ffmpeg + faster-whisper + Drive/Boards clients.
+#
+# LiveKit (host network) fires its egress webhook at 127.0.0.1:9080, so the worker publishes to
+# loopback. Everything else stays on the private bridge; nothing new is exposed publicly.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: synergymeet-ollama
+    volumes:
+      - ollama-models:/root/.ollama
+    networks: [moat]
+    restart: unless-stopped
+
+  moat:
+    build: .
+    container_name: synergymeet-moat
+    depends_on: [ollama]
+    environment:
+      # webhook verification (same key/secret LiveKit signs with)
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      # summary model: the suite's AI settings, defaulting to the bundled Ollama
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      AI_BASE_URL: ${AI_BASE_URL:-http://synergymeet-ollama:11434/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${MOAT_AI_MODEL:-${AI_MODEL:-qwen2.5:3b-instruct}}
+      RECORDINGS_DIR: /out
+      MOAT_WORK_DIR: /work
+      # SynergyDrive (token-gated machine ingress) — optional
+      MOAT_DRIVE_BASE: ${MOAT_DRIVE_BASE:-}
+      MOAT_DRIVE_MACHINE_TOKEN: ${MOAT_DRIVE_MACHINE_TOKEN:-}
+      MOAT_DRIVE_UUID_NAMESPACE: ${MOAT_DRIVE_UUID_NAMESPACE:-}
+      MOAT_DRIVE_TENANT: ${MOAT_DRIVE_TENANT:-}
+      MOAT_DRIVE_USER: ${MOAT_DRIVE_USER:-}
+      # SynergyBoards (public token path) — optional
+      MOAT_BOARDS_BASE: ${MOAT_BOARDS_BASE:-}
+      MOAT_MIND_TOKEN: ${MOAT_MIND_TOKEN:-}
+      MOAT_BOARDS_BOARD: ${MOAT_BOARDS_BOARD:-SynergyMeet}
+      MOAT_BOARDS_LIST: ${MOAT_BOARDS_LIST:-Action Items}
+    volumes:
+      - /opt/synergymeet/recordings:/out:ro
+      - moat-work:/work
+    ports:
+      - "127.0.0.1:9080:9080"
+    networks: [moat]
+    restart: unless-stopped
+
+networks:
+  moat:
+    driver: bridge
+
+volumes:
+  ollama-models:
+  moat-work:

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Slides</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  body { background: var(--surface); overflow: hidden; }
+  .doc-bar { display: flex; align-items: center; gap: 4px; padding: 8px 12px 0; }
+  .doc-title { font-family: var(--font); font-size: 18px; border: 1px solid transparent;
+    background: transparent; padding: 2px 6px; border-radius: var(--r-sm);
+    color: var(--on-surface); outline: none; min-width: 160px; }
+  .doc-title:hover { border-color: var(--outline-variant); }
+  .doc-title:focus { border-color: var(--blue-700); }
+  .menubar { display: flex; gap: 2px; padding: 0 12px 4px 56px; }
+  .menubar button { background: none; border: none; font-size: 14px; color: var(--on-surface);
+    padding: 4px 8px; border-radius: var(--r-sm); cursor: pointer; }
+  .menubar button:hover { background: var(--surface-c); }
+  .toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 8px; margin: 0 12px 8px;
+    background: var(--surface-c); border-radius: var(--r-full); overflow-x: auto; }
+  .toolbar .sep { width: 1px; height: 22px; background: var(--outline-variant); margin: 0 6px; flex: none; }
+  .tb-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+    border: none; background: transparent; border-radius: var(--r-sm); cursor: pointer;
+    color: var(--on-surface-variant); flex: none; }
+  .tb-btn:hover { background: var(--surface-c-max); }
+  .tb-btn.on { background: var(--blue-100); color: var(--blue-900); }
+  .tb-btn .mi { font-size: 18px; }
+
+  .sl-body { flex: 1; display: flex; min-height: 0; }
+  .filmstrip { width: 200px; flex: none; overflow-y: auto; padding: 12px 8px;
+               border-right: 1px solid var(--divider); background: var(--surface); }
+  .thumb-row { display: flex; gap: 6px; margin-bottom: 10px; align-items: flex-start; }
+  .thumb-row .n { font-size: 12px; color: var(--on-surface-variant); width: 16px; text-align: right; padding-top: 20px; }
+  .thumb { flex: 1; aspect-ratio: 16/9; border: 2px solid var(--divider); border-radius: 2px;
+           background: #fff; position: relative; overflow: hidden; cursor: pointer; }
+  .thumb.on { border-color: var(--blue-700); }
+
+  .stage-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0;
+                background: var(--surface-c-low); overflow: auto; }
+  .stage-pad { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .stage { width: 960px; height: 540px; background: #fff; box-shadow: var(--elev-2);
+           position: relative; flex: none; transform-origin: center; }
+  .el { position: absolute; cursor: move; outline: 1px solid transparent; padding: 4px; }
+  .el:hover { outline: 1px dashed var(--blue-600); }
+  .el.sel { outline: 2px solid var(--blue-700); }
+  .el[contenteditable="true"]:focus { outline: 2px solid var(--blue-700); cursor: text; }
+  .notes { height: 120px; flex: none; border-top: 1px solid var(--divider);
+           padding: 10px 24px; background: var(--surface); overflow-y: auto; }
+  .notes[contenteditable]:focus { outline: none; }
+
+  .present { position: fixed; inset: 0; background: #000; z-index: 900; display: none;
+             align-items: center; justify-content: center; }
+  .present.on { display: flex; }
+  .present .stage { box-shadow: none; }
+  .present-hud { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+                 display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,.7);
+                 border-radius: var(--r-full); padding: 6px 12px; color: #fff; z-index: 901; }
+  .present-hud button { background: none; border: none; color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="doc-bar">
+    <input class="doc-title" id="title" value="Untitled presentation">
+    <button class="icon-btn" data-tip="Star"><span class="mi">star_border</span></button>
+    <div class="spacer"></div>
+    <span class="muted" id="saveState" style="font-size:12px;margin-right:8px"></span>
+    <button class="btn btn-filled" id="presentBtn"><span class="mi s18">slideshow</span>Slideshow</button>
+    <button class="btn btn-tonal" id="shareBtn" style="margin-left:8px"><span class="mi s18">lock</span>Share</button>
+  </div>
+  <div class="menubar" id="menubar"></div>
+  <div class="toolbar" id="toolbar"></div>
+  <div class="sl-body">
+    <aside class="filmstrip" id="filmstrip"></aside>
+    <div class="stage-wrap">
+      <div class="stage-pad"><div class="stage" id="stage"></div></div>
+      <div class="notes" id="notes" contenteditable="true" data-ph="Click to add speaker notes"></div>
+    </div>
+  </div>
+</div>
+<div class="present" id="present"><div class="stage" id="presentStage"></div></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

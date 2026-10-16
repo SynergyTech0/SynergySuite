@@ -1,0 +1,793 @@
+diff --git a/packages/ai/src/chatPanel.ts b/packages/ai/src/chatPanel.ts
+index 71e8dc7..08385dd 100644
+--- a/packages/ai/src/chatPanel.ts
++++ b/packages/ai/src/chatPanel.ts
+@@ -30,6 +30,7 @@ import {
+     DEFAULT_ANTHROPIC_MODEL,
+     type LLMConfig,
+     loadConfig,
++    managedConfig,
+     PROVIDER_PRESETS,
+     saveConfig,
+ } from "./settings";
+@@ -105,6 +106,8 @@ export class ChatPanel extends HTMLElement {
+     private readonly messages: ChatMessage[] = [];
+     private readonly messageList: HTMLElement;
+     private readonly emptyState: HTMLElement;
++    /** Shown instead of the chat when the host page has the assistant turned off. */
++    private readonly offNotice: HTMLElement;
+     private readonly composer: HTMLElement;
+     private readonly input: HTMLTextAreaElement;
+     private readonly sendButton: HTMLButtonElement;
+@@ -171,11 +174,21 @@ export class ChatPanel extends HTMLElement {
+         const fileInput = this.createFileInput();
+         this.composer = this.createComposer(fileInput);
+         this.emptyState = this.createEmptyState();
++        this.offNotice = div(
++            { className: style.emptyState, style: "display: none" },
++            img({ className: style.emptyIcon, src: "synergy-mark.png", alt: "" }),
++            div({ className: style.emptyTitle, textContent: "The AI assistant is off" }),
++            div({
++                className: style.emptyHint,
++                textContent: "An administrator turns it on by choosing the AI model for the suite.",
++            }),
++        );
+ 
+         this.append(
+             this.header,
+             this.messageList,
+             this.emptyState,
++            this.offNotice,
+             this.imagePreview,
+             this.composer,
+             fileInput,
+@@ -236,7 +249,7 @@ export class ChatPanel extends HTMLElement {
+     private createTitle(): HTMLElement {
+         this.titleEl = div(
+             { className: style.title },
+-            svg({ className: style.titleIcon, icon: "icon-chili" }),
++            img({ className: style.titleIcon, src: "synergy-mark.png", alt: "" }),
+             span({ textContent: new Localize("ai.title") }),
+         );
+         return this.titleEl;
+@@ -318,7 +331,7 @@ export class ChatPanel extends HTMLElement {
+     private createEmptyState(): HTMLElement {
+         return div(
+             { className: style.emptyState },
+-            svg({ className: style.emptyIcon, icon: "icon-chili" }),
++            img({ className: style.emptyIcon, src: "synergy-mark.png", alt: "" }),
+             div({ className: style.emptyTitle, textContent: new Localize("ai.emptyTitle") }),
+             div({ className: style.emptyHint, textContent: new Localize("ai.emptyHint") }),
+             div({ className: style.emptyHint, textContent: new Localize("ai.emptyExample") }),
+@@ -327,7 +340,9 @@ export class ChatPanel extends HTMLElement {
+     }
+ 
+     connectedCallback(): void {
+-        if (!this.configured) this.showSettings();
++        // The host page may have set or changed the model since the panel was made.
++        this.loadConfig();
++        if (!this.configured && managedConfig() === undefined) this.showSettings();
+         this.autosizeInput();
+     }
+ 
+@@ -352,11 +367,14 @@ export class ChatPanel extends HTMLElement {
+ 
+     private loadConfig() {
+         this.configured = !!loadConfig()?.apiKey;
++        // A host page that provides the model leaves nothing to set here.
++        this.settingsButtonEl.style.display = managedConfig() === undefined ? "" : "none";
+         this.renderState();
+     }
+ 
+     private renderState() {
+         this.composer.style.display = this.configured ? "" : "none";
++        this.offNotice.style.display = managedConfig() === null ? "flex" : "none";
+         this.updateEmptyState();
+     }
+ 
+diff --git a/packages/ai/src/index.ts b/packages/ai/src/index.ts
+index 663502c..fec4541 100644
+--- a/packages/ai/src/index.ts
++++ b/packages/ai/src/index.ts
+@@ -2,3 +2,4 @@
+ // See LICENSE file in the project root for full license information.
+ 
+ export { ChatPanel, createChatPanel } from "./chatPanel";
++export { managedConfig, setManagedConfig } from "./settings";
+diff --git a/packages/ai/src/llm/prompt.ts b/packages/ai/src/llm/prompt.ts
+index 9684b40..7397fe5 100644
+--- a/packages/ai/src/llm/prompt.ts
++++ b/packages/ai/src/llm/prompt.ts
+@@ -21,7 +21,7 @@ export function buildSystemPrompt(): SystemPrompt {
+ }
+ 
+ function introSection(): string {
+-    return `You are the AI assistant for Chili3D (a parametric CAD). Help the user create and edit 3D models in the browser.
++    return `You are the AI assistant for Synergy CAD's 3D modeler (built on Chili3D, a parametric CAD). Help the user create and edit 3D models in the browser.
+ 
+ Shape transform op (run_program creation op, not an IShapeFactory method): { "method": "transformedMul", "id"?, "args": { "shape": "<ref>", "translate"?, "rotate"?, "scale"?, "mirror"? } } — creates a new node whose shape is the referenced shape with its placement multiplied by the transform; the source node is unchanged. Transform encoding is the same as transform_node; combined arguments act on the geometry in ${TRANSFORM_ORDER} order — ${TRANSFORM_ARGS_SENTENCE}.`;
+ }
+diff --git a/packages/ai/src/settings.ts b/packages/ai/src/settings.ts
+index a8884d1..9826e3d 100644
+--- a/packages/ai/src/settings.ts
++++ b/packages/ai/src/settings.ts
+@@ -57,7 +57,24 @@ let sessionApiKey = "";
+ /** Older versions persisted the key in plain text; migrate it out on first read. */
+ type StoredConfig = Omit<LLMConfig, "apiKey"> & { apiKey?: string };
+ 
++/**
++ * Set by a page that embeds Chili3D and provides the model itself (`?host=parent`, see
++ * web/src/host.ts): a config makes the assistant use it, `null` turns the assistant off. Either
++ * way the settings form and anything stored in this browser are bypassed. `undefined` (no host)
++ * keeps the usual bring-your-own-key behaviour.
++ */
++let managed: LLMConfig | null | undefined;
++
++export function setManagedConfig(config: LLMConfig | null): void {
++    managed = config;
++}
++
++export function managedConfig(): LLMConfig | null | undefined {
++    return managed;
++}
++
+ export function loadConfig(): LLMConfig | undefined {
++    if (managed !== undefined) return managed ?? undefined;
+     const saved = ObjectStorage.default.value<StoredConfig>(STORAGE_KEY);
+     if (!saved) return undefined;
+     if (saved.apiKey) {
+@@ -73,6 +90,7 @@ export function loadConfig(): LLMConfig | undefined {
+ }
+ 
+ export function saveConfig(config: LLMConfig): void {
++    if (managed !== undefined) return;
+     sessionApiKey = config.apiKey;
+     persist(config);
+ }
+diff --git a/packages/ai/src/skills/appGuide.ts b/packages/ai/src/skills/appGuide.ts
+index 417f7d8..4b1d4f4 100644
+--- a/packages/ai/src/skills/appGuide.ts
++++ b/packages/ai/src/skills/appGuide.ts
+@@ -63,7 +63,7 @@ function navigationProfiles(): string {
+     }).join("\n");
+ }
+ 
+-const INTRO = `Chili3D app guide — how to operate the application itself.
++const INTRO = `Synergy CAD 3D app guide — how to operate the application itself.
+ 
+ Use this document to TEACH. The user is sitting in front of the app and can click along, so answer with the actual path: the tab, the group, the button, the hotkey, the click sequence. Every command named below carries the label the user's own language gives it and the hotkey their navigation profile binds — so name the button in their language, and lean on the tab, the group and the hotkey to disambiguate, since those are language-independent.
+ 
+@@ -169,7 +169,7 @@ function buildAppGuideDoc(): string {
+ export const appGuide: Skill = {
+     name: "app-guide",
+     description:
+-        'How to operate the Chili3D app itself: where every command lives (ribbon tabs and groups, toolbars, hotkeys), viewport navigation and selection, the model tree and property panel, sketch mode, parametric features, file operations and settings — load it to answer any "how do I…" or "where is…" question',
++        'How to operate the Synergy CAD 3D app itself: where every command lives (ribbon tabs and groups, toolbars, hotkeys), viewport navigation and selection, the model tree and property panel, sketch mode, parametric features, file operations and settings — load it to answer any "how do I…" or "where is…" question',
+     get content() {
+         return buildAppGuideDoc();
+     },
+diff --git a/packages/app/src/commands/application/saveDocument.ts b/packages/app/src/commands/application/saveDocument.ts
+index 32ed5c2..1deb30b 100644
+--- a/packages/app/src/commands/application/saveDocument.ts
++++ b/packages/app/src/commands/application/saveDocument.ts
+@@ -1,7 +1,16 @@
+ // Part of the Chili3d Project, under the AGPL-3.0 License.
+ // See LICENSE file in the project root for full license information.
+ 
+-import { command, I18n, type IApplication, type ICommand, PubSub } from "@chili3d/core";
++import {
++    command,
++    DOCUMENT_FILE_EXTENSION,
++    download,
++    I18n,
++    type IApplication,
++    type ICommand,
++    isHosted,
++    PubSub,
++} from "@chili3d/core";
+ 
+ @command({
+     key: "doc.save",
+@@ -14,7 +23,14 @@ export class SaveDocument implements ICommand {
+         PubSub.default.pub(
+             "showPermanent",
+             async () => {
+-                await app.activeView?.document.save();
++                const document = app.activeView?.document;
++                await document?.save();
++                if (document && isHosted()) {
++                    download(
++                        [JSON.stringify(document.serialize())],
++                        `${document.name}${DOCUMENT_FILE_EXTENSION}`,
++                    );
++                }
+                 PubSub.default.pub("showToast", "toast.document.saved");
+             },
+             "toast.excuting{0}",
+diff --git a/packages/builder/src/ribbon.ts b/packages/builder/src/ribbon.ts
+index 979ed17..178e0bd 100644
+--- a/packages/builder/src/ribbon.ts
++++ b/packages/builder/src/ribbon.ts
+@@ -100,7 +100,7 @@ export const DefaultRibbon: RibbonTabProfile[] = [
+             },
+             {
+                 groupName: "ribbon.group.other",
+-                items: ["wechat.group", "ai.toggleChat"],
++                items: ["ai.toggleChat"],
+             },
+         ],
+     },
+diff --git a/packages/core/src/foundation/utils/download.ts b/packages/core/src/foundation/utils/download.ts
+index b6e4837..1e164ad 100644
+--- a/packages/core/src/foundation/utils/download.ts
++++ b/packages/core/src/foundation/utils/download.ts
+@@ -1,8 +1,27 @@
+ // Part of the Chili3d Project, under the AGPL-3.0 License.
+ // See LICENSE file in the project root for full license information.
+ 
++let handler: ((blob: Blob, name: string) => void) | undefined;
++
++/**
++ * Hand every download to `fn` instead of the browser, e.g. a page that embeds Chili3D and stores
++ * files itself. While a handler is set, saving a document also sends it there (see `isHosted`).
++ */
++export function setDownloadHandler(fn: ((blob: Blob, name: string) => void) | undefined) {
++    handler = fn;
++}
++
++/** True when a host page receives the files (see `setDownloadHandler`). */
++export function isHosted() {
++    return handler !== undefined;
++}
++
+ export function download(data: BlobPart[], name: string) {
+     const blob = new Blob(data);
++    if (handler) {
++        handler(blob, name);
++        return;
++    }
+     const url = URL.createObjectURL(blob);
+     try {
+         const a = document.createElement("a");
+diff --git a/packages/i18n/src/en.ts b/packages/i18n/src/en.ts
+index 637810d..9de2b4c 100644
+--- a/packages/i18n/src/en.ts
++++ b/packages/i18n/src/en.ts
+@@ -15,7 +15,7 @@ export default {
+         "ai.baseURL": "Base URL",
+         "ai.cancel": "Cancel",
+         "ai.copy": "Copy",
+-        "ai.emptyAsk": "Or ask how to use Chili3D — e.g. “how do I chamfer an edge?”",
++        "ai.emptyAsk": "Or ask how to use Synergy CAD — e.g. “how do I chamfer an edge?”",
+         "ai.emptyExample": "e.g. create a 10×20×5 box, then fillet 2mm",
+         "ai.emptyHint": "Create and edit 3D models with natural language",
+         "ai.emptyTitle": "AI Modeling Assistant",
+diff --git a/packages/i18n/src/pt-br.ts b/packages/i18n/src/pt-br.ts
+index 72df960..58f46f5 100644
+--- a/packages/i18n/src/pt-br.ts
++++ b/packages/i18n/src/pt-br.ts
+@@ -17,7 +17,7 @@ export default {
+         "ai.baseURL": "URL Base",
+         "ai.cancel": "Cancelar",
+         "ai.copy": "Copiar",
+-        "ai.emptyAsk": "Ou pergunte como usar o Chili3D — ex.: “como faço um chanfro em uma aresta?”",
++        "ai.emptyAsk": "Ou pergunte como usar o Synergy CAD — ex.: “como faço um chanfro em uma aresta?”",
+         "ai.emptyExample": "ex.: crie uma caixa 10×20×5 e depois um filete de 2mm",
+         "ai.emptyHint": "Crie e edite modelos 3D com linguagem natural",
+         "ai.emptyTitle": "Assistente de Modelagem IA",
+diff --git a/packages/i18n/src/zh-cn.ts b/packages/i18n/src/zh-cn.ts
+index ba7626b..f4e98f8 100644
+--- a/packages/i18n/src/zh-cn.ts
++++ b/packages/i18n/src/zh-cn.ts
+@@ -14,7 +14,7 @@ export default {
+         "ai.baseURL": "Base URL",
+         "ai.cancel": "取消",
+         "ai.copy": "复制",
+-        "ai.emptyAsk": "也可以直接问 Chili3D 怎么用，例如：「怎么给边倒斜角？」",
++        "ai.emptyAsk": "也可以直接问 Synergy CAD 怎么用，例如：「怎么给边倒斜角？」",
+         "ai.emptyExample": "例如：创建一个 10×20×5 的盒子，再倒 2mm 圆角",
+         "ai.emptyHint": "用自然语言创建和编辑 3D 模型",
+         "ai.emptyTitle": "AI 建模助手",
+diff --git a/packages/ui/src/editor.ts b/packages/ui/src/editor.ts
+index cdcf8a2..5fdfaf3 100644
+--- a/packages/ui/src/editor.ts
++++ b/packages/ui/src/editor.ts
+@@ -44,7 +44,6 @@ export class Editor extends HTMLElement {
+         viewport.classList.add(style.viewport);
+         this._viewportContainer = div({ className: style.viewportContainer }, viewport);
+         this.render();
+-        this.showChat();
+     }
+ 
+     private render() {
+diff --git a/packages/ui/src/home/home.ts b/packages/ui/src/home/home.ts
+index 88437c6..961ecc1 100644
+--- a/packages/ui/src/home/home.ts
++++ b/packages/ui/src/home/home.ts
+@@ -71,7 +71,7 @@ export class Home extends HTMLElement {
+     private async getVideoData(): Promise<VideoData> {
+         if (videoDataCache) return videoDataCache;
+         try {
+-            const response = await fetch("/videos.json");
++            const response = await fetch("videos.json");
+             videoDataCache = (await response.json()) as VideoData;
+             return videoDataCache;
+         } catch {
+@@ -110,11 +110,11 @@ export class Home extends HTMLElement {
+     private logoSection() {
+         return div(
+             { className: style.logo },
+-            svg({ icon: "icon-chili" }),
++            img({ src: "synergy-mark.png", alt: "", width: 32, height: 32 }),
+             div(
+                 { className: style.logoText },
+-                span({ className: style.wordmark, textContent: "CHILI3D" }),
+-                span({ className: style.version, textContent: `v${__APP_VERSION__}` }),
++                span({ className: style.wordmark, textContent: "SYNERGY CAD" }),
++                span({ className: style.version, textContent: `Chili3D v${__APP_VERSION__}`, title: "Built on Chili3D, AGPL-3.0" }),
+             ),
+         );
+     }
+@@ -191,7 +191,7 @@ export class Home extends HTMLElement {
+                     rel: "noopener noreferrer",
+                 },
+                 svg({ icon: "icon-github" }),
+-                label({ textContent: "GitHub" }),
++                label({ textContent: "Chili3D on GitHub" }),
+             ),
+             button(
+                 {
+diff --git a/packages/ui/src/ribbon/ribbon.ts b/packages/ui/src/ribbon/ribbon.ts
+index 10d6c60..972b8b8 100644
+--- a/packages/ui/src/ribbon/ribbon.ts
++++ b/packages/ui/src/ribbon/ribbon.ts
+@@ -20,7 +20,7 @@ import {
+     type RibbonTab,
+     type RibbonTabKeys,
+ } from "@chili3d/core";
+-import { a, collection, createIcon, div, label, span, svg } from "@chili3d/element";
++import { a, collection, createIcon, div, img, label, span, svg } from "@chili3d/element";
+ import style from "./ribbon.module.css";
+ import { RibbonPushButton } from "./ribbonButton";
+ import { RibbonGroupElement } from "./ribbonGroup";
+@@ -94,8 +94,9 @@ export class RibbonUI extends HTMLElement {
+             { className: style.left },
+             div(
+                 { className: style.appIcon, onclick: () => PubSub.default.pub("displayHome", true) },
+-                svg({ className: style.icon, icon: "icon-chili" }),
+-                span({ id: "appName", textContent: `Chili3D - v${__APP_VERSION__}` }),
++                // Synergy CAD's name and mark; the credit to Chili3D is on the home page and in the tooltip.
++                img({ className: style.icon, src: "synergy-mark.png", alt: "" }),
++                span({ id: "appName", textContent: "Synergy CAD", title: `Built on Chili3D v${__APP_VERSION__} (AGPL-3.0)` }),
+             ),
+             div(
+                 { className: style.ribbonTitlePanel },
+diff --git a/packages/ui/test/ribbon.test.ts b/packages/ui/test/ribbon.test.ts
+index ea01ddb..3430cd2 100644
+--- a/packages/ui/test/ribbon.test.ts
++++ b/packages/ui/test/ribbon.test.ts
+@@ -153,7 +153,7 @@ describe("RibbonUI", () => {
+         expect(ui.querySelector(".r-title-bar")).not.toBeNull();
+ 
+         const appName = mustQuery(ui, "#appName");
+-        expect(appName.textContent).toContain("Chili3D - v");
++        expect(appName.textContent).toBe("Synergy CAD");
+     });
+ 
+     test("should render github link", () => {
+diff --git a/packages/web/src/host.ts b/packages/web/src/host.ts
+new file mode 100644
+index 0000000..767d08a
+--- /dev/null
++++ b/packages/web/src/host.ts
+@@ -0,0 +1,189 @@
++// Part of the Chili3d Project, under the AGPL-3.0 License.
++// See LICENSE file in the project root for full license information.
++
++import {
++    GeometryNode,
++    type IApplication,
++    type INode,
++    Logger,
++    MeshNode,
++    NodeUtils,
++    setDownloadHandler,
++    Transaction,
++} from "@chili3d/core";
++
++/**
++ * The `postMessage` bridge to a same-origin parent page (`?host=parent`), for pages that embed
++ * Chili3D in an `<iframe>` and keep files themselves. Messages are plain objects with a `type`:
++ *
++ * - `chili3d:ready` (to the parent): `{ version }`, the app is listening; send a file now.
++ * - `chili3d:open` (from the parent): `{ name, bytes, document? }`, bytes an `ArrayBuffer` or
++ *   `Uint8Array`. A `.cd` file opens as a document; anything else (STEP, IGES, BREP, STL) is
++ *   imported into a new document named `document` (default: the file name without extension).
++ *   With no message, the parent can send `chili3d:new` `{ document }` for an empty document.
++ * - `chili3d:save` (to the parent): `{ name, bytes }` (a transferred `ArrayBuffer`) for every file
++ *   Chili3D would otherwise download: Save, Save to file and exports.
++ * - `chili3d:failed` (to the parent): `{ error }` when a file couldn't be opened.
++ * - `chili3d:ai` (from the parent): `{ enabled: true, protocol, model, baseURL }` points the AI
++ *   assistant at the parent's model relay (`protocol` "anthropic" or "openai"; `baseURL` on the
++ *   page's own origin, which holds the key), `{ enabled: false }` turns it off. Until the parent
++ *   says, it is off; the assistant never asks for a key of its own.
++ * - `chili3d:geometry` (from the parent): `{ id }`, asks for the model as triangles, answered with
++ *   `chili3d:geometry` `{ id, document, parts }`. Each part is one visible body in world
++ *   coordinates: `position` (xyz per vertex), `index` (three vertices per triangle), `face` (the
++ *   B-rep face each triangle belongs to) and `edges` (xyz pairs, for bodies with no faces, such as
++ *   sketches and wires). The parent draws 2D views from these.
++ *
++ * Only the parent window on the page's own origin is heard or answered.
++ */
++export function startHostBridge(app: IApplication, version: string): boolean {
++    const parent = window.parent;
++    if (!parent || parent === window) return false;
++    const origin = window.location.origin;
++    const send = (message: object, transfer: Transferable[] = []) =>
++        parent.postMessage(message, origin, transfer);
++
++    // Loaded lazily, like the rest of the app, so the bridge doesn't pull the AI clients into the
++    // first bundle. Calls run in order, so the parent's settings land after this default.
++    const ai = import("@chili3d/ai");
++    const setAssistant = (config: Parameters<typeof import("@chili3d/ai").setManagedConfig>[0]) =>
++        ai.then(
++            (m) => m.setManagedConfig(config),
++            (err) => Logger.error(err),
++        );
++    setAssistant(null);
++    setDownloadHandler((blob, name) => {
++        blob.arrayBuffer().then(
++            (bytes) => send({ type: "chili3d:save", name, bytes }, [bytes]),
++            (err) => Logger.error(err),
++        );
++    });
++
++    window.addEventListener("message", (event: MessageEvent) => {
++        if (event.origin !== origin || event.source !== parent) return;
++        const data = event.data as HostMessage | null;
++        if (!data || typeof data !== "object") return;
++        if (data.type === "chili3d:open" && typeof data.name === "string") {
++            const bytes =
++                data.bytes instanceof ArrayBuffer || data.bytes instanceof Uint8Array
++                    ? data.bytes
++                    : undefined;
++            if (!bytes) return;
++            const docName =
++                typeof data.document === "string" && data.document ? data.document : baseName(data.name);
++            open(app, data.name, docName, bytes).catch((err) => {
++                Logger.error(err);
++                send({ type: "chili3d:failed", error: err instanceof Error ? err.message : String(err) });
++            });
++        } else if (data.type === "chili3d:ai") {
++            setAssistant(assistantConfig(data, origin));
++        } else if (data.type === "chili3d:geometry") {
++            const parts = geometry(app);
++            const transfer = parts.flatMap((p) => [
++                p.position.buffer,
++                p.index.buffer,
++                p.face.buffer,
++                p.edges.buffer,
++            ]);
++            send(
++                {
++                    type: "chili3d:geometry",
++                    id: data.id,
++                    document: app.activeView?.document?.name ?? "",
++                    parts,
++                },
++                transfer,
++            );
++        } else if (data.type === "chili3d:new") {
++            const docName = typeof data.document === "string" && data.document ? data.document : "Untitled";
++            app.newDocument(docName).catch((err) => Logger.error(err));
++        }
++    });
++
++    send({ type: "chili3d:ready", version });
++    return true;
++}
++
++type HostMessage = {
++    type?: unknown;
++    name?: unknown;
++    bytes?: unknown;
++    document?: unknown;
++    id?: unknown;
++    enabled?: unknown;
++    protocol?: unknown;
++    model?: unknown;
++    baseURL?: unknown;
++};
++
++/** The assistant's model settings from a `chili3d:ai` message; off unless it names a same-origin relay. */
++function assistantConfig(data: HostMessage, origin: string) {
++    if (data.enabled !== true || typeof data.model !== "string" || typeof data.baseURL !== "string")
++        return null;
++    const provider =
++        data.protocol === "anthropic" ? "anthropic" : data.protocol === "openai" ? "completions" : null;
++    const url = new URL(data.baseURL, origin);
++    if (!provider || url.origin !== origin) return null;
++    // The relay adds the real key; the provider clients only need a non-empty one.
++    return { provider, baseURL: url.href, model: data.model, apiKey: "suite" } as const;
++}
++
++function baseName(name: string) {
++    return name.replace(/\.[^.]+$/, "") || "Untitled";
++}
++
++async function open(app: IApplication, name: string, docName: string, bytes: ArrayBuffer | Uint8Array) {
++    if (name.toLowerCase().endsWith(".cd")) {
++        const json = JSON.parse(new TextDecoder().decode(bytes));
++        const document = await app.loadDocument(json);
++        if (document) document.name = docName;
++    } else {
++        // Import into a fresh document so the model's name, and so its saves, follow the file.
++        const document = await app.newDocument(docName);
++        const file = new File([bytes as BlobPart], name);
++        await Transaction.executeAsync(document, "import model", async () => {
++            await app.dataExchange.import(document, [file]);
++        });
++    }
++    app.activeView?.cameraController.fitContent();
++}
++
++type Part = { position: Float32Array; index: Uint32Array; face: Uint32Array; edges: Float32Array };
++
++const shown = (node: INode) => node.visible && node.parentVisible;
++
++/** Every visible body of the active document, as world-space triangles and edges. */
++function geometry(app: IApplication): Part[] {
++    const document = app.activeView?.document;
++    if (!document) return [];
++    const parts: Part[] = [];
++    for (const node of NodeUtils.findNodes(document.modelManager.rootNode, shown)) {
++        if (node instanceof GeometryNode) {
++            const mesh = node.mesh;
++            const world = node.worldTransform();
++            const faces = mesh.faces;
++            const face = new Uint32Array((faces?.index.length ?? 0) / 3);
++            faces?.range.forEach((range, i) => {
++                face.fill(i, range.start / 3, (range.start + range.count) / 3);
++            });
++            parts.push({
++                position: new Float32Array(faces ? world.ofPoints(faces.position) : []),
++                index: new Uint32Array(faces?.index ?? []),
++                face,
++                edges: new Float32Array(
++                    !faces?.index.length && mesh.edges ? world.ofPoints(mesh.edges.position) : [],
++                ),
++            });
++        } else if (node instanceof MeshNode && node.mesh.meshType === "surface" && node.mesh.index) {
++            // A plain triangle mesh: each triangle is its own face.
++            const index = new Uint32Array(node.mesh.index);
++            parts.push({
++                position: new Float32Array(node.worldTransform().ofPoints(node.mesh.position ?? [])),
++                index,
++                face: Uint32Array.from({ length: index.length / 3 }, (_, i) => i),
++                edges: new Float32Array(),
++            });
++        }
++    }
++    return parts;
++}
+diff --git a/packages/web/src/index.ts b/packages/web/src/index.ts
+index 40a6b60..7bff543 100644
+--- a/packages/web/src/index.ts
++++ b/packages/web/src/index.ts
+@@ -3,6 +3,7 @@
+ 
+ import { AppBuilder } from "@chili3d/builder";
+ import { type IApplication, Logger } from "@chili3d/core";
++import { startHostBridge } from "./host";
+ import { Loading } from "./loading";
+ import { parseStartupParams } from "./startupParams";
+ 
+@@ -13,6 +14,9 @@ async function handleApplicaionBuilt(app: IApplication) {
+     document.body.removeChild(loading);
+ 
+     const { plugins, fileUrl } = parseStartupParams(window.location.search);
++    if (new URLSearchParams(window.location.search).get("host") === "parent") {
++        startHostBridge(app, __APP_VERSION__);
++    }
+     for (const plugin of plugins) {
+         Logger.info(`loading plugin from: ${plugin}`);
+         await app.pluginManager.loadFromUrl(plugin);
+diff --git a/public/index.html b/public/index.html
+index 9ff9b75..429b7e3 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -6,16 +6,9 @@
+         <meta name="description" content="A 3D CAD application that runs directly in your browser for online model design and editing。一款直接在浏览器中运行的3D CAD应用程序，实现在线模型设计与编辑" />
+         <meta name="keywords" content="Web CAD, WebAssembly, WASM, Three.js, OCCT, Opencascade, 3D CAD, 在线 CAD, 在线建模" />
+         <meta name="author" content="仙阁" />
+-        <title>Chili3D</title>
++        <title>Synergy CAD 3D</title>
+         <link rel="icon" href="favicon.svg">
+         <link rel="stylesheet" type="text/css" href="index.css" />
+-        <script type="text/javascript">
+-            (function(c,l,a,r,i,t,y){
+-                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+-                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+-                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+-            })(window, document, "clarity", "script", "k1qrtibhcl");
+-        </script>
+     </head>
+     <body>
+         <noscript>You need to enable JavaScript to run this app.</noscript>
+diff --git a/public/synergy-mark.png b/public/synergy-mark.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..97c280b02b8ee6b17a5a12163d4363f578ee4e69
+GIT binary patch
+literal 6185
+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
+Hu0mjfMhnYl
+
+literal 0
+HcmV?d00001
+
+diff --git a/public/videos.json b/public/videos.json
+index 1a56e9e..a543d42 100644
+--- a/public/videos.json
++++ b/public/videos.json
+@@ -1,42 +1 @@
+-{
+-    "recent": {
+-        "moreUrl": "https://space.bilibili.com/539380032/lists/3108412?type=season",
+-        "items": [
+-            {
+-                "title": "chili3d的更新记录：V0.7",
+-                "thumbnail": "http://i1.hdslb.com/bfs/archive/7b92bdd63b5766189a7aafde81f294ec1b95a99e.jpg",
+-                "url": "https://www.bilibili.com/video/BV1bW846iEqa/?vd_source=f685d57cb359c1b63fbcb49a5275cd55",
+-                "date": "2026-08-23"
+-            }
+-        ]
+-    },
+-    "cases": {
+-        "moreUrl": "https://space.bilibili.com/539380032/lists/8502350?type=season",
+-        "items": [
+-            {
+-                "title": "收纳盒",
+-                "thumbnail": "https://i2.hdslb.com/bfs/archive/bf0d135ad8d64581c2b8f2e351992306d95bda4c.jpg",
+-                "url": "https://www.bilibili.com/video/BV1Mdum6CE9C/?vd_source=f685d57cb359c1b63fbcb49a5275cd55",
+-                "date": "2026-08-09"
+-            },
+-            {
+-                "title": "咖啡馆",
+-                "thumbnail": "http://i1.hdslb.com/bfs/archive/0bb15776e1d3e5d79bfa0d99de6419504b383f2c.jpg",
+-                "url": "https://www.bilibili.com/video/BV1pD376HEP5/?vd_source=f685d57cb359c1b63fbcb49a5275cd55",
+-                "date": "2026-07-26"
+-            },
+-            {
+-                "title": "梯形置物架",
+-                "thumbnail": "http://i0.hdslb.com/bfs/archive/add83fc6ccd7ed43a92c2f55e95d66daffb69132.jpg",
+-                "url": "https://www.bilibili.com/video/BV1Q2Nu68EHj/?vd_source=f685d57cb359c1b63fbcb49a5275cd55",
+-                "date": "2026-07-12"
+-            },
+-            {
+-                "title": "机械零件",
+-                "thumbnail": "http://i0.hdslb.com/bfs/archive/be99bc8aed70ad8e667ffe7f93d84bc80d1a889b.jpg",
+-                "url": "https://www.bilibili.com/video/BV1UbTC6oEeo/?vd_source=f685d57cb359c1b63fbcb49a5275cd55",
+-                "date": "2026-07-05"
+-            }
+-        ]
+-    }
+-}
++{ "recent": { "items": [] }, "cases": { "items": [] } }

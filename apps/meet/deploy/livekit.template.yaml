@@ -1,0 +1,20 @@
+# LiveKit config. Keys are filled in on the box (never committed). See docker-compose.yml.
+port: 7880
+log_level: info
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Discover the public IP with STUN. If the host has a directly attached public IP, you can set
+  # use_external_ip: false and node_ip: <that IP> instead.
+  use_external_ip: true
+
+# API key -> secret. The SynergyMeet app signs join JWTs (HS256) with these; the server verifies.
+# Real values are injected on the box into livekit.yaml (chmod 600).
+keys:
+  __LIVEKIT_API_KEY__: __LIVEKIT_API_SECRET__
+
+# Turn off telemetry/analytics phone-home for a self-hosted, private deployment.
+turn:
+  enabled: false

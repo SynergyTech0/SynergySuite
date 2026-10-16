@@ -1,0 +1,8 @@
+{
+  "name": "synergy-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synergy Workspace — the full productivity suite. Zero runtime dependencies.",
+  "scripts": { "start": "node server/index.mjs", "dev": "node --watch server/index.mjs" }
+}

@@ -1,0 +1,297 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - run: npm run test:packages
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - name: App unit tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: npm test -w apps/sites -w addons/people
+      - name: Compliance tests (chat, calendar, notes, forms)
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: npm test -w apps/chat -w apps/calendar -w apps/notes -w apps/forms
+      - name: Apps boot on the shared packages
+        env:
+          DEV_USER_EMAIL: ci@example.com
+        run: |
+          for dir in apps/calendar apps/chat apps/forms apps/notes apps/sites addons/people addons/portal; do
+            app=$(basename $dir)
+            psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE $app"
+            DATABASE_URL=postgres://postgres:postgres@localhost:5432/$app PORT=4000 node $dir/server/index.js &
+            pid=$!
+            for i in $(seq 1 40); do curl -sf localhost:4000/healthz >/dev/null && break; sleep 0.5; done
+            curl -sf localhost:4000/api/me | grep -q ci@example.com || { echo "$app failed"; kill $pid; exit 1; }
+            kill $pid; wait $pid || true
+            echo "$app ok"
+          done
+
+  next-apps:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sboards_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Typecheck the Next.js apps
+        run: |
+          npx tsc --noEmit -p apps/admin
+          npx tsc --noEmit -p apps/search
+          npx tsc --noEmit -p apps/drive
+          npx tsc --noEmit -p apps/contacts
+          npx tsc --noEmit -p apps/todo
+          npx tsc --noEmit -p apps/crm
+          npx tsc --noEmit -p apps/desk
+          npx tsc --noEmit -p apps/mail
+          npx tsc --noEmit -p apps/meet
+          npx tsc --noEmit -p apps/office
+          npx tsc --noEmit -p apps/photo
+          npx tsc --noEmit -p apps/cad
+          npx tsc --noEmit -p apps/planner
+          npx tsc --noEmit -p apps/base
+      - name: Admin tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/admin_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE admin_test"
+          npm test --workspace apps/admin
+      - name: Search tests
+        run: npm test --workspace apps/search
+      - name: Drive tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/drive_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE drive_test"
+          npm test --workspace apps/drive
+      - name: Contacts tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/contacts_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contacts_test"
+          npm test --workspace apps/contacts
+      - name: To Do tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE todo_test"
+          npm test --workspace apps/todo
+      - name: CRM tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE crm_test"
+          npm test --workspace apps/crm
+      - name: Desk tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/desk_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE desk_test"
+          npm test --workspace apps/desk
+      - name: Mail tests
+        run: npm test --workspace apps/mail
+      - name: Meet tests
+        run: npm test --workspace apps/meet
+      - name: Photo tests
+        run: npm test --workspace apps/photo
+      - name: CAD tests
+        run: npm test --workspace apps/cad
+      - name: Office tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        # Some .xlsx tests check the files with openpyxl, which the runner's python3 lacks.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends python3-openpyxl
+          npm test --workspace apps/office
+      - name: Base tests
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/sboards_test -qc "CREATE DATABASE base_test"
+          npm test --workspace apps/base
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/base_test
+      - name: Planner tests
+        working-directory: apps/planner
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/sboards_test
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/sboards_test
+        run: |
+          npx drizzle-kit migrate
+          npx vitest run
+
+  books:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: books
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/books
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Typecheck the Books API
+        run: npm run typecheck -w @synergy/books-api
+      - name: Migrations match the schema
+        working-directory: apps/books/api
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Build Books
+        run: |
+          npm run build -w @synergy/books-web
+          npm run build -w @synergy/books-api
+      - name: Books boots on suite sign-in
+        working-directory: apps/books/api
+        env:
+          DEV_USER_EMAIL: ci@example.com
+          REDIS_HOST: localhost
+          BOOKS_SVC_TOKEN: ci-svc-token
+        run: |
+          node dist/main.js &
+          pid=$!
+          for i in $(seq 1 60); do curl -sf localhost:3055/api/health >/dev/null && break; sleep 0.5; done
+          curl -sf localhost:3055/api/auth/me | grep -q ci@example.com || { kill $pid; exit 1; }
+          curl -sf localhost:3055/ | grep -qi '<div id="root"' || { echo "web not served"; kill $pid; exit 1; }
+          # The Portal's invoice feed refuses a missing token and answers with the right one.
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:3055/api/svc/invoices?email=a@example.com')" = 401 || { kill $pid; exit 1; }
+          curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" 'localhost:3055/api/svc/invoices?email=a@example.com' | grep -qx '\[\]' || { kill $pid; exit 1; }
+          kill $pid
+
+  trust:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/trust
+      TRUST_TENANT: example
+    defaults:
+      run:
+        working-directory: apps/trust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        working-directory: .
+      - run: npm run build:packages
+        working-directory: .
+      - name: Typecheck Trust
+        run: npx tsc --noEmit -p .
+      - name: Migrations apply to a fresh database, and re-run cleanly
+        run: |
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs | grep -q "Already up to date"
+          node scripts/seed.mjs --tenant example "Example Organisation"
+      - name: Schema, append-only and RLS checks
+        run: node scripts/verify.mjs
+      - name: Build Trust
+        run: npm run build
+      - name: Collectors
+        env:
+          TRUST_MONITOR_PUBLIC: example.com
+          TRUST_MONITOR_HOSTS: 127.0.0.1
+          TRUST_MONITOR_SSH_HOSTS: localhost
+        run: |
+          node scripts/seed-monitors.mjs example
+          # Exits non-zero when any monitor could not measure (expected for some here).
+          node scripts/collect.mjs example || true
+          node scripts/verify-collectors.mjs
+      - name: API checks against the production server
+        env:
+          PROXY_SHARED_SECRET: ci-secret
+        run: |
+          npx next start -p 3670 &
+          pid=$!
+          for i in $(seq 1 60); do curl -s -o /dev/null localhost:3670/no-access && break; sleep 0.5; done
+          node scripts/verify-api.mjs || { kill $pid; exit 1; }
+          kill $pid
+      - name: Access rules (suite sign-in, invitations, read-only seats, tenant isolation)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/trust_access
+          PROXY_SHARED_SECRET: ci-secret
+          TRUST_BASE: http://127.0.0.1:3671
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE trust_access"
+          node scripts/migrate.mjs
+          node scripts/seed.mjs
+          npx next start -p 3671 &
+          pid=$!
+          for i in $(seq 1 60); do curl -s -o /dev/null localhost:3671/no-access && break; sleep 0.5; done
+          node scripts/verify-access.ts || { kill $pid; exit 1; }
+          kill $pid
+      - name: Contrast in both themes
+        run: node scripts/verify-contrast.mjs
+      - name: Trust boots on suite sign-in (DEV_USER_EMAIL)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/trust_dev
+          DEV_USER_EMAIL: ci@example.com
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE trust_dev"
+          node scripts/migrate.mjs
+          node scripts/seed.mjs
+          # DEV_USER_EMAIL only applies outside production, so this runs the dev server.
+          npx next dev -p 3672 &
+          pid=$!
+          for i in $(seq 1 120); do curl -s -o /dev/null localhost:3672/api/me && break; sleep 1; done
+          curl -sf localhost:3672/api/me | tee /dev/stderr | grep -q '"email":"ci@example.com"' || { kill $pid; exit 1; }
+          curl -sf localhost:3672/api/me | grep -q '"role":"owner"' || { kill $pid; exit 1; }
+          curl -sf localhost:3672/ | grep -q 'My Company' || { kill $pid; exit 1; }
+          kill $pid

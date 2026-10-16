@@ -1,0 +1,48 @@
+{
+ "title": "Synergy Groups",
+ "navItems": [
+  "groupsAll groups",
+  "starMy groups"
+ ],
+ "menuBar": [],
+ "toolbar": [],
+ "topbarActions": [
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "primaryButtons": [
+  "addCreate group"
+ ],
+ "tableHeaders": [
+  "Group",
+  "Description",
+  "Members",
+  "Access"
+ ],
+ "chips": [],
+ "tabs": [],
+ "searchPlaceholder": "Search groups",
+ "iconButtons": [
+  "Main menu",
+  "Search",
+  "Clear",
+  "Support",
+  "Settings",
+  "Synergy apps"
+ ],
+ "emptyState": null,
+ "counts": {
+  "waffleApps": 16,
+  "rows": 2,
+  "cells": 0,
+  "notes": 0,
+  "messages": 0,
+  "slides": 0,
+  "questions": 0,
+  "hourRows": 0,
+  "events": 0,
+  "statCards": 0,
+  "tasks": 0
+ }
+}

@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.env
+.env.*
+*.log
+coverage/
+tsconfig.tsbuildinfo
+
+# Next 16 regenerates these on dev start
+AGENTS.md
+CLAUDE.md
+
+# uploaded attachments in local dev
+.data/

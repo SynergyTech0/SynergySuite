@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Contacts</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  table.ct { width: 100%; border-collapse: collapse; }
+  table.ct th { text-align: left; font-size: 12px; font-weight: 500; color: var(--on-surface-variant);
+                padding: 10px 16px; border-bottom: 1px solid var(--divider); }
+  table.ct td { padding: 0 16px; height: 52px; font-size: 14px; border-bottom: 1px solid var(--surface-c-low); }
+  table.ct tbody tr { cursor: pointer; }
+  table.ct tbody tr:hover { background: var(--surface-c-low); }
+  .cname { display: flex; align-items: center; gap: 16px; }
+  .details { width: 340px; flex: none; border-left: 1px solid var(--divider); padding: 24px 16px; overflow-y: auto; }
+  .drow { display: flex; gap: 16px; padding: 10px 0; font-size: 14px; align-items: flex-start; }
+  .drow .mi { color: var(--on-surface-variant); }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav" id="nav" style="width:256px"></nav>
+    <main class="app-main" id="main"></main>
+    <aside class="details hidden" id="details"></aside>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

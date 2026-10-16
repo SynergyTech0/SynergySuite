@@ -1,0 +1,21 @@
+{
+  "name": "synergychat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergyChat - team messaging for the Synergy suite",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@synergy/compliance": "*",
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/server": "*",
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

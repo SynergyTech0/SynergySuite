@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Sites</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  table.adm { width: 100%; border-collapse: collapse; background: var(--surface);
+              border: 1px solid var(--divider); border-radius: var(--r-lg); overflow: hidden; }
+  table.adm th { text-align: left; font-size: 12px; font-weight: 500; color: var(--on-surface-variant);
+                 padding: 12px 16px; border-bottom: 1px solid var(--divider); background: var(--surface-c-low); }
+  table.adm td { padding: 0 16px; height: 56px; font-size: 14px; border-bottom: 1px solid var(--surface-c-low); }
+  table.adm tbody tr { cursor: pointer; }
+  table.adm tbody tr:hover { background: var(--surface-c-low); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px;
+          border-radius: var(--r-full); font-size: 12px; font-weight: 500;
+          background: var(--surface-c); color: var(--on-surface-variant); }
+  .pill.ok { background: #e6f4ea; color: #137333; }
+  .pill.warn { background: #fef7e0; color: #b06000; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav" id="nav" style="width:256px"></nav>
+    <main class="app-main" id="main"></main>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

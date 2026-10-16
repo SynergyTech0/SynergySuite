@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>UI inventory</title></head>
+<body><pre id="out">extracting…</pre>
+<script>
+const APPS = ['mail','drive','docs','sheets','slides','forms','calendar','keep',
+              'tasks','contacts','chat','meet','sites','groups','vault','admin'];
+
+function label(n){
+  return (n.getAttribute('data-tip') || n.getAttribute('aria-label') ||
+          n.getAttribute('placeholder') || n.getAttribute('title') ||
+          (n.textContent || '').trim().replace(/\s+/g,' ')).slice(0,60);
+}
+function inventory(d){
+  const vis = n => { const r = n.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const grab = (sel, max=200) => [...d.querySelectorAll(sel)].filter(vis).map(label).filter(Boolean).slice(0,max);
+  const uniq = a => [...new Set(a)];
+  return {
+    title: d.title,
+    navItems: uniq(grab('#nav .nav-item, .nav .nav-item')),
+    menuBar: uniq(grab('#menubar button')),
+    toolbar: uniq(grab('.toolbar .tb-btn, .toolbar select, .toolbar .btn')),
+    topbarActions: uniq(grab('.topbar-actions .icon-btn, .topbar-actions .btn')),
+    primaryButtons: uniq(grab('.fab-extended, .btn-filled, .btn-tonal')),
+    tableHeaders: uniq(grab('table th')),
+    chips: uniq(grab('.chip')),
+    tabs: uniq(grab('.tabs button, .stab')),
+    searchPlaceholder: (d.querySelector('#shellSearch')||{}).placeholder || null,
+    iconButtons: uniq(grab('.icon-btn')).slice(0,40),
+    emptyState: (d.querySelector('.empty h3')||{}).textContent || null,
+    counts: {
+      waffleApps: d.querySelectorAll('.waffle-item').length,
+      rows: d.querySelectorAll('tbody tr').length,
+      cells: d.querySelectorAll('td[data-r]').length,
+      notes: d.querySelectorAll('.note').length,
+      messages: d.querySelectorAll('.msg, .cm').length,
+      slides: d.querySelectorAll('#filmstrip .thumb').length,
+      questions: d.querySelectorAll('.card-q').length,
+      hourRows: d.querySelectorAll('.trow').length,
+      events: d.querySelectorAll('.ev, .mev').length,
+      statCards: d.querySelectorAll('.stat-card').length,
+      tasks: d.querySelectorAll('.task').length,
+    },
+  };
+}
+
+const out = {};
+async function run(app){
+  return new Promise(res => {
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:absolute;left:-9999px;width:1440px;height:900px';
+    f.src = '/' + app + '/';
+    f.onload = () => setTimeout(() => {
+      try { out[app] = inventory(f.contentDocument); }
+      catch (e) { out[app] = { error: e.message }; }
+      f.remove(); res();
+    }, 1500);
+    document.body.appendChild(f);
+  });
+}
+(async () => {
+  for (const a of APPS) await run(a);
+  window.__INV__ = out;
+  window.__DONE__ = true;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 1);
+})();
+</script></body></html>

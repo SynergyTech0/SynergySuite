@@ -1,0 +1,147 @@
+[
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something doesn't work as it should"
+  },
+  {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "A new feature or an improvement to an existing one"
+  },
+  {
+    "name": "docs",
+    "color": "0075ca",
+    "description": "README, guides and code comments"
+  },
+  {
+    "name": "question",
+    "color": "d876e3",
+    "description": "A question rather than a change; usually better in Discussions"
+  },
+  {
+    "name": "good first issue",
+    "color": "7057ff",
+    "description": "Small and well described: a good place to start"
+  },
+  {
+    "name": "help wanted",
+    "color": "008672",
+    "description": "Maintainers would welcome a pull request for this"
+  },
+  {
+    "name": "needs-triage",
+    "color": "fbca04",
+    "description": "New, not yet reviewed by a maintainer"
+  },
+  {
+    "name": "app: auth",
+    "color": "c5def5",
+    "description": "Account and sign-in (apps/auth)"
+  },
+  {
+    "name": "app: mail",
+    "color": "c5def5",
+    "description": "Mail (apps/mail)"
+  },
+  {
+    "name": "app: calendar",
+    "color": "c5def5",
+    "description": "Calendar (apps/calendar)"
+  },
+  {
+    "name": "app: chat",
+    "color": "c5def5",
+    "description": "Chat (apps/chat)"
+  },
+  {
+    "name": "app: meet",
+    "color": "c5def5",
+    "description": "Meet (apps/meet)"
+  },
+  {
+    "name": "app: office",
+    "color": "c5def5",
+    "description": "Office documents, spreadsheets and slides (apps/office)"
+  },
+  {
+    "name": "app: drive",
+    "color": "c5def5",
+    "description": "Drive (apps/drive)"
+  },
+  {
+    "name": "app: forms",
+    "color": "c5def5",
+    "description": "Forms (apps/forms)"
+  },
+  {
+    "name": "app: planner",
+    "color": "c5def5",
+    "description": "Planner (apps/planner)"
+  },
+  {
+    "name": "app: photo",
+    "color": "c5def5",
+    "description": "Photo (apps/photo)"
+  },
+  {
+    "name": "app: cad",
+    "color": "c5def5",
+    "description": "CAD (apps/cad)"
+  },
+  {
+    "name": "app: sites",
+    "color": "c5def5",
+    "description": "Sites (apps/sites)"
+  },
+  {
+    "name": "app: notes",
+    "color": "c5def5",
+    "description": "Notes (apps/notes)"
+  },
+  {
+    "name": "app: sign",
+    "color": "c5def5",
+    "description": "Sign add-on (addons/sign)"
+  },
+  {
+    "name": "app: campaigns",
+    "color": "c5def5",
+    "description": "Campaigns add-on (addons/campaigns)"
+  },
+  {
+    "name": "app: portal",
+    "color": "c5def5",
+    "description": "Portal add-on (addons/portal)"
+  },
+  {
+    "name": "app: people",
+    "color": "c5def5",
+    "description": "People add-on (addons/people)"
+  },
+  {
+    "name": "area: deploy",
+    "color": "5319e7",
+    "description": "Docker Compose, Caddy, oauth2-proxy and the quickstart (deploy/)"
+  },
+  {
+    "name": "area: identity",
+    "color": "5319e7",
+    "description": "Sign-in, the gateway's identity headers and @synergy/identity"
+  },
+  {
+    "name": "area: ai",
+    "color": "5319e7",
+    "description": "Bring-your-own-model features and @synergy/ai"
+  },
+  {
+    "name": "area: a11y",
+    "color": "5319e7",
+    "description": "Accessibility: keyboard use, screen readers, contrast"
+  },
+  {
+    "name": "area: i18n",
+    "color": "5319e7",
+    "description": "Translation, locales, date and number formats"
+  }
+]

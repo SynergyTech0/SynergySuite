@@ -1,0 +1,43 @@
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+.turbo/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.gradle/
+.kotlin/
+local.properties
+
+# secrets and local config: only *.example files are committed
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.local.example
+config.yaml
+!config.example.yaml
+
+# runtime data
+/prototype/workspace/data/
+.data/
+uploads/
+dev-mail/
+pgdata/
+*.db
+*.sqlite
+*.log
+*.bak*
+.claude/
+
+# Test run output
+cypress/screenshots/
+cypress/videos/
+
+# Caddy local CA exported by deploy/quickstart.sh
+deploy/local-ca.crt

@@ -1,0 +1,4768 @@
+// SynergyBooks Database Schema
+// AI-native accounting platform with embedded IRS tax code intelligence
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// PHASE 1: TAX CORPUS MODELS
+// ============================================================================
+
+enum SourceType {
+  IRC
+  TREASURY_REG
+  IRS_PUBLICATION
+  REVENUE_RULING
+  REVENUE_PROCEDURE
+  IRS_FORM
+  FORM_INSTRUCTION
+  TAX_COURT
+  STATE_CODE
+}
+
+enum CrawlStatus {
+  PENDING
+  CRAWLING
+  COMPLETED
+  FAILED
+}
+
+enum TaxCorpusDocumentType {
+  STATUTE
+  REGULATION
+  PUBLICATION
+  RULING
+  PROCEDURE
+  FORM
+  INSTRUCTION
+  COURT_OPINION
+}
+
+enum ProcessingStatus {
+  RAW
+  PARSED
+  EXTRACTED
+  CLASSIFIED
+  VALIDATED
+  PUBLISHED
+}
+
+enum RuleType {
+  INCLUSION
+  DEDUCTION
+  EXCLUSION
+  CREDIT
+  TIMING
+  LIMITATION
+  PENALTY
+  SAFE_HARBOR
+  ELECTION
+  REPORTING
+}
+
+enum EntityType {
+  INDIVIDUAL
+  C_CORPORATION
+  S_CORPORATION
+  PARTNERSHIP
+  LLC_PARTNERSHIP
+  LLC_CORPORATION
+  LLC_DISREGARDED
+  SOLE_PROPRIETOR
+  TRUST_SIMPLE
+  TRUST_COMPLEX
+  TRUST_GRANTOR
+  ESTATE
+  NONPROFIT_501C3
+  NONPROFIT_OTHER
+  GOVERNMENT
+  SOLE_PROPRIETORSHIP
+  LLC
+  S_CORP
+  C_CORP
+  NON_PROFIT
+  TRUST
+}
+
+enum LimitationType {
+  DOLLAR_CAP
+  PERCENTAGE_CAP
+  AGI_PHASEOUT
+  INCOME_LIMIT
+  ACTIVITY_LIMIT
+  CARRYFORWARD_LIMIT
+  CARRYBACK_LIMIT
+}
+
+enum ThresholdType {
+  FIXED_AMOUNT
+  PERCENTAGE_OF_AGI
+  PERCENTAGE_OF_INCOME
+  PERCENTAGE_OF_BASIS
+  FORMULA
+}
+
+enum FilingStatus {
+  SINGLE
+  MARRIED_FILING_JOINTLY
+  MARRIED_FILING_SEPARATELY
+  HEAD_OF_HOUSEHOLD
+  QUALIFYING_WIDOW
+}
+
+enum CrossRefType {
+  IRC_SECTION
+  TREASURY_REG
+  PUBLICATION
+  RULING
+  FORM
+  COURT_CASE
+}
+
+enum CrossRefRelationship {
+  IMPLEMENTS
+  EXPLAINS
+  EXCEPTS
+  MODIFIES
+  SUPERSEDES
+  CROSS_REFERENCES
+  CONFLICTS
+}
+
+enum ExtractionType {
+  SECTION_BOUNDARY
+  HIERARCHY
+  DEFINITION
+  RULE
+  EXCEPTION
+  LIMITATION
+  CROSS_REFERENCE
+  EFFECTIVE_DATE
+  AMOUNT_THRESHOLD
+}
+
+enum GraphNodeType {
+  IRC_SECTION
+  TREASURY_REG
+  IRS_PUBLICATION
+  REVENUE_RULING
+  IRS_FORM
+  FORM_LINE
+  DEFINITION
+  RULE
+  EXCEPTION
+  THRESHOLD
+  ENTITY_TYPE
+  TRANSACTION_TYPE
+  TAX_TREATMENT
+}
+
+enum GraphEdgeType {
+  IMPLEMENTS
+  EXPLAINS
+  INTERPRETS
+  REQUIRES
+  MAPS_TO
+  EXCEPTS
+  MODIFIES
+  SUPERSEDES
+  CROSS_REFERENCES
+  APPLIES_TO
+  HAS_LIMITATION
+  HAS_EXCEPTION
+  DEFINES
+  CONFLICTS_WITH
+}
+
+model TaxCorpusSource {
+  id           String        @id @default(cuid())
+  sourceType   SourceType
+  sourceUrl    String
+  sourceName   String?
+  lastCrawled  DateTime?
+  lastModified DateTime?
+  contentHash  String?
+  status       CrawlStatus   @default(PENDING)
+  errorLog     String?       @db.Text
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  documents    TaxDocument[]
+
+  @@index([sourceType])
+  @@index([status])
+}
+
+model TaxDocument {
+  id             String                @id @default(cuid())
+  sourceId       String
+  source         TaxCorpusSource       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  documentType   TaxCorpusDocumentType
+  identifier     String // e.g., "IRC 162(a)", "Pub 463", "Rev. Rul. 2024-01"
+  title          String
+  rawContent     String                @db.Text
+  parsedContent  Json?
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+  version        Int                   @default(1)
+  contentHash    String
+  status         ProcessingStatus      @default(RAW)
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  sections       TaxSection[]
+  extractions    TaxExtraction[]
+
+  @@unique([sourceId, identifier, version])
+  @@index([documentType])
+  @@index([status])
+  @@index([identifier])
+}
+
+model TaxSection {
+  id                    String              @id @default(cuid())
+  documentId            String
+  document              TaxDocument         @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sectionNumber         String // e.g., "162", "162(a)", "162(a)(1)"
+  sectionTitle          String?
+  fullPath              String // e.g., "Title 26 > Subtitle A > Chapter 1 > Subchapter B > Part VI > Section 162"
+  parentId              String?
+  parent                TaxSection?         @relation("SectionHierarchy", fields: [parentId], references: [id])
+  children              TaxSection[]        @relation("SectionHierarchy")
+  content               String              @db.Text
+  summary               String?             @db.Text
+  effectiveDate         DateTime?
+  expirationDate        DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  rules                 TaxRule[]
+  definitions           TaxDefinition[]
+  crossReferences       TaxCrossReference[] @relation("CrossRefSource")
+  targetCrossReferences TaxCrossReference[] @relation("CrossRefTarget")
+  limitations           TaxLimitation[]
+  exceptions            TaxException[]
+  extractions           TaxExtraction[]
+
+  @@unique([documentId, sectionNumber])
+  @@index([sectionNumber])
+}
+
+model TaxRule {
+  id           String          @id @default(cuid())
+  sectionId    String
+  section      TaxSection      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  ruleType     RuleType
+  condition    String          @db.Text
+  consequence  String          @db.Text
+  category     String?
+  summary      String?         @db.Text
+  ruleText     String?         @db.Text
+  exceptions   TaxException[]
+  limitations  TaxLimitation[]
+  applicableTo EntityType[]
+  confidence   Float
+  extractionId String
+  extraction   TaxExtraction   @relation(fields: [extractionId], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([ruleType])
+  @@index([sectionId])
+}
+
+model TaxDefinition {
+  id         String     @id @default(cuid())
+  sectionId  String
+  section    TaxSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  term       String
+  definition String     @db.Text
+  scope      String?
+  confidence Float
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([term])
+}
+
+model TaxException {
+  id             String      @id @default(cuid())
+  ruleId         String
+  rule           TaxRule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  condition      String      @db.Text
+  description    String      @db.Text
+  confidence     Float
+  exceptionType  String?
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+  sectionId      String?
+  section        TaxSection? @relation(fields: [sectionId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model TaxLimitation {
+  id                  String         @id @default(cuid())
+  ruleId              String
+  rule                TaxRule        @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  limitationType      LimitationType
+  thresholdType       ThresholdType
+  thresholdValue      Decimal?       @db.Decimal(19, 4)
+  thresholdFormula    String?
+  thresholdPercentage Decimal?       @db.Decimal(19, 4)
+  description         String?        @db.Text
+  phaseoutStart       Decimal?       @db.Decimal(19, 4)
+  phaseoutEnd         Decimal?       @db.Decimal(19, 4)
+  effectiveDate       DateTime?
+  expirationDate      DateTime?
+  sectionId           String?
+  section             TaxSection?    @relation(fields: [sectionId], references: [id])
+  filingStatuses      FilingStatus[]
+  taxYearStart        Int?
+  taxYearEnd          Int?
+  indexedForInflation Boolean        @default(false)
+  confidence          Float
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+}
+
+model TaxCrossReference {
+  id               String               @id @default(cuid())
+  sourceSectionId  String
+  sourceSection    TaxSection           @relation("CrossRefSource", fields: [sourceSectionId], references: [id], onDelete: Cascade)
+  targetIdentifier String
+  targetType       CrossRefType
+  relationship     CrossRefRelationship
+  referenceType    String?
+  targetSectionId  String?
+  targetSection    TaxSection?          @relation("CrossRefTarget", fields: [targetSectionId], references: [id])
+  context          String?
+  confidence       Float
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([targetIdentifier])
+}
+
+model TaxExtraction {
+  id             String         @id @default(cuid())
+  documentId     String
+  document       TaxDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sectionId      String?
+  section        TaxSection?    @relation(fields: [sectionId], references: [id])
+  extractionType ExtractionType
+  modelUsed      String
+  modelVersion   String
+  rawOutput      Json
+  confidence     Float
+  humanReviewed  Boolean        @default(false)
+  humanApproved  Boolean?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  rules          TaxRule[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([extractionType])
+  @@index([documentId])
+}
+
+// Knowledge Graph Models
+model TaxGraphNode {
+  id            String         @id @default(cuid())
+  nodeType      GraphNodeType
+  identifier    String         @unique
+  label         String
+  properties    Json
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  outgoingEdges TaxGraphEdge[] @relation("OutgoingEdges")
+  incomingEdges TaxGraphEdge[] @relation("IncomingEdges")
+
+  @@index([nodeType])
+}
+
+model TaxGraphEdge {
+  id         String        @id @default(cuid())
+  sourceId   String
+  source     TaxGraphNode  @relation("OutgoingEdges", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetId   String
+  target     TaxGraphNode  @relation("IncomingEdges", fields: [targetId], references: [id], onDelete: Cascade)
+  edgeType   GraphEdgeType
+  properties Json?
+  weight     Float         @default(1.0)
+  confidence Float         @default(1.0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([sourceId, targetId, edgeType])
+  @@index([edgeType])
+}
+
+// ============================================================================
+// PHASE 2: CORE ACCOUNTING MODELS
+// ============================================================================
+
+enum AccountingMethod {
+  CASH
+  ACCRUAL
+  HYBRID
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum TaxTreatmentType {
+  ORDINARY_INCOME
+  CAPITAL_GAIN_SHORT
+  CAPITAL_GAIN_LONG
+  TAX_EXEMPT
+  DEDUCTIBLE_FULL
+  DEDUCTIBLE_LIMITED
+  NON_DEDUCTIBLE
+  DEFERRED
+  AMORTIZABLE
+  DEPRECIABLE
+}
+
+enum PeriodType {
+  MONTH
+  QUARTER
+  YEAR
+  CUSTOM
+}
+
+enum PeriodStatus {
+  OPEN
+  SOFT_CLOSE
+  HARD_CLOSE
+  FUTURE
+  CLOSED
+  LOCKED
+}
+
+enum JournalSource {
+  MANUAL
+  BANK_IMPORT
+  INVOICE
+  BILL
+  PAYROLL
+  DEPRECIATION
+  ADJUSTMENT
+  CLOSING
+  SYSTEM
+  IMPORT
+  PAYMENT
+  RECEIPT
+  BANK_FEED
+  ACCRUAL
+  TAX
+}
+
+enum JournalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  POSTED
+  REVERSED
+  VOIDED
+}
+
+enum ClassificationMethod {
+  AI_AUTO
+  RULE_BASED
+  USER_SPECIFIED
+  CPA_REVIEWED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum DeductionType {
+  ABOVE_THE_LINE
+  BELOW_THE_LINE_ITEMIZED
+  BELOW_THE_LINE_STANDARD
+  BUSINESS_EXPENSE
+  CAPITAL_EXPENSE
+  NOT_DEDUCTIBLE
+}
+
+enum DeductionLimit {
+  NONE
+  FIFTY_PERCENT
+  THIRTY_PERCENT
+  AGI_BASED
+  DOLLAR_CAP
+  HOBBY_LOSS
+  PASSIVE_ACTIVITY
+  AT_RISK
+}
+
+enum AuditRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+enum AuthorityType {
+  IRC
+  TREASURY_REG
+  IRS_PUBLICATION
+  REVENUE_RULING
+  REVENUE_PROCEDURE
+  TAX_COURT
+  APPEALS_COURT
+  SUPREME_COURT
+}
+
+model Organization {
+  id                   String              @id @default(cuid())
+  externalId           String?             @unique // SynergyAuth organization ID
+  name                 String
+  entityType           EntityType
+  taxId                String?
+  fiscalYearEnd        Int                 @default(12)
+  accountingMethod     AccountingMethod    @default(ACCRUAL)
+  industry             String?
+  stateOfIncorporation String?
+  address              Json?
+  settings             Json?
+  legalName            String?
+  naicsCode            String?
+  defaultCurrency      String?             @default("USD")
+  subscriptionTier     String?
+  isActive             Boolean?            @default(true)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  chartOfAccounts      Account[]
+  journals             Journal[]
+  fiscalPeriods        FiscalPeriod[]
+  taxReturns           TaxReturn[]
+  users                OrganizationUser[]
+  customers            Customer[]
+  vendors              Vendor[]
+  bankAccounts         BankAccount[]
+  taxPositions         TaxPosition[]
+  estimates            Estimate[]          @relation("OrganizationEstimates")
+  purchaseOrders       PurchaseOrder[]     @relation("OrganizationPOs")
+  goodsReceipts        GoodsReceipt[]      @relation("OrganizationReceipts")
+  expenses             Expense[]           @relation("OrganizationExpenses")
+  inventoryItems       InventoryItem[]     @relation("OrganizationInventory")
+  budgets              Budget[]            @relation("OrganizationBudgets")
+  employees            Employee[]          @relation("OrganizationEmployees")
+  timesheets           Timesheet[]         @relation("OrganizationTimesheets")
+  documents            Document[]          @relation("OrganizationDocuments")
+  auditTrail           AuditTrailEntry[]   @relation("OrganizationAuditTrail")
+  bulkImports          BulkImport[]        @relation("OrganizationImports")
+  tasks                Task[]              @relation("OrganizationTasks")
+  // New QuickBooks feature relations
+  paymentGateways      PaymentGateway[]
+  payrollSettings      PayrollSettings?
+  salesTaxRates        SalesTaxRate[]
+  taxAgencies          TaxAgency[]
+  salesTaxLiabilities  SalesTaxLiability[]
+  productTaxability    ProductTaxability[]
+  fixedAssets          FixedAsset[]
+  bankFeedRules        BankFeedRule[]
+  form1099s            Form1099[]
+  creditMemos          CreditMemo[]
+  vendorCredits        VendorCredit[]
+  recurringTemplates   RecurringTemplate[]
+  classes              Class[]
+  locations            Location[]
+  projects             Project[]
+  customerStatements   CustomerStatement[]
+  emailTemplates       EmailTemplate[]
+  emailLogs            EmailLog[]
+  CheckTemplate        CheckTemplate[]
+  CheckPrint           CheckPrint[]
+  CheckBatch           CheckBatch[]
+  InventoryBundle      InventoryBundle[]
+  ACHBatch             ACHBatch[]
+  PayrollTaxFiling     PayrollTaxFiling[]
+  EFTPSTransaction     EFTPSTransaction[]
+  EFTPSEnrollment      EFTPSEnrollment?
+  MobileDeposit        MobileDeposit[]
+  invoices             Invoice[]           @relation("OrganizationInvoices")
+  customerPayments     CustomerPayment[]   @relation("OrganizationCustomerPayments")
+
+  @@index([entityType])
+}
+
+model OrganizationUser {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String // SynergyAuth user ID
+  role           String       @default("member")
+  permissions    String[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId])
+}
+
+model Account {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountNumber    String
+  name             String
+  description      String?
+  accountType      AccountType
+  accountSubtype   String?
+  normalBalance    NormalBalance
+  taxCode          String?
+  currency         String?            @default("USD")
+  isActive         Boolean            @default(true)
+  isBankAccount    Boolean            @default(false)
+  isSystemAccount  Boolean            @default(false)
+  parentId         String?
+  parent           Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children         Account[]          @relation("AccountHierarchy")
+  taxMapping       AccountTaxMapping?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  journalLines     JournalLine[]
+  expenses         Expense[]
+  inventoryItems   InventoryItem[]
+  budgetLineItems  BudgetLineItem[]   @relation("BudgetLineItems")
+  bankAccountsGL   BankAccount[]      @relation("BankAccountGL")
+  bankTxCategories BankTransaction[]  @relation("BankTxCategory")
+
+  @@unique([organizationId, accountNumber])
+  @@index([accountType])
+}
+
+model AccountTaxMapping {
+  id                String            @id @default(cuid())
+  accountId         String            @unique
+  account           Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  primaryIrcSection String?
+  defaultTreatment  TaxTreatmentType?
+  scheduleMapping   String?
+  form1099Type      String?
+  requiresTracking  Boolean           @default(false)
+  trackingType      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model FiscalPeriod {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  periodType     PeriodType
+  periodNumber   Int          @default(0)
+  fiscalYear     Int?
+  name           String?
+  startDate      DateTime
+  endDate        DateTime
+  status         PeriodStatus @default(OPEN)
+  closedAt       DateTime?
+  closedBy       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  journals       Journal[]
+
+  @@unique([organizationId, fiscalYear, periodType, periodNumber])
+  @@index([fiscalYear])
+}
+
+model Journal {
+  id                      String                         @id @default(cuid())
+  organizationId          String
+  organization            Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  periodId                String?
+  period                  FiscalPeriod?                  @relation(fields: [periodId], references: [id])
+  journalNumber           String
+  journalDate             DateTime
+  description             String?
+  reference               String?
+  sourceType              JournalSource
+  sourceId                String?
+  status                  JournalStatus                  @default(DRAFT)
+  type                    String?
+  tags                    String[]
+  createdBy               String?
+  voidedAt                DateTime?
+  voidReason              String?
+  voidedBy                String?
+  isAdjusting             Boolean                        @default(false)
+  isReversing             Boolean                        @default(false)
+  reversesJournalId       String?
+  reversedByJournalId     String?
+  postedAt                DateTime?
+  postedBy                String?
+  createdAt               DateTime                       @default(now())
+  updatedAt               DateTime                       @updatedAt
+  lines                   JournalLine[]
+  taxClassifications      TransactionTaxClassification[]
+  bills                   Bill[]                         @relation("BillJournal")
+  matchedBankTransactions BankTransaction[]              @relation("MatchedBankTransactions")
+
+  @@unique([organizationId, journalNumber])
+  @@index([journalDate])
+  @@index([status])
+}
+
+model JournalLine {
+  id                String                        @id @default(cuid())
+  journalId         String
+  journal           Journal                       @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  lineNumber        Int
+  accountId         String
+  account           Account                       @relation(fields: [accountId], references: [id])
+  description       String?
+  debit             Decimal                       @default(0) @db.Decimal(19, 4)
+  credit            Decimal                       @default(0) @db.Decimal(19, 4)
+  memo              String?
+  referenceType     String?
+  referenceId       String?
+  taxCode           String?
+  quantity          Decimal?                      @db.Decimal(19, 4)
+  unitPrice         Decimal?                      @db.Decimal(19, 4)
+  taxClassification JournalLineTaxClassification?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  // Class/Location tracking
+  classId    String?
+  class      Class?    @relation(name: "JournalLineClass", fields: [classId], references: [id], onDelete: SetNull)
+  locationId String?
+  location   Location? @relation(name: "JournalLineLocation", fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@unique([journalId, lineNumber])
+}
+
+model TransactionTaxClassification {
+  id                   String                         @id @default(cuid())
+  journalId            String
+  journal              Journal                        @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  classificationMethod ClassificationMethod
+  overallConfidence    Float
+  reviewStatus         ReviewStatus                   @default(PENDING)
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  reviewNotes          String?
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  lineClassifications  JournalLineTaxClassification[]
+}
+
+model JournalLineTaxClassification {
+  id                          String                        @id @default(cuid())
+  journalLineId               String                        @unique
+  journalLine                 JournalLine                   @relation(fields: [journalLineId], references: [id], onDelete: Cascade)
+  transactionClassificationId String?
+  transactionClassification   TransactionTaxClassification? @relation(fields: [transactionClassificationId], references: [id], onDelete: Cascade)
+  taxTreatment                TaxTreatmentType?
+  ircSection                  String?
+  regulationRef               String?
+  deductionType               DeductionType?
+  deductionLimit              DeductionLimit?
+  limitedAmount               Decimal?                      @db.Decimal(19, 4)
+  disallowedAmount            Decimal?                      @db.Decimal(19, 4)
+  carryforwardAmount          Decimal?                      @db.Decimal(19, 4)
+  recognitionYear             Int?
+  isDeferral                  Boolean                       @default(false)
+  deferralEndYear             Int?
+  requiredDocs                String[]
+  hasRequiredDocs             Boolean                       @default(false)
+  confidence                  Float
+  auditRiskLevel              AuditRiskLevel                @default(LOW)
+  auditRiskFactors            String[]
+  category                    String?
+  classifiedAt                DateTime?
+  deductibility               String?
+  deductiblePercentage        Float?
+  explanation                 String?                       @db.Text
+  formPlacement               Json?
+  isManualOverride            Boolean?                      @default(false)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
+  citations                   TaxCitation[]
+
+  @@index([ircSection])
+  @@index([taxTreatment])
+}
+
+model TaxCitation {
+  id                             String                        @id @default(cuid())
+  classificationId               String?
+  classification                 JournalLineTaxClassification? @relation(fields: [classificationId], references: [id], onDelete: Cascade)
+  journalLineTaxClassificationId String?
+  authorityType                  AuthorityType?
+  authorityId                    String?
+  section                        String?
+  regulation                     String?
+  publication                    String?
+  courtCase                      String?
+  citationText                   String?                       @db.Text
+  relevanceScore                 Float
+  createdAt                      DateTime                      @default(now())
+}
+
+// ============================================================================
+// PHASE 3: FINANCIAL MODULES
+// ============================================================================
+
+// Accounts Receivable
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+  WRITTEN_OFF
+  APPROVED
+}
+
+model Customer {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  externalId      String?
+  name            String
+  email           String?
+  phone           String?
+  billingAddress  Json?
+  shippingAddress Json?
+  taxExempt       Boolean           @default(false)
+  taxExemptNumber String?
+  creditLimit     Decimal?          @db.Decimal(19, 4)
+  paymentTerms    Int?
+  company         String?
+  taxId           String?
+  balance         Decimal?          @db.Decimal(19, 4)
+  isActive        Boolean?          @default(true)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  invoices        Invoice[]
+  payments        CustomerPayment[]
+  estimates       Estimate[]
+
+  // New QuickBooks feature relations
+  paymentMethods      PaymentMethod[]
+  paymentTransactions PaymentTransaction[]
+  creditMemos         CreditMemo[]
+  statements          CustomerStatement[]
+  portalAccess        CustomerPortalAccess?
+  projects            Project[]
+  bankTransactions    BankTransaction[]     @relation("CustomerBankTransactions")
+
+  @@unique([organizationId, externalId])
+  @@index([name])
+}
+
+model Invoice {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation("OrganizationInvoices", fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer          @relation(fields: [customerId], references: [id])
+  projectId      String?
+  project        Project?          @relation("ProjectInvoices", fields: [projectId], references: [id])
+  invoiceNumber  String
+  invoiceDate    DateTime
+  dueDate        DateTime
+  status         InvoiceStatus     @default(DRAFT)
+  subtotal       Decimal           @db.Decimal(19, 4)
+  taxAmount      Decimal           @default(0) @db.Decimal(19, 4)
+  totalAmount    Decimal           @db.Decimal(19, 4)
+  amountPaid     Decimal           @default(0) @db.Decimal(19, 4)
+  amountDue      Decimal           @db.Decimal(19, 4)
+  discountAmount Decimal?          @db.Decimal(19, 4)
+  poNumber       String?
+  memo           String?
+  sentAt         DateTime?
+  paidAt         DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  terms          String?
+  notes          String?
+  journalId      String?
+  // Online collection via Stripe hosted invoice (through synergy-payments)
+  stripeInvoiceId String?
+  stripeHostedUrl String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  lineItems      InvoiceLineItem[]
+  payments       InvoicePayment[]
+  documents      Document[]        @relation("InvoiceDocuments")
+
+  // New QuickBooks feature relations
+  paymentTransactions    PaymentTransaction[]
+  creditMemoApplications CreditMemoApplication[]
+  progressInvoice        ProgressInvoice?
+  portalViews            PortalInvoiceView[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([status])
+  @@index([dueDate])
+}
+
+/// A Stripe Issuing card transaction posted into the GL (SynergyExpense).
+/// One row per issuing transaction — the unique keeps re-posting idempotent.
+model CardTransactionPosting {
+  id             String   @id @default(cuid())
+  organizationId String
+  stripeTxnId    String
+  accountId      String
+  journalId      String?
+  amountCents    Int
+  description    String?
+  cardLast4      String?
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, stripeTxnId])
+  @@index([organizationId])
+}
+
+model InvoiceLineItem {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  lineNumber      Int
+  description     String
+  quantity        Decimal  @db.Decimal(19, 4)
+  unitPrice       Decimal  @db.Decimal(19, 4)
+  amount          Decimal  @db.Decimal(19, 4)
+  accountId       String?
+  productId       String?
+  discountPercent Decimal? @db.Decimal(19, 4)
+  taxRate         Decimal? @db.Decimal(19, 4)
+  taxAmount       Decimal? @db.Decimal(19, 4)
+  taxable         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Class/Location/Project tracking
+  classId    String?
+  class      Class?    @relation(name: "InvoiceLineClass", fields: [classId], references: [id], onDelete: SetNull)
+  locationId String?
+  location   Location? @relation(name: "InvoiceLineLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  projectId  String?
+  project    Project?  @relation(name: "InvoiceLineProject", fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model CustomerPayment {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation("OrganizationCustomerPayments", fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer         @relation(fields: [customerId], references: [id])
+  paymentDate    DateTime
+  amount         Decimal          @db.Decimal(19, 4)
+  paymentMethod  String
+  reference      String?
+  notes          String?
+  status         String?
+  journalId      String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  invoices       InvoicePayment[]
+}
+
+model InvoicePayment {
+  id            String           @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  paymentId     String?
+  payment       CustomerPayment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount        Decimal          @db.Decimal(19, 4)
+  paymentDate   DateTime?
+  paymentMethod String?
+  reference     String?
+  notes         String?
+  createdAt     DateTime         @default(now())
+}
+
+// Accounts Payable
+enum BillStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Vendor {
+  id                      String          @id @default(cuid())
+  organizationId          String
+  organization            Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  externalId              String?
+  name                    String
+  email                   String?
+  phone                   String?
+  address                 Json?
+  taxId                   String?
+  requires1099            Boolean         @default(false)
+  vendor1099Type          String?
+  paymentTerms            Int?
+  company                 String?
+  balance                 Decimal?        @db.Decimal(19, 4)
+  isActive                Boolean?        @default(true)
+  defaultExpenseAccountId String?
+  notes                   String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  bills                   Bill[]
+  payments                VendorPayment[]
+  expenses                Expense[]
+  purchaseOrders          PurchaseOrder[]
+
+  // New QuickBooks feature relations
+  form1099s         Form1099[]
+  vendorCredits     VendorCredit[]
+  VendorBankAccount VendorBankAccount[]
+  bankTransactions  BankTransaction[]   @relation("VendorBankTransactions")
+
+  @@unique([organizationId, externalId])
+  @@index([name])
+}
+
+model Bill {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  vendorId            String
+  vendor              Vendor         @relation(fields: [vendorId], references: [id])
+  billNumber          String
+  billDate            DateTime
+  dueDate             DateTime
+  status              BillStatus     @default(DRAFT)
+  subtotal            Decimal        @db.Decimal(19, 4)
+  taxAmount           Decimal        @default(0) @db.Decimal(19, 4)
+  totalAmount         Decimal        @db.Decimal(19, 4)
+  amountPaid          Decimal        @default(0) @db.Decimal(19, 4)
+  amountDue           Decimal        @db.Decimal(19, 4)
+  balance             Decimal        @default(0) @db.Decimal(19, 4)
+  vendorInvoiceNumber String?
+  approvedAt          DateTime?
+  paidAt              DateTime?
+  terms               String?
+  notes               String?
+  journalId           String?
+  journalEntry        Journal?       @relation("BillJournal", fields: [journalId], references: [id])
+  attachments         String[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  lineItems           BillLineItem[]
+  payments            BillPayment[]
+  documents           Document[]     @relation("BillDocuments")
+
+  // New QuickBooks feature relations
+  vendorCreditApplications VendorCreditApplication[]
+
+  @@unique([organizationId, vendorId, billNumber])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model BillLineItem {
+  id                        String   @id @default(cuid())
+  billId                    String
+  bill                      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  lineNumber                Int
+  description               String
+  quantity                  Decimal  @db.Decimal(19, 4)
+  unitPrice                 Decimal  @db.Decimal(19, 4)
+  amount                    Decimal  @db.Decimal(19, 4)
+  accountId                 String?
+  taxRate                   Decimal? @db.Decimal(19, 4)
+  taxAmount                 Decimal? @db.Decimal(19, 4)
+  taxClassificationOverride String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  // Class/Location tracking
+  classId    String?
+  class      Class?    @relation(name: "BillLineClass", fields: [classId], references: [id], onDelete: SetNull)
+  locationId String?
+  location   Location? @relation(name: "BillLineLocation", fields: [locationId], references: [id], onDelete: SetNull)
+}
+
+model VendorPayment {
+  id             String        @id @default(cuid())
+  organizationId String
+  vendorId       String
+  vendor         Vendor        @relation(fields: [vendorId], references: [id])
+  paymentDate    DateTime
+  amount         Decimal       @db.Decimal(19, 4)
+  paymentMethod  String
+  reference      String?
+  notes          String?
+  journalId      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  bills          BillPayment[]
+}
+
+model BillPayment {
+  id            String         @id @default(cuid())
+  billId        String
+  bill          Bill           @relation(fields: [billId], references: [id], onDelete: Cascade)
+  paymentId     String?
+  payment       VendorPayment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount        Decimal        @db.Decimal(19, 4)
+  paymentDate   DateTime?
+  paymentMethod String?
+  reference     String?
+  notes         String?
+  createdAt     DateTime       @default(now())
+}
+
+// Banking & Reconciliation
+enum BankAccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  MONEY_MARKET
+  LINE_OF_CREDIT
+}
+
+enum BankTransactionType {
+  DEBIT
+  CREDIT
+  DEPOSIT
+  ADJUSTMENT
+}
+
+enum BankTransactionStatus {
+  UNMATCHED
+  MATCHED
+  CREATED
+  EXCLUDED
+  RECONCILED
+  PENDING
+  CLEARED
+}
+
+enum MatchMethod {
+  EXACT_MATCH
+  FUZZY_MATCH
+  AI_SUGGESTED
+  MANUAL
+  RULE_BASED
+}
+
+enum ReconciliationStatus {
+  IN_PROGRESS
+  COMPLETED
+  DISCREPANCY
+  ABANDONED
+}
+
+model BankAccount {
+  id               String               @id @default(cuid())
+  organizationId   String
+  organization     Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId        String // Link to GL account
+  glAccount        Account              @relation("BankAccountGL", fields: [accountId], references: [id])
+  bankName         String
+  accountName      String
+  accountNumber    String // Last 4 digits for display
+  routingNumber    String?
+  accountType      BankAccountType
+  currency         String               @default("USD")
+  currentBalance   Decimal              @db.Decimal(19, 4)
+  availableBalance Decimal?             @db.Decimal(19, 4)
+  plaidItemId      String?
+  plaidAccessToken String? // Encrypted
+  lastSyncAt       DateTime?
+  isActive         Boolean              @default(true)
+  isPrimary        Boolean?             @default(false)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  transactions     BankTransaction[]
+  reconciliations  BankReconciliation[]
+
+  // New QuickBooks feature relations
+  feedConnections  BankFeedConnection[]
+  achBatches       ACHBatch[]           @relation("ACHBatchBankAccount")
+  eftpsEnrollments EFTPSEnrollment[]    @relation("EFTPSEnrollmentBank")
+  checkTemplates   CheckTemplate[]      @relation("CheckTemplateBank")
+  mobileDeposits   MobileDeposit[]      @relation("MobileDepositBank")
+}
+
+model BankTransaction {
+  id                        String                @id @default(cuid())
+  bankAccountId             String
+  bankAccount               BankAccount           @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  externalId                String?
+  transactionDate           DateTime
+  postDate                  DateTime?
+  description               String?
+  originalDescription       String?
+  amount                    Decimal               @db.Decimal(19, 4)
+  transactionType           BankTransactionType
+  category                  String?
+  merchantName              String?
+  pending                   Boolean               @default(false)
+  status                    BankTransactionStatus @default(UNMATCHED)
+  reference                 String?
+  referenceNumber           String?
+  categoryAccountId         String?
+  categoryAccount           Account?              @relation("BankTxCategory", fields: [categoryAccountId], references: [id])
+  vendorId                  String?
+  vendor                    Vendor?               @relation("VendorBankTransactions", fields: [vendorId], references: [id])
+  customerId                String?
+  customer                  Customer?             @relation("CustomerBankTransactions", fields: [customerId], references: [id])
+  matchedJournalId          String?
+  matchedJournal            Journal?              @relation("MatchedBankTransactions", fields: [matchedJournalId], references: [id])
+  matchConfidence           Float?
+  matchMethod               MatchMethod?
+  excludeFromReconciliation Boolean               @default(false)
+  metadata                  Json?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  @@index([transactionDate])
+  @@index([status])
+}
+
+model BankReconciliation {
+  id                String               @id @default(cuid())
+  bankAccountId     String
+  bankAccount       BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  periodEnd         DateTime
+  statementBalance  Decimal              @db.Decimal(19, 4)
+  glBalance         Decimal?             @db.Decimal(19, 4)
+  reconciledBalance Decimal?             @db.Decimal(19, 4)
+  beginningBalance  Decimal              @default(0) @db.Decimal(19, 4)
+  clearedBalance    Decimal              @default(0) @db.Decimal(19, 4)
+  difference        Decimal              @db.Decimal(19, 4)
+  status            ReconciliationStatus @default(IN_PROGRESS)
+  completedAt       DateTime?
+  completedBy       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+// ============================================================================
+// PHASE 4: TAX PREPARATION & FILING
+// ============================================================================
+
+enum TaxReturnType {
+  FORM_1040
+  FORM_1120
+  FORM_1120S
+  FORM_1065
+  FORM_1041
+  FORM_990
+  STATE_INDIVIDUAL
+  STATE_CORPORATE
+}
+
+enum TaxReturnStatus {
+  DRAFT
+  IN_PROGRESS
+  REVIEW
+  READY_TO_FILE
+  FILED
+  ACCEPTED
+  REJECTED
+  AMENDED
+}
+
+enum FormStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  VALIDATED
+  ERRORS
+}
+
+enum ScheduleType {
+  SCHEDULE_A
+  SCHEDULE_B
+  SCHEDULE_C
+  SCHEDULE_D
+  SCHEDULE_E
+  SCHEDULE_F
+  SCHEDULE_SE
+  SCHEDULE_K1
+}
+
+enum EstimatedPaymentStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+}
+
+enum SafeHarborStatus {
+  ON_TRACK
+  BEHIND
+  PENALTY_RISK
+}
+
+model TaxReturn {
+  id                String             @id @default(cuid())
+  organizationId    String
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxYear           Int
+  returnType        TaxReturnType
+  filingStatus      FilingStatus?
+  status            TaxReturnStatus    @default(DRAFT)
+  dueDate           DateTime
+  extendedDueDate   DateTime?
+  filedDate         DateTime?
+  acceptedDate      DateTime?
+  grossIncome       Decimal?           @db.Decimal(19, 4)
+  adjustments       Decimal?           @db.Decimal(19, 4)
+  agi               Decimal?           @db.Decimal(19, 4)
+  deductions        Decimal?           @db.Decimal(19, 4)
+  taxableIncome     Decimal?           @db.Decimal(19, 4)
+  taxLiability      Decimal?           @db.Decimal(19, 4)
+  credits           Decimal?           @db.Decimal(19, 4)
+  paymentsWithheld  Decimal?           @db.Decimal(19, 4)
+  estimatedPayments Decimal?           @db.Decimal(19, 4)
+  amountDue         Decimal?           @db.Decimal(19, 4)
+  refundAmount      Decimal?           @db.Decimal(19, 4)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  forms             TaxForm[]
+  schedules         TaxSchedule[]
+  estimates         EstimatedPayment[]
+
+  @@unique([organizationId, taxYear, returnType])
+  @@index([taxYear])
+  @@index([status])
+}
+
+model TaxForm {
+  id                String     @id @default(cuid())
+  taxReturnId       String
+  taxReturn         TaxReturn  @relation(fields: [taxReturnId], references: [id], onDelete: Cascade)
+  formType          String
+  formVersion       String
+  status            FormStatus @default(NOT_STARTED)
+  data              Json
+  computedFields    Json?
+  validationErrors  Json?
+  sourceLineMapping Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model TaxSchedule {
+  id             String       @id @default(cuid())
+  taxReturnId    String
+  taxReturn      TaxReturn    @relation(fields: [taxReturnId], references: [id], onDelete: Cascade)
+  scheduleType   ScheduleType
+  data           Json
+  computedTotals Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model EstimatedPayment {
+  id             String                 @id @default(cuid())
+  taxReturnId    String
+  taxReturn      TaxReturn              @relation(fields: [taxReturnId], references: [id], onDelete: Cascade)
+  quarter        Int
+  dueDate        DateTime
+  requiredAmount Decimal                @db.Decimal(19, 4)
+  paidAmount     Decimal                @default(0) @db.Decimal(19, 4)
+  paidDate       DateTime?
+  status         EstimatedPaymentStatus @default(PENDING)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+}
+
+model TaxPosition {
+  id                    String           @id @default(cuid())
+  organizationId        String
+  organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asOfDate              DateTime
+  taxYear               Int
+  ytdGrossIncome        Decimal          @db.Decimal(19, 4)
+  ytdAdjustments        Decimal          @db.Decimal(19, 4)
+  projectedAGI          Decimal          @db.Decimal(19, 4)
+  ytdDeductions         Decimal          @db.Decimal(19, 4)
+  projectedDeductions   Decimal          @db.Decimal(19, 4)
+  ytdTaxLiability       Decimal          @db.Decimal(19, 4)
+  projectedTaxLiability Decimal          @db.Decimal(19, 4)
+  ytdWithholding        Decimal          @db.Decimal(19, 4)
+  ytdEstimatedPayments  Decimal          @db.Decimal(19, 4)
+  projectedAmountDue    Decimal          @db.Decimal(19, 4)
+  safeHarborRequired    Decimal          @db.Decimal(19, 4)
+  safeHarborStatus      SafeHarborStatus
+  q1Required            Decimal          @db.Decimal(19, 4)
+  q2Required            Decimal          @db.Decimal(19, 4)
+  q3Required            Decimal          @db.Decimal(19, 4)
+  q4Required            Decimal          @db.Decimal(19, 4)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([organizationId, taxYear])
+}
+
+// ============================================================================
+// PHASE 8B: ESTIMATES & PURCHASE ORDERS
+// ============================================================================
+
+enum EstimateStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  ACKNOWLEDGED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+model Estimate {
+  id                   String             @id @default(cuid())
+  organizationId       String
+  organization         Organization       @relation(name: "OrganizationEstimates", fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId           String
+  customer             Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  estimateNumber       String
+  estimateDate         DateTime
+  expiryDate           DateTime
+  subject              String?
+  description          String?
+  status               EstimateStatus     @default(DRAFT)
+  subtotal             Decimal            @default(0) @db.Decimal(19, 4)
+  tax                  Decimal            @default(0) @db.Decimal(19, 4)
+  total                Decimal            @default(0) @db.Decimal(19, 4)
+  currency             String             @default("USD")
+  exchangeRate         Decimal            @default(1) @db.Decimal(12, 8)
+  notes                String?
+  terms                String?
+  sentAt               DateTime?
+  viewedAt             DateTime?
+  acceptedBy           String?
+  acceptedAt           DateTime?
+  convertedToInvoiceId String?
+  convertedAt          DateTime?
+  createdBy            String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  lineItems            EstimateLineItem[]
+  documents            Document[]         @relation("EstimateDocuments")
+
+  // New QuickBooks feature relations
+  progressInvoices ProgressInvoice[]
+  milestones       ProgressMilestone[]
+
+  @@unique([organizationId, estimateNumber])
+  @@index([customerId])
+  @@index([status])
+}
+
+model EstimateLineItem {
+  id          String   @id @default(cuid())
+  estimateId  String
+  estimate    Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  lineNumber  Int
+  description String
+  quantity    Decimal  @db.Decimal(12, 4)
+  unitPrice   Decimal  @db.Decimal(19, 4)
+  amount      Decimal  @db.Decimal(19, 4)
+  taxable     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([estimateId, lineNumber])
+}
+
+model PurchaseOrder {
+  id               String              @id @default(cuid())
+  organizationId   String
+  organization     Organization        @relation(name: "OrganizationPOs", fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorId         String
+  vendor           Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  poNumber         String
+  poDate           DateTime
+  deliveryDate     DateTime?
+  status           PurchaseOrderStatus @default(DRAFT)
+  subtotal         Decimal             @default(0) @db.Decimal(19, 4)
+  tax              Decimal             @default(0) @db.Decimal(19, 4)
+  total            Decimal             @default(0) @db.Decimal(19, 4)
+  currency         String              @default("USD")
+  exchangeRate     Decimal             @default(1) @db.Decimal(12, 8)
+  notes            String?
+  terms            String?
+  shippingAddress  Json?
+  sentAt           DateTime?
+  acknowledgmentId String?
+  acknowledgedAt   DateTime?
+  createdBy        String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  lineItems        POLineItem[]
+  receipts         GoodsReceipt[]
+  documents        Document[]          @relation("PODocuments")
+
+  @@unique([organizationId, poNumber])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model POLineItem {
+  id            String        @id @default(cuid())
+  poId          String
+  purchaseOrder PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  lineNumber    Int
+  description   String
+  quantity      Decimal       @db.Decimal(12, 4)
+  unitPrice     Decimal       @db.Decimal(19, 4)
+  amount        Decimal       @db.Decimal(19, 4)
+  receivedQty   Decimal       @default(0) @db.Decimal(12, 4)
+  taxable       Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([poId, lineNumber])
+}
+
+model GoodsReceipt {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(name: "OrganizationReceipts", fields: [organizationId], references: [id], onDelete: Cascade)
+  poId           String
+  purchaseOrder  PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Restrict)
+  receiptNumber  String
+  receiptDate    DateTime
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  lineItems      GRLineItem[]
+  documents      Document[]    @relation("ReceiptDocuments")
+
+  @@unique([organizationId, receiptNumber])
+  @@index([poId])
+}
+
+model GRLineItem {
+  id           String       @id @default(cuid())
+  receiptId    String
+  goodsReceipt GoodsReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  poLineItemId String?
+  lineNumber   Int
+  quantity     Decimal      @db.Decimal(12, 4)
+  cost         Decimal      @default(0) @db.Decimal(19, 4)
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([receiptId, lineNumber])
+}
+
+// ============================================================================
+// PHASE 8C: EXPENSE TRACKING & INVENTORY/COGS
+// ============================================================================
+
+enum ExpenseCategory {
+  MEALS
+  TRAVEL
+  SUPPLIES
+  UTILITIES
+  EQUIPMENT
+  MAINTENANCE
+  PROFESSIONAL_FEES
+  ENTERTAINMENT
+  TRANSPORTATION
+  TELECOMMUNICATIONS
+  OFFICE_RENT
+  OTHER
+}
+
+model Expense {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(name: "OrganizationExpenses", fields: [organizationId], references: [id], onDelete: Cascade)
+  expenseNumber  String
+  expenseDate    DateTime
+  category       ExpenseCategory?
+  description    String
+  amount         Decimal           @db.Decimal(19, 4)
+  currency       String            @default("USD")
+  exchangeRate   Decimal           @default(1) @db.Decimal(12, 8)
+  accountId      String?
+  account        Account?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  vendorId       String?
+  vendor         Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  employeeId     String?
+  projectId      String?
+  project        Project?          @relation("ExpenseProject", fields: [projectId], references: [id], onDelete: SetNull)
+  status         String            @default("DRAFT") // DRAFT, SUBMITTED, APPROVED, REJECTED, POSTED
+  notes          String?
+  tags           String[]
+  createdBy      String
+  approvedBy     String?
+  approvedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  documents      Document[]        @relation("ExpenseDocuments")
+  auditTrail     AuditTrailEntry[] @relation("ExpenseAudit")
+
+  // New QuickBooks feature relations
+  projectExpenses ProjectExpense[]
+
+  @@unique([organizationId, expenseNumber])
+  @@index([expenseDate])
+  @@index([status])
+}
+
+enum InventoryValuationMethod {
+  FIFO
+  LIFO
+  WEIGHTED_AVERAGE
+  SPECIFIC_ID
+}
+
+model InventoryItem {
+  id                 String                   @id @default(cuid())
+  organizationId     String
+  organization       Organization             @relation(name: "OrganizationInventory", fields: [organizationId], references: [id], onDelete: Cascade)
+  sku                String
+  name               String
+  description        String?
+  category           String?
+  unitCost           Decimal                  @db.Decimal(19, 4)
+  sellingPrice       Decimal                  @db.Decimal(19, 4)
+  quantity           Decimal                  @default(0) @db.Decimal(12, 4)
+  reorderPoint       Decimal                  @db.Decimal(12, 4)
+  valuationMethod    InventoryValuationMethod @default(FIFO)
+  accountId          String
+  account            Account                  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  ledger             InventoryLedger[]
+  bundleItems        InventoryBundleItem[]    @relation("BundleItemInventory")
+  assemblyBuildItems AssemblyBuildItem[]      @relation("AssemblyBuildItemInventory")
+
+  @@unique([organizationId, sku])
+  @@index([quantity])
+}
+
+model InventoryLedger {
+  id              String        @id @default(cuid())
+  itemId          String
+  inventoryItem   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transactionType String // PURCHASE, SALE, ADJUSTMENT, RETURN
+  referenceId     String? // PO ID, Invoice ID, etc.
+  quantity        Decimal       @db.Decimal(12, 4)
+  unitCost        Decimal       @db.Decimal(19, 4)
+  totalCost       Decimal       @db.Decimal(19, 4)
+  balanceQty      Decimal       @db.Decimal(12, 4)
+  balanceCost     Decimal       @db.Decimal(19, 4)
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  @@index([itemId])
+  @@index([transactionType])
+}
+
+// ============================================================================
+// PHASE 8D: MULTI-CURRENCY SUPPORT
+// ============================================================================
+
+model Currency {
+  id            String   @id @default(cuid())
+  code          String   @unique // USD, EUR, GBP, etc.
+  name          String
+  symbol        String
+  decimalPlaces Int      @default(2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+}
+
+model ExchangeRate {
+  id            String   @id @default(cuid())
+  fromCurrency  String
+  toCurrency    String
+  rate          Decimal  @db.Decimal(12, 8)
+  effectiveDate DateTime
+  source        String // MANUAL, OPENEXCHANGERATES, ECB, etc.
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([fromCurrency, toCurrency, effectiveDate])
+  @@index([effectiveDate])
+}
+
+// ============================================================================
+// PHASE 8E: BUDGETING & FORECASTING
+// ============================================================================
+
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+model Budget {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(name: "OrganizationBudgets", fields: [organizationId], references: [id], onDelete: Cascade)
+  budgetName     String
+  fiscalYear     Int
+  period         BudgetPeriod
+  startDate      DateTime
+  endDate        DateTime
+  status         String           @default("DRAFT") // DRAFT, APPROVED, ACTIVE, CLOSED
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  lineItems      BudgetLineItem[]
+
+  @@unique([organizationId, budgetName, fiscalYear])
+  @@index([status])
+}
+
+model BudgetLineItem {
+  id             String   @id @default(cuid())
+  budgetId       String
+  budget         Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account  @relation(name: "BudgetLineItems", fields: [accountId], references: [id], onDelete: Restrict)
+  budgetAmount   Decimal  @db.Decimal(19, 4)
+  actualAmount   Decimal  @default(0) @db.Decimal(19, 4)
+  forecastAmount Decimal  @default(0) @db.Decimal(19, 4)
+  type           String?
+  amount         Decimal  @default(0) @db.Decimal(19, 4)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([budgetId, accountId])
+}
+
+// ============================================================================
+// PHASE 8F: TIMESHEET & LABOR TRACKING
+// ============================================================================
+
+enum TimesheetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model Employee {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(name: "OrganizationEmployees", fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  hireDate       DateTime
+  department     String?
+  jobTitle       String?
+  hourlyRate     Decimal?     @db.Decimal(12, 4)
+  salary         Decimal?     @db.Decimal(19, 4)
+  taxId          String? // SSN or Tax ID
+  address        Json?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  timesheets     Timesheet[]
+  tasks          Task[]
+
+  // New QuickBooks feature relations
+  paychecks           Paycheck[]
+  w2Forms             W2Form[]
+  deductionSetups     EmployeeDeductionSetup[]
+  projectTimeEntries  ProjectTimeEntry[]
+  EmployeeBankAccount EmployeeBankAccount[]
+
+  @@unique([organizationId, employeeId])
+  @@index([email])
+}
+
+model Timesheet {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(name: "OrganizationTimesheets", fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  weekStartDate  DateTime
+  weekEndDate    DateTime
+  status         TimesheetStatus   @default(DRAFT)
+  totalHours     Decimal           @default(0) @db.Decimal(10, 2)
+  totalAmount    Decimal           @default(0) @db.Decimal(19, 4)
+  hours          Decimal?          @db.Decimal(10, 2)
+  hourlyRate     Decimal?          @db.Decimal(12, 4)
+  projectId      String?
+  project        Project?          @relation("TimesheetProject", fields: [projectId], references: [id], onDelete: SetNull)
+  notes          String?
+  submittedAt    DateTime?
+  submittedBy    String?
+  approvedAt     DateTime?
+  approvedBy     String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  entries        TimesheetEntry[]
+  auditTrail     AuditTrailEntry[] @relation("TimesheetAudit")
+
+  @@unique([employeeId, weekStartDate])
+  @@index([status])
+}
+
+model TimesheetEntry {
+  id          String    @id @default(cuid())
+  timesheetId String
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  date        DateTime
+  hours       Decimal   @db.Decimal(10, 2)
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  projectId   String?
+  project     Project?  @relation(name: "TimesheetEntryProject", fields: [projectId], references: [id], onDelete: SetNull)
+  description String?
+  notes       String?
+  billable    Boolean   @default(false)
+  billingRate Decimal?  @db.Decimal(12, 4)
+  invoiced    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Task {
+  id             String           @id @default(cuid())
+  organizationId String?
+  organization   Organization?    @relation(name: "OrganizationTasks", fields: [organizationId], references: [id], onDelete: Cascade)
+  taskName       String?
+  name           String?
+  description    String?
+  employeeId     String?
+  employee       Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  assignedTo     String?
+  priority       String?
+  estimatedHours Decimal?         @db.Decimal(10, 2)
+  actualHours    Decimal?         @db.Decimal(10, 2)
+  dueDate        DateTime?
+  completedAt    DateTime?
+  projectId      String?
+  project        Project?         @relation("TaskProject", fields: [projectId], references: [id], onDelete: SetNull)
+  status         String           @default("ACTIVE")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  entries        TimesheetEntry[]
+}
+
+// ============================================================================
+// PHASE 8G: DOCUMENT STORAGE & AUDIT TRAIL
+// ============================================================================
+
+enum StorageDocumentType {
+  INVOICE
+  BILL
+  PO
+  ESTIMATE
+  RECEIPT
+  EXPENSE_RECEIPT
+  CONTRACT
+  TAX_FORM
+  STATEMENT
+  OTHER
+}
+
+model Document {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(name: "OrganizationDocuments", fields: [organizationId], references: [id], onDelete: Cascade)
+  documentType      StorageDocumentType
+  fileName          String
+  fileSize          Int // in bytes
+  mimeType          String
+  storagePath       String // S3 path or MinIO path
+  uploadedBy        String
+  uploadedAt        DateTime            @default(now())
+  description       String?
+  relatedEntityId   String? // ID of related entity
+  relatedEntityType String? // Invoice, Bill, PO, Estimate, Expense
+  metadata          Json?
+  isArchived        Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations for specific document types
+  invoices  Invoice[]       @relation("InvoiceDocuments")
+  bills     Bill[]          @relation("BillDocuments")
+  estimates Estimate[]      @relation("EstimateDocuments")
+  pos       PurchaseOrder[] @relation("PODocuments")
+  receipts  GoodsReceipt[]  @relation("ReceiptDocuments")
+  expenses  Expense[]       @relation("ExpenseDocuments")
+
+  @@index([organizationId])
+  @@index([relatedEntityType, relatedEntityId])
+}
+
+enum AuditActionType {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SUBMIT
+  POST
+  VOID
+  CONVERT
+  IMPORT
+  EXPORT
+}
+
+model AuditTrailEntry {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(name: "OrganizationAuditTrail", fields: [organizationId], references: [id], onDelete: Cascade)
+  actionType     AuditActionType
+  entityType     String // Transaction, Journal, Invoice, Bill, etc.
+  entityId       String
+  userId         String
+  userEmail      String?
+  changes        Json? // Before/after values
+  ipAddress      String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+
+  // Relations for specific entity types
+  expenses   Expense[]   @relation("ExpenseAudit")
+  timesheets Timesheet[] @relation("TimesheetAudit")
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([actionType])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// PHASE 8H: BULK IMPORT
+// ============================================================================
+
+enum ImportStatus {
+  PENDING
+  VALIDATING
+  PROCESSING
+  COMPLETED
+  FAILED
+  ROLLED_BACK
+}
+
+model BulkImport {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(name: "OrganizationImports", fields: [organizationId], references: [id], onDelete: Cascade)
+  importType     String // TRANSACTIONS, CUSTOMERS, VENDORS, INVOICES, etc.
+  fileName       String
+  rowCount       Int
+  successCount   Int             @default(0)
+  errorCount     Int             @default(0)
+  status         ImportStatus    @default(PENDING)
+  errors         Json? // Array of row errors
+  mappingConfig  Json? // Column mapping
+  importedBy     String
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  rows           BulkImportRow[]
+
+  @@index([status])
+}
+
+model BulkImportRow {
+  id              String     @id @default(cuid())
+  importId        String
+  bulkImport      BulkImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  rowNumber       Int
+  status          String // PENDING, SUCCESS, ERROR
+  data            Json
+  errors          Json? // Validation errors
+  createdEntityId String? // ID of created entity
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([importId, rowNumber])
+}
+
+// ============================================================================
+// PHASE 9: CONTINUOUS LEARNING
+// ============================================================================
+
+enum FeedbackType {
+  INCORRECT_SECTION
+  INCORRECT_TREATMENT
+  MISSING_LIMITATION
+  WRONG_ENTITY_TYPE
+  MISSING_EXCEPTION
+  OTHER
+}
+
+enum FeedbackStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum UserRole {
+  USER
+  ACCOUNTANT
+  CPA
+  TAX_ATTORNEY
+  ADMIN
+}
+
+model ClassificationFeedback {
+  id                             String         @id @default(cuid())
+  classificationId               String?
+  journalLineTaxClassificationId String?
+  originalCategory               String?
+  suggestedCategory              String?
+  isCorrect                      Boolean?
+  notes                          String?
+  createdBy                      String?
+  feedbackType                   FeedbackType?
+  originalClassification         Json?
+  correctedClassification        Json?
+  correctionReason               String?
+  submittedBy                    String?
+  submittedByRole                UserRole?
+  status                         FeedbackStatus @default(PENDING)
+  reviewedBy                     String?
+  reviewedAt                     DateTime?
+  appliedToModel                 Boolean        @default(false)
+  appliedAt                      DateTime?
+  createdAt                      DateTime       @default(now())
+  updatedAt                      DateTime       @updatedAt
+
+  @@index([status])
+  @@index([feedbackType])
+}
+
+// ============================================================================
+// MIGRATION TRACKING
+// ============================================================================
+
+enum MigrationStatus {
+  INITIALIZING
+  EXTRACTING
+  MAPPING
+  IMPORTING
+  CLASSIFYING
+  VALIDATING
+  COMPLETE
+  FAILED
+  ROLLED_BACK
+}
+
+model MigrationJob {
+  id             String          @id @default(cuid())
+  organizationId String
+  sourceSystem   String
+  status         MigrationStatus @default(INITIALIZING)
+  progress       Int             @default(0)
+  currentPhase   String?
+  stats          Json?
+  errors         Json?
+  startedAt      DateTime        @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([status])
+}
+
+// ============================================================================
+// PHASE 10: PAYMENT PROCESSING (Stripe + Square)
+// ============================================================================
+
+enum PaymentGatewayProvider {
+  STRIPE
+  SQUARE
+}
+
+enum PaymentGatewayStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_SETUP
+  ERROR
+}
+
+enum PaymentMethodType {
+  CARD
+  ACH
+  WALLET
+  CHECK
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+  DISPUTED
+}
+
+model PaymentGateway {
+  id                 String                 @id @default(cuid())
+  organizationId     String
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider           PaymentGatewayProvider
+  name               String // e.g., "Main Stripe Account"
+  isDefault          Boolean                @default(false)
+  status             PaymentGatewayStatus   @default(PENDING_SETUP)
+  publicKey          String? // Publishable key for frontend
+  secretKeyEncrypted String? // Encrypted secret key
+  webhookSecret      String? // For webhook verification
+  merchantId         String? // Square merchant ID
+  locationId         String? // Square location ID
+  accountId          String? // Connected account ID for Stripe Connect
+  settings           Json? // Provider-specific settings
+  lastSyncAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  transactions       PaymentTransaction[]
+
+  @@unique([organizationId, provider, name])
+  @@index([provider])
+  @@index([status])
+}
+
+model PaymentMethod {
+  id                    String               @id @default(cuid())
+  organizationId        String
+  customerId            String
+  customer              Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type                  PaymentMethodType
+  isDefault             Boolean              @default(false)
+  // Card details (tokenized)
+  cardBrand             String? // visa, mastercard, amex, etc.
+  cardLast4             String?
+  cardExpMonth          Int?
+  cardExpYear           Int?
+  // ACH details (tokenized)
+  bankName              String?
+  accountLast4          String?
+  accountType           String? // checking, savings
+  routingNumber         String? // Last 4 for display
+  // Provider tokens
+  stripePaymentMethodId String?
+  squareCardId          String?
+  // Metadata
+  billingAddress        Json?
+  isVerified            Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  transactions          PaymentTransaction[]
+
+  @@index([customerId])
+  @@index([type])
+}
+
+model PaymentTransaction {
+  id                    String                   @id @default(cuid())
+  organizationId        String
+  gatewayId             String
+  gateway               PaymentGateway           @relation(fields: [gatewayId], references: [id])
+  paymentMethodId       String?
+  paymentMethod         PaymentMethod?           @relation(fields: [paymentMethodId], references: [id])
+  invoiceId             String?
+  invoice               Invoice?                 @relation(fields: [invoiceId], references: [id])
+  customerId            String
+  customer              Customer                 @relation(fields: [customerId], references: [id])
+  amount                Decimal                  @db.Decimal(19, 4)
+  currency              String                   @default("USD")
+  status                PaymentTransactionStatus @default(PENDING)
+  // Provider details
+  providerTransactionId String? // Stripe charge ID or Square payment ID
+  providerFee           Decimal?                 @db.Decimal(19, 4)
+  netAmount             Decimal?                 @db.Decimal(19, 4)
+  // Processing details
+  description           String?
+  statementDescriptor   String?
+  receiptUrl            String?
+  receiptNumber         String?
+  // Error handling
+  failureCode           String?
+  failureMessage        String?
+  // Metadata
+  metadata              Json?
+  ipAddress             String?
+  processedAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  refunds               PaymentRefund[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([providerTransactionId])
+}
+
+model PaymentRefund {
+  id               String                   @id @default(cuid())
+  transactionId    String
+  transaction      PaymentTransaction       @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount           Decimal                  @db.Decimal(19, 4)
+  reason           String?
+  status           PaymentTransactionStatus @default(PENDING)
+  providerRefundId String? // Stripe refund ID or Square refund ID
+  failureCode      String?
+  failureMessage   String?
+  processedAt      DateTime?
+  createdBy        String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([transactionId])
+}
+
+// ============================================================================
+// PHASE 11: PAYROLL SYSTEM
+// ============================================================================
+
+enum PayFrequency {
+  WEEKLY
+  BIWEEKLY
+  SEMIMONTHLY
+  MONTHLY
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  CALCULATING
+  PENDING_APPROVAL
+  APPROVED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  ERROR
+}
+
+enum PaycheckStatus {
+  PENDING
+  CALCULATED
+  APPROVED
+  PAID
+  VOIDED
+}
+
+enum PayrollDeductionType {
+  FEDERAL_TAX
+  STATE_TAX
+  LOCAL_TAX
+  SOCIAL_SECURITY
+  MEDICARE
+  RETIREMENT_401K
+  RETIREMENT_IRA
+  HEALTH_INSURANCE
+  DENTAL_INSURANCE
+  VISION_INSURANCE
+  LIFE_INSURANCE
+  HSA
+  FSA
+  GARNISHMENT
+  CHILD_SUPPORT
+  UNION_DUES
+  OTHER_PRETAX
+  OTHER_POSTTAX
+}
+
+enum W2Status {
+  DRAFT
+  GENERATED
+  SENT
+  CORRECTED
+}
+
+model PayrollSettings {
+  id                     String       @id @default(cuid())
+  organizationId         String       @unique
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payFrequency           PayFrequency @default(BIWEEKLY)
+  defaultPayDay          Int          @default(5) // 1=Monday, 5=Friday
+  federalEIN             String?
+  stateEINs              Json? // { "CA": "123-456-789", "NY": "..." }
+  // Tax deposit schedule
+  federalDepositSchedule String? // SEMIWEEKLY, MONTHLY
+  // Bank account for payroll
+  payrollBankAccountId   String?
+  // Direct deposit settings
+  directDepositEnabled   Boolean      @default(false)
+  // Overtime rules
+  overtimeThreshold      Decimal      @default(40) @db.Decimal(10, 2)
+  overtimeMultiplier     Decimal      @default(1.5) @db.Decimal(5, 2)
+  // Tax tables version
+  federalTaxTableYear    Int?
+  stateTaxTableYear      Int?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  payrollRuns            PayrollRun[]
+}
+
+model PayrollRun {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  settingsId         String
+  settings           PayrollSettings    @relation(fields: [settingsId], references: [id])
+  runNumber          String
+  periodStart        DateTime
+  periodEnd          DateTime
+  payDate            DateTime
+  status             PayrollRunStatus   @default(DRAFT)
+  // Totals
+  totalGrossPay      Decimal            @default(0) @db.Decimal(19, 4)
+  totalDeductions    Decimal            @default(0) @db.Decimal(19, 4)
+  totalTaxes         Decimal            @default(0) @db.Decimal(19, 4)
+  totalNetPay        Decimal            @default(0) @db.Decimal(19, 4)
+  totalEmployerTaxes Decimal            @default(0) @db.Decimal(19, 4)
+  employeeCount      Int                @default(0)
+  // Processing
+  calculatedAt       DateTime?
+  approvedAt         DateTime?
+  approvedBy         String?
+  processedAt        DateTime?
+  journalId          String? // Link to accounting journal entry
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  paychecks          Paycheck[]
+  payrollTaxFilings  PayrollTaxFiling[]
+
+  @@unique([organizationId, runNumber])
+  @@index([status])
+  @@index([payDate])
+}
+
+model Paycheck {
+  id                    String              @id @default(cuid())
+  payrollRunId          String
+  payrollRun            PayrollRun          @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee            @relation(fields: [employeeId], references: [id])
+  checkNumber           String?
+  status                PaycheckStatus      @default(PENDING)
+  // Hours
+  regularHours          Decimal             @default(0) @db.Decimal(10, 2)
+  overtimeHours         Decimal             @default(0) @db.Decimal(10, 2)
+  ptoHours              Decimal             @default(0) @db.Decimal(10, 2)
+  holidayHours          Decimal             @default(0) @db.Decimal(10, 2)
+  sickHours             Decimal             @default(0) @db.Decimal(10, 2)
+  // Pay rates
+  regularRate           Decimal             @db.Decimal(12, 4)
+  overtimeRate          Decimal?            @db.Decimal(12, 4)
+  // Earnings
+  regularPay            Decimal             @default(0) @db.Decimal(19, 4)
+  overtimePay           Decimal             @default(0) @db.Decimal(19, 4)
+  ptoPay                Decimal             @default(0) @db.Decimal(19, 4)
+  holidayPay            Decimal             @default(0) @db.Decimal(19, 4)
+  sickPay               Decimal             @default(0) @db.Decimal(19, 4)
+  bonusPay              Decimal             @default(0) @db.Decimal(19, 4)
+  commissionPay         Decimal             @default(0) @db.Decimal(19, 4)
+  otherEarnings         Decimal             @default(0) @db.Decimal(19, 4)
+  grossPay              Decimal             @default(0) @db.Decimal(19, 4)
+  // Totals
+  totalDeductions       Decimal             @default(0) @db.Decimal(19, 4)
+  totalTaxes            Decimal             @default(0) @db.Decimal(19, 4)
+  netPay                Decimal             @default(0) @db.Decimal(19, 4)
+  // Payment method
+  paymentMethod         String              @default("CHECK") // CHECK, DIRECT_DEPOSIT
+  bankAccountId         String? // Employee's bank account
+  // Period tax amounts (for filings)
+  federalTax            Decimal?            @db.Decimal(19, 4)
+  socialSecurityTax     Decimal?            @db.Decimal(19, 4)
+  medicareTax           Decimal?            @db.Decimal(19, 4)
+  additionalMedicareTax Decimal?            @db.Decimal(19, 4)
+  // YTD totals (for tax calculations)
+  ytdGrossPay           Decimal             @default(0) @db.Decimal(19, 4)
+  ytdFederalTax         Decimal             @default(0) @db.Decimal(19, 4)
+  ytdStateTax           Decimal             @default(0) @db.Decimal(19, 4)
+  ytdSocialSecurity     Decimal             @default(0) @db.Decimal(19, 4)
+  ytdMedicare           Decimal             @default(0) @db.Decimal(19, 4)
+  // Memo
+  memo                  String?
+  paidAt                DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  deductions            PaycheckDeduction[]
+  taxes                 PaycheckTax[]
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model PaycheckDeduction {
+  id                  String               @id @default(cuid())
+  paycheckId          String
+  paycheck            Paycheck             @relation(fields: [paycheckId], references: [id], onDelete: Cascade)
+  type                PayrollDeductionType
+  name                String // e.g., "401k - Fidelity", "Health - Blue Cross"
+  amount              Decimal              @db.Decimal(19, 4)
+  isPreTax            Boolean              @default(true)
+  isEmployerMatch     Boolean              @default(false)
+  employerMatchAmount Decimal?             @db.Decimal(19, 4)
+  ytdAmount           Decimal              @default(0) @db.Decimal(19, 4)
+  createdAt           DateTime             @default(now())
+
+  @@index([paycheckId])
+  @@index([type])
+}
+
+model PaycheckTax {
+  id              String   @id @default(cuid())
+  paycheckId      String
+  paycheck        Paycheck @relation(fields: [paycheckId], references: [id], onDelete: Cascade)
+  taxType         String // FEDERAL, STATE_CA, STATE_NY, FICA_SS, FICA_MED, LOCAL, etc.
+  jurisdiction    String? // State code or locality
+  taxableWages    Decimal  @db.Decimal(19, 4)
+  taxAmount       Decimal  @db.Decimal(19, 4)
+  employerAmount  Decimal  @default(0) @db.Decimal(19, 4) // Employer portion (FICA)
+  ytdTaxableWages Decimal  @default(0) @db.Decimal(19, 4)
+  ytdTaxAmount    Decimal  @default(0) @db.Decimal(19, 4)
+  createdAt       DateTime @default(now())
+
+  @@index([paycheckId])
+  @@index([taxType])
+}
+
+model EmployeeDeductionSetup {
+  id                   String               @id @default(cuid())
+  employeeId           String
+  employee             Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type                 PayrollDeductionType
+  name                 String
+  amount               Decimal?             @db.Decimal(19, 4)
+  percentage           Decimal?             @db.Decimal(5, 4) // As decimal, e.g., 0.06 for 6%
+  isPercentage         Boolean              @default(false)
+  isPreTax             Boolean              @default(true)
+  hasEmployerMatch     Boolean              @default(false)
+  employerMatchPercent Decimal?             @db.Decimal(5, 4)
+  employerMatchLimit   Decimal?             @db.Decimal(19, 4)
+  annualLimit          Decimal?             @db.Decimal(19, 4)
+  startDate            DateTime?
+  endDate              DateTime?
+  isActive             Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([employeeId])
+  @@index([type])
+}
+
+model W2Form {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  employeeId            String
+  employee              Employee  @relation(fields: [employeeId], references: [id])
+  taxYear               Int
+  status                W2Status  @default(DRAFT)
+  // Box 1-20 data
+  wagesTipsOther        Decimal   @db.Decimal(19, 4) // Box 1
+  federalTaxWithheld    Decimal   @db.Decimal(19, 4) // Box 2
+  socialSecurityWages   Decimal   @db.Decimal(19, 4) // Box 3
+  socialSecurityTax     Decimal   @db.Decimal(19, 4) // Box 4
+  medicareWages         Decimal   @db.Decimal(19, 4) // Box 5
+  medicareTax           Decimal   @db.Decimal(19, 4) // Box 6
+  socialSecurityTips    Decimal   @default(0) @db.Decimal(19, 4) // Box 7
+  allocatedTips         Decimal   @default(0) @db.Decimal(19, 4) // Box 8
+  dependentCareBenefits Decimal   @default(0) @db.Decimal(19, 4) // Box 10
+  nonqualifiedPlans     Decimal   @default(0) @db.Decimal(19, 4) // Box 11
+  box12Data             Json? // Array of {code, amount} for Box 12a-d
+  statutoryEmployee     Boolean   @default(false) // Box 13
+  retirementPlan        Boolean   @default(false) // Box 13
+  thirdPartySickPay     Boolean   @default(false) // Box 13
+  other                 Json? // Box 14
+  // State/Local
+  stateWages            Json? // Array of {state, wages, tax} for Box 15-17
+  localWages            Json? // Array of {locality, wages, tax} for Box 18-20
+  // Control numbers
+  controlNumber         String?
+  // Printing/Filing
+  generatedAt           DateTime?
+  sentAt                DateTime?
+  sentMethod            String? // EMAIL, MAIL, PORTAL
+  correctedFromId       String? // If this is a W-2c
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([organizationId, employeeId, taxYear])
+  @@index([taxYear])
+  @@index([status])
+}
+
+// ============================================================================
+// PHASE 12: SALES TAX
+// ============================================================================
+
+enum TaxJurisdictionType {
+  FEDERAL
+  STATE
+  COUNTY
+  CITY
+  DISTRICT
+  SPECIAL
+}
+
+enum TaxFilingFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  SEMIANNUALLY
+}
+
+enum TaxLiabilityStatus {
+  ACCRUING
+  DUE
+  FILED
+  PAID
+  OVERDUE
+}
+
+model SalesTaxRate {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name              String // e.g., "California State Tax", "LA County Tax"
+  jurisdiction      String // State code, county name, city name
+  jurisdictionType  TaxJurisdictionType
+  rate              Decimal             @db.Decimal(8, 6) // e.g., 0.0725 for 7.25%
+  isCompound        Boolean             @default(false) // Tax on tax
+  effectiveDate     DateTime
+  endDate           DateTime?
+  isActive          Boolean             @default(true)
+  // Geographic scope
+  zipCodes          String[] // Applicable ZIP codes
+  countyFips        String? // FIPS code for county
+  stateFips         String? // FIPS code for state
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  liabilities       SalesTaxLiability[]
+  productTaxability ProductTaxability[]
+
+  @@index([organizationId])
+  @@index([jurisdictionType])
+  @@index([effectiveDate])
+}
+
+model TaxAgency {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String // e.g., "California CDTFA", "IRS"
+  jurisdiction       String
+  jurisdictionType   TaxJurisdictionType
+  filingFrequency    TaxFilingFrequency
+  accountNumber      String? // Agency account number
+  filingMethod       String? // ONLINE, PAPER, EDI
+  paymentMethod      String? // ACH, CHECK, CREDIT_CARD
+  // Due dates
+  dueDayOfMonth      Int? // Day of month filing is due
+  gracePeriodDays    Int                 @default(0)
+  // Linked GL account for liability
+  liabilityAccountId String?
+  expenseAccountId   String?
+  // Contact info
+  website            String?
+  phone              String?
+  mailingAddress     Json?
+  notes              String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  liabilities        SalesTaxLiability[]
+  filings            SalesTaxFiling[]
+
+  @@unique([organizationId, name])
+  @@index([jurisdictionType])
+}
+
+model SalesTaxLiability {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agencyId         String
+  agency           TaxAgency          @relation(fields: [agencyId], references: [id])
+  taxRateId        String?
+  taxRate          SalesTaxRate?      @relation(fields: [taxRateId], references: [id])
+  periodStart      DateTime
+  periodEnd        DateTime
+  // Amounts
+  taxableSales     Decimal            @default(0) @db.Decimal(19, 4)
+  exemptSales      Decimal            @default(0) @db.Decimal(19, 4)
+  taxCollected     Decimal            @default(0) @db.Decimal(19, 4)
+  adjustments      Decimal            @default(0) @db.Decimal(19, 4)
+  amountDue        Decimal            @default(0) @db.Decimal(19, 4)
+  amountPaid       Decimal            @default(0) @db.Decimal(19, 4)
+  // Status
+  status           TaxLiabilityStatus @default(ACCRUING)
+  dueDate          DateTime
+  // Linking
+  journalId        String? // Accrual journal entry
+  paymentJournalId String? // Payment journal entry
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  filings          SalesTaxFiling[]
+
+  @@index([organizationId])
+  @@index([agencyId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model SalesTaxFiling {
+  id                 String            @id @default(cuid())
+  liabilityId        String
+  liability          SalesTaxLiability @relation(fields: [liabilityId], references: [id], onDelete: Cascade)
+  agencyId           String
+  agency             TaxAgency         @relation(fields: [agencyId], references: [id])
+  filedDate          DateTime
+  filedBy            String
+  filingMethod       String // ONLINE, PAPER, EDI
+  confirmationNumber String?
+  // Payment
+  paymentDate        DateTime?
+  paymentAmount      Decimal?          @db.Decimal(19, 4)
+  paymentMethod      String?
+  paymentReference   String?
+  // Filing data
+  formData           Json? // Submitted form data
+  attachments        String[] // Document IDs
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([liabilityId])
+  @@index([filedDate])
+}
+
+model ProductTaxability {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxRateId       String
+  taxRate         SalesTaxRate @relation(fields: [taxRateId], references: [id], onDelete: Cascade)
+  // Can link to inventory item or product category
+  inventoryItemId String?
+  productCategory String?
+  // Taxability
+  isTaxable       Boolean      @default(true)
+  isExempt        Boolean      @default(false)
+  exemptionCode   String? // Tax exemption code
+  exemptionReason String?
+  // Special rates
+  specialRate     Decimal?     @db.Decimal(8, 6)
+  effectiveDate   DateTime     @default(now())
+  endDate         DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([taxRateId])
+}
+
+// ============================================================================
+// PHASE 13: FIXED ASSETS & DEPRECIATION
+// ============================================================================
+
+enum AssetType {
+  BUILDING
+  BUILDING_IMPROVEMENT
+  LAND
+  LAND_IMPROVEMENT
+  MACHINERY
+  EQUIPMENT
+  FURNITURE
+  VEHICLE
+  COMPUTER_EQUIPMENT
+  SOFTWARE
+  LEASEHOLD_IMPROVEMENT
+  INTANGIBLE
+  OTHER
+}
+
+enum DepreciationMethod {
+  STRAIGHT_LINE
+  DECLINING_BALANCE
+  DOUBLE_DECLINING
+  SUM_OF_YEARS
+  UNITS_OF_PRODUCTION
+  MACRS_GDS
+  MACRS_ADS
+  SECTION_179
+  BONUS_DEPRECIATION
+  NO_DEPRECIATION
+}
+
+enum AssetStatus {
+  ACTIVE
+  FULLY_DEPRECIATED
+  DISPOSED
+  SOLD
+  WRITTEN_OFF
+  IMPAIRED
+}
+
+enum DisposalMethod {
+  SALE
+  TRADE_IN
+  SCRAPPED
+  DONATED
+  STOLEN
+  DESTROYED
+  WRITTEN_OFF
+}
+
+model FixedAsset {
+  id                      String                @id @default(cuid())
+  organizationId          String
+  organization            Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assetNumber             String
+  name                    String
+  description             String?
+  assetType               AssetType
+  status                  AssetStatus           @default(ACTIVE)
+  // Acquisition
+  acquisitionDate         DateTime
+  acquisitionCost         Decimal               @db.Decimal(19, 4)
+  acquisitionMethod       String? // PURCHASE, LEASE, GIFT, EXCHANGE
+  vendorId                String?
+  purchaseOrderId         String?
+  invoiceNumber           String?
+  // Location and assignment
+  location                String?
+  department              String?
+  assignedTo              String?
+  serialNumber            String?
+  modelNumber             String?
+  manufacturer            String?
+  // Warranty
+  warrantyExpiration      DateTime?
+  warrantyNotes           String?
+  // Insurance
+  insuredValue            Decimal?              @db.Decimal(19, 4)
+  insurancePolicy         String?
+  // Current values
+  currentBookValue        Decimal               @db.Decimal(19, 4)
+  accumulatedDepreciation Decimal               @default(0) @db.Decimal(19, 4)
+  // Notes and attachments
+  notes                   String?
+  tags                    String[]
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  accounts                FixedAssetAccount?
+  depreciation            DepreciationSchedule?
+  entries                 DepreciationEntry[]
+  disposal                AssetDisposal?
+
+  @@unique([organizationId, assetNumber])
+  @@index([assetType])
+  @@index([status])
+  @@index([acquisitionDate])
+}
+
+model FixedAssetAccount {
+  id                           String     @id @default(cuid())
+  assetId                      String     @unique
+  asset                        FixedAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  // GL Account links
+  assetAccountId               String // Fixed Asset account (debit on purchase)
+  accumulatedDepAccountId      String // Accumulated Depreciation (credit)
+  depreciationExpenseAccountId String // Depreciation Expense (debit)
+  gainLossAccountId            String? // Gain/Loss on Disposal
+  createdAt                    DateTime   @default(now())
+  updatedAt                    DateTime   @updatedAt
+}
+
+model DepreciationSchedule {
+  id                  String              @id @default(cuid())
+  assetId             String              @unique
+  asset               FixedAsset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  method              DepreciationMethod
+  // Book depreciation
+  usefulLifeMonths    Int // In months
+  salvageValue        Decimal             @default(0) @db.Decimal(19, 4)
+  // Tax depreciation (can differ from book)
+  taxMethod           DepreciationMethod?
+  taxUsefulLifeMonths Int?
+  taxSalvageValue     Decimal?            @db.Decimal(19, 4)
+  // MACRS specific
+  macrsClass          String? // 3, 5, 7, 10, 15, 20, 27.5, 39 year
+  macrsConvention     String? // HALF_YEAR, MID_QUARTER, MID_MONTH
+  // Section 179 / Bonus
+  section179Amount    Decimal?            @db.Decimal(19, 4)
+  bonusDepreciation   Decimal?            @db.Decimal(19, 4)
+  // Calculation settings
+  startDate           DateTime
+  endDate             DateTime?
+  priorDepreciation   Decimal             @default(0) @db.Decimal(19, 4) // If transferred in
+  // Status
+  isActive            Boolean             @default(true)
+  lastCalculatedDate  DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([method])
+}
+
+model DepreciationEntry {
+  id                 String     @id @default(cuid())
+  assetId            String
+  asset              FixedAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  periodDate         DateTime // First day of period
+  periodType         PeriodType // MONTH, QUARTER, YEAR
+  // Book values
+  depreciationAmount Decimal    @db.Decimal(19, 4)
+  accumulatedTotal   Decimal    @db.Decimal(19, 4)
+  bookValue          Decimal    @db.Decimal(19, 4)
+  // Tax values (if different)
+  taxDepreciation    Decimal?   @db.Decimal(19, 4)
+  taxAccumulated     Decimal?   @db.Decimal(19, 4)
+  taxBookValue       Decimal?   @db.Decimal(19, 4)
+  // Journal entry
+  journalId          String?
+  isPosted           Boolean    @default(false)
+  postedAt           DateTime?
+  postedBy           String?
+  // Audit
+  calculationMethod  String? // How this was calculated
+  notes              String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([assetId, periodDate])
+  @@index([periodDate])
+  @@index([isPosted])
+}
+
+model AssetDisposal {
+  id                       String         @id @default(cuid())
+  assetId                  String         @unique
+  asset                    FixedAsset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  disposalDate             DateTime
+  disposalMethod           DisposalMethod
+  // Sale details
+  salePrice                Decimal?       @db.Decimal(19, 4)
+  saleExpenses             Decimal?       @db.Decimal(19, 4)
+  netProceeds              Decimal?       @db.Decimal(19, 4)
+  buyerName                String?
+  buyerContact             Json?
+  // Book values at disposal
+  bookValueAtDisposal      Decimal        @db.Decimal(19, 4)
+  accumulatedDepAtDisposal Decimal        @db.Decimal(19, 4)
+  // Gain/Loss
+  gainLoss                 Decimal        @db.Decimal(19, 4) // Positive = gain, Negative = loss
+  isOrdinaryIncome         Boolean        @default(false) // vs capital gain
+  // Trade-in
+  tradeInAssetId           String? // If traded for another asset
+  tradeInAllowance         Decimal?       @db.Decimal(19, 4)
+  // Journal entry
+  journalId                String?
+  // Documentation
+  notes                    String?
+  attachments              String[]
+  approvedBy               String?
+  approvedAt               DateTime?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  @@index([disposalDate])
+  @@index([disposalMethod])
+}
+
+// ============================================================================
+// PHASE 14: BANK FEEDS (Plaid + Yodlee)
+// ============================================================================
+
+enum BankFeedProvider {
+  PLAID
+  YODLEE
+  STRIPE
+  MANUAL
+}
+
+enum BankFeedConnectionStatus {
+  PENDING
+  CONNECTED
+  REQUIRES_REAUTH
+  ERROR
+  DISCONNECTED
+}
+
+enum BankFeedSyncStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+model BankFeedConnection {
+  id                      String                   @id @default(cuid())
+  bankAccountId           String
+  bankAccount             BankAccount              @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  provider                BankFeedProvider
+  status                  BankFeedConnectionStatus @default(PENDING)
+  // Plaid specific
+  plaidItemId             String?
+  plaidAccessToken        String? // Encrypted
+  plaidAccountId          String?
+  // Yodlee specific
+  yodleeAccountId         String?
+  yodleeProviderAccountId String?
+  // Connection metadata
+  institutionId           String?
+  institutionName         String?
+  institutionLogo         String?
+  // Status tracking
+  lastSuccessfulSync      DateTime?
+  lastAttemptedSync       DateTime?
+  consecutiveFailures     Int                      @default(0)
+  errorCode               String?
+  errorMessage            String?
+  // Settings
+  autoSync                Boolean                  @default(true)
+  syncFrequencyHours      Int                      @default(24)
+  syncHistoryDays         Int                      @default(90)
+  // Consent
+  consentExpiresAt        DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  syncs                   BankFeedSync[]
+
+  @@unique([bankAccountId, provider])
+  @@index([provider])
+  @@index([status])
+}
+
+model BankFeedSync {
+  id                    String             @id @default(cuid())
+  connectionId          String
+  connection            BankFeedConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  syncType              String // FULL, INCREMENTAL, MANUAL
+  status                BankFeedSyncStatus @default(PENDING)
+  // Sync window
+  fromDate              DateTime?
+  toDate                DateTime?
+  // Results
+  transactionsFound     Int                @default(0)
+  transactionsNew       Int                @default(0)
+  transactionsUpdated   Int                @default(0)
+  transactionsDuplicate Int                @default(0)
+  // Timing
+  startedAt             DateTime           @default(now())
+  completedAt           DateTime?
+  durationMs            Int?
+  // Errors
+  errorCode             String?
+  errorMessage          String?
+  errorDetails          Json?
+  // Metadata from provider
+  providerCursor        String? // For incremental sync
+  providerResponse      Json?
+  createdAt             DateTime           @default(now())
+
+  @@index([connectionId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model BankFeedRule {
+  id                  String               @id @default(cuid())
+  organizationId      String
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  isActive            Boolean              @default(true)
+  priority            Int                  @default(100) // Lower = higher priority
+  // Matching conditions (all must match)
+  descriptionContains String?
+  descriptionPattern  String? // Regex pattern
+  matchPattern        String?
+  matchType           String?
+  merchantName        String?
+  minAmount           Decimal?             @db.Decimal(19, 4)
+  maxAmount           Decimal?             @db.Decimal(19, 4)
+  transactionType     BankTransactionType?
+  // Actions
+  accountId           String? // GL account to categorize to
+  categoryAccountId   String?
+  taxClassification   String? // Tax classification to apply
+  vendorId            String? // Vendor to assign
+  customerId          String? // Customer to assign
+  classId             String? // Class to assign
+  locationId          String? // Location to assign
+  memo                String? // Memo to add
+  // Auto-actions
+  autoApprove         Boolean              @default(false)
+  autoCreateJournal   Boolean              @default(false)
+  autoMatch           Boolean              @default(true)
+  // Stats
+  timesMatched        Int                  @default(0)
+  lastMatchedAt       DateTime?
+  createdBy           String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([priority])
+}
+
+// ============================================================================
+// PHASE 15: 1099 FILING
+// ============================================================================
+
+enum Form1099Type {
+  NEC // Non-Employee Compensation
+  MISC // Miscellaneous Income
+  INT // Interest Income
+  DIV // Dividends
+  B // Proceeds from Broker
+  S // Proceeds from Real Estate
+  K // Partnership Income
+  R // Distributions from Retirement
+  G // Government Payments
+}
+
+enum Form1099Status {
+  DRAFT
+  GENERATED
+  REVIEWED
+  SENT_TO_RECIPIENT
+  FILED_WITH_IRS
+  ACCEPTED
+  REJECTED
+  CORRECTED
+}
+
+model Form1099 {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorId           String
+  vendor             Vendor           @relation(fields: [vendorId], references: [id])
+  taxYear            Int
+  formType           Form1099Type
+  status             Form1099Status   @default(DRAFT)
+  // Recipient info (from vendor, can be overridden)
+  recipientName      String
+  recipientTin       String? // SSN or EIN (encrypted)
+  recipientTinType   String? // SSN, EIN
+  recipientAddress   Json
+  // Payer info
+  payerName          String
+  payerTin           String
+  payerAddress       Json
+  // Form control
+  formNumber         String? // Sequential number for this org/year
+  correctedFormId    String? // If this is a correction
+  isVoid             Boolean          @default(false)
+  // Totals (calculated from lines)
+  totalAmount        Decimal          @default(0) @db.Decimal(19, 4)
+  federalTaxWithheld Decimal          @default(0) @db.Decimal(19, 4)
+  stateTaxWithheld   Decimal          @default(0) @db.Decimal(19, 4)
+  // State filing
+  stateCode          String?
+  stateIdNumber      String?
+  stateIncome        Decimal?         @db.Decimal(19, 4)
+  // Dates
+  generatedAt        DateTime?
+  sentToRecipientAt  DateTime?
+  filedWithIrsAt     DateTime?
+  // Filing response
+  irsSubmissionId    String?
+  irsAcceptedAt      DateTime?
+  irsRejectionReason String?
+  // Metadata
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  lines              Form1099Line[]
+  filings            Form1099Filing[]
+
+  @@unique([organizationId, vendorId, taxYear, formType])
+  @@index([taxYear])
+  @@index([status])
+  @@index([formType])
+}
+
+model Form1099Line {
+  id          String   @id @default(cuid())
+  form1099Id  String
+  form1099    Form1099 @relation(fields: [form1099Id], references: [id], onDelete: Cascade)
+  boxNumber   String // "1", "2", "3", etc.
+  boxLabel    String // Description of what this box represents
+  amount      Decimal  @db.Decimal(19, 4)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([form1099Id, boxNumber])
+}
+
+model Form1099Filing {
+  id                   String    @id @default(cuid())
+  form1099Id           String
+  form1099             Form1099  @relation(fields: [form1099Id], references: [id], onDelete: Cascade)
+  filingType           String // RECIPIENT, IRS, STATE
+  method               String // EFILE, PAPER, EMAIL
+  filedAt              DateTime
+  filedBy              String
+  confirmationNumber   String?
+  // For e-filing
+  transmissionId       String?
+  transmissionStatus   String?
+  transmissionResponse Json?
+  // For mailing
+  trackingNumber       String?
+  mailedAt             DateTime?
+  deliveredAt          DateTime?
+  // Document
+  documentPath         String? // PDF path
+  notes                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([form1099Id])
+  @@index([filingType])
+}
+
+// ============================================================================
+// PHASE 16: CREDIT MEMOS & VENDOR CREDITS
+// ============================================================================
+
+enum CreditMemoStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_APPLIED
+  APPLIED
+  VOID
+}
+
+model CreditMemo {
+  id                String                  @id @default(cuid())
+  organizationId    String
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer                @relation(fields: [customerId], references: [id])
+  creditNumber      String
+  creditDate        DateTime
+  status            CreditMemoStatus        @default(DRAFT)
+  // Amounts
+  subtotal          Decimal                 @db.Decimal(19, 4)
+  taxAmount         Decimal                 @default(0) @db.Decimal(19, 4)
+  totalAmount       Decimal                 @db.Decimal(19, 4)
+  appliedAmount     Decimal                 @default(0) @db.Decimal(19, 4)
+  remainingAmount   Decimal                 @db.Decimal(19, 4)
+  // Reference
+  originalInvoiceId String? // If credit is for specific invoice
+  reason            String?
+  notes             String?
+  // Accounting
+  journalId         String?
+  // Metadata
+  createdBy         String
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  lineItems         CreditMemoLine[]
+  applications      CreditMemoApplication[]
+
+  @@unique([organizationId, creditNumber])
+  @@index([customerId])
+  @@index([status])
+}
+
+model CreditMemoLine {
+  id           String     @id @default(cuid())
+  creditMemoId String
+  creditMemo   CreditMemo @relation(fields: [creditMemoId], references: [id], onDelete: Cascade)
+  lineNumber   Int
+  description  String
+  quantity     Decimal    @db.Decimal(12, 4)
+  unitPrice    Decimal    @db.Decimal(19, 4)
+  amount       Decimal    @db.Decimal(19, 4)
+  accountId    String
+  taxable      Boolean    @default(true)
+  classId      String?
+  locationId   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([creditMemoId, lineNumber])
+}
+
+model CreditMemoApplication {
+  id           String     @id @default(cuid())
+  creditMemoId String
+  creditMemo   CreditMemo @relation(fields: [creditMemoId], references: [id], onDelete: Cascade)
+  invoiceId    String
+  invoice      Invoice    @relation(fields: [invoiceId], references: [id])
+  amount       Decimal    @db.Decimal(19, 4)
+  appliedDate  DateTime   @default(now())
+  appliedBy    String
+  journalId    String?
+  createdAt    DateTime   @default(now())
+
+  @@unique([creditMemoId, invoiceId])
+  @@index([invoiceId])
+}
+
+enum VendorCreditStatus {
+  DRAFT
+  RECEIVED
+  PARTIALLY_APPLIED
+  APPLIED
+  VOID
+}
+
+model VendorCredit {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorId           String
+  vendor             Vendor                    @relation(fields: [vendorId], references: [id])
+  creditNumber       String
+  creditDate         DateTime
+  vendorCreditNumber String? // Vendor's reference number
+  status             VendorCreditStatus        @default(DRAFT)
+  // Amounts
+  subtotal           Decimal                   @db.Decimal(19, 4)
+  taxAmount          Decimal                   @default(0) @db.Decimal(19, 4)
+  totalAmount        Decimal                   @db.Decimal(19, 4)
+  appliedAmount      Decimal                   @default(0) @db.Decimal(19, 4)
+  remainingAmount    Decimal                   @db.Decimal(19, 4)
+  // Reference
+  originalBillId     String? // If credit is for specific bill
+  reason             String?
+  notes              String?
+  // Accounting
+  journalId          String?
+  // Metadata
+  createdBy          String
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  lineItems          VendorCreditLine[]
+  applications       VendorCreditApplication[]
+
+  @@unique([organizationId, creditNumber])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model VendorCreditLine {
+  id             String       @id @default(cuid())
+  vendorCreditId String
+  vendorCredit   VendorCredit @relation(fields: [vendorCreditId], references: [id], onDelete: Cascade)
+  lineNumber     Int
+  description    String
+  quantity       Decimal      @db.Decimal(12, 4)
+  unitPrice      Decimal      @db.Decimal(19, 4)
+  amount         Decimal      @db.Decimal(19, 4)
+  accountId      String
+  taxable        Boolean      @default(true)
+  classId        String?
+  locationId     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([vendorCreditId, lineNumber])
+}
+
+model VendorCreditApplication {
+  id             String       @id @default(cuid())
+  vendorCreditId String
+  vendorCredit   VendorCredit @relation(fields: [vendorCreditId], references: [id], onDelete: Cascade)
+  billId         String
+  bill           Bill         @relation(fields: [billId], references: [id])
+  amount         Decimal      @db.Decimal(19, 4)
+  appliedDate    DateTime     @default(now())
+  appliedBy      String
+  journalId      String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([vendorCreditId, billId])
+  @@index([billId])
+}
+
+// ============================================================================
+// PHASE 17: RECURRING TRANSACTIONS
+// ============================================================================
+
+enum RecurringType {
+  INVOICE
+  BILL
+  JOURNAL
+  EXPENSE
+  TRANSFER
+}
+
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUALLY
+  ANNUALLY
+  CUSTOM
+}
+
+enum RecurringStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum RecurringTransactionStatus {
+  SCHEDULED
+  GENERATED
+  SKIPPED
+  FAILED
+}
+
+model RecurringTemplate {
+  id               String                 @id @default(cuid())
+  organizationId   String
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  type             RecurringType
+  status           RecurringStatus        @default(ACTIVE)
+  // Template data (stores full entity structure)
+  templateData     Json // Full invoice/bill/journal data
+  // For invoices/bills
+  customerId       String?
+  vendorId         String?
+  // Options
+  autoSend         Boolean                @default(false) // Auto-email invoices
+  autoApprove      Boolean                @default(false) // Auto-approve bills
+  autoPost         Boolean                @default(false) // Auto-post journals
+  // Notifications
+  notifyBeforeDays Int? // Notify X days before
+  notifyOnCreation Boolean                @default(true)
+  // Notes
+  notes            String?
+  createdBy        String
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  schedule         RecurringSchedule?
+  transactions     RecurringTransaction[]
+
+  @@unique([organizationId, name])
+  @@index([type])
+  @@index([status])
+}
+
+model RecurringSchedule {
+  id              String             @id @default(cuid())
+  templateId      String             @unique
+  template        RecurringTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  frequency       RecurringFrequency
+  // Timing
+  interval        Int                @default(1) // Every X periods
+  dayOfWeek       Int? // 0-6 for weekly
+  dayOfMonth      Int? // 1-31 for monthly
+  monthOfYear     Int? // 1-12 for annual
+  // Custom pattern (cron-like)
+  customPattern   String?
+  // Date range
+  startDate       DateTime
+  endDate         DateTime?
+  maxOccurrences  Int? // Stop after X occurrences
+  occurrenceCount Int                @default(0)
+  // Next run
+  nextRunDate     DateTime
+  lastRunDate     DateTime?
+  lastRunStatus   String?
+  // End conditions
+  endAfterAmount  Decimal?           @db.Decimal(19, 4) // Stop after total reaches
+  totalGenerated  Decimal            @default(0) @db.Decimal(19, 4)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([nextRunDate])
+}
+
+model RecurringTransaction {
+  id                  String                     @id @default(cuid())
+  templateId          String
+  template            RecurringTemplate          @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  scheduledDate       DateTime
+  status              RecurringTransactionStatus @default(SCHEDULED)
+  // Generated entity
+  generatedEntityType String? // Invoice, Bill, Journal, etc.
+  generatedEntityId   String? // ID of created entity
+  // Processing
+  processedAt         DateTime?
+  processedBy         String? // User or "SYSTEM"
+  // Error handling
+  failureReason       String?
+  retryCount          Int                        @default(0)
+  // Skip info
+  skippedAt           DateTime?
+  skippedBy           String?
+  skipReason          String?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  @@index([templateId])
+  @@index([scheduledDate])
+  @@index([status])
+}
+
+// ============================================================================
+// PHASE 18: CLASS & LOCATION TRACKING
+// ============================================================================
+
+model Class {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String?
+  description    String?
+  parentId       String?
+  parent         Class?       @relation("ClassHierarchy", fields: [parentId], references: [id])
+  children       Class[]      @relation("ClassHierarchy")
+  isActive       Boolean      @default(true)
+  // For reporting
+  fullPath       String? // e.g., "Sales > Online > US"
+  level          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Back-relations
+  journalLineEntries JournalLine[]     @relation("JournalLineClass")
+  invoiceLineItems   InvoiceLineItem[] @relation("InvoiceLineClass")
+  billLineItems      BillLineItem[]    @relation("BillLineClass")
+
+  @@unique([organizationId, name, parentId])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model Location {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  code             String?
+  description      String?
+  address          Json?
+  phone            String?
+  parentId         String?
+  parent           Location?    @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children         Location[]   @relation("LocationHierarchy")
+  isActive         Boolean      @default(true)
+  // For reporting
+  fullPath         String? // e.g., "US > California > Los Angeles"
+  level            Int          @default(0)
+  // Tax settings
+  defaultTaxRateId String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Back-relations
+  journalLineEntries JournalLine[]     @relation("JournalLineLocation")
+  invoiceLineItems   InvoiceLineItem[] @relation("InvoiceLineLocation")
+  billLineItems      BillLineItem[]    @relation("BillLineLocation")
+
+  @@unique([organizationId, name, parentId])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+// ============================================================================
+// PHASE 19: PROJECTS & JOB COSTING
+// ============================================================================
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  CLOSED
+}
+
+enum ProjectBillingType {
+  FIXED_PRICE
+  TIME_AND_MATERIALS
+  NOT_BILLABLE
+  RETAINER
+}
+
+model Project {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId        String?
+  customer          Customer?           @relation(fields: [customerId], references: [id])
+  projectNumber     String
+  name              String
+  description       String?
+  status            ProjectStatus       @default(PLANNING)
+  billingType       ProjectBillingType  @default(TIME_AND_MATERIALS)
+  // Dates
+  startDate         DateTime?
+  endDate           DateTime?
+  actualEndDate     DateTime?
+  // Budget
+  budgetAmount      Decimal?            @db.Decimal(19, 4)
+  budgetHours       Decimal?            @db.Decimal(10, 2)
+  // Billing rates
+  defaultHourlyRate Decimal?            @db.Decimal(12, 4)
+  markupPercent     Decimal?            @db.Decimal(5, 2)
+  // Fixed price details
+  fixedPriceAmount  Decimal?            @db.Decimal(19, 4)
+  // Retainer details
+  retainerAmount    Decimal?            @db.Decimal(19, 4)
+  retainerFrequency String? // MONTHLY, QUARTERLY
+  // Calculated totals (updated on changes)
+  totalBudget       Decimal             @default(0) @db.Decimal(19, 4)
+  totalCost         Decimal             @default(0) @db.Decimal(19, 4)
+  totalBilled       Decimal             @default(0) @db.Decimal(19, 4)
+  totalHours        Decimal             @default(0) @db.Decimal(10, 2)
+  billableHours     Decimal             @default(0) @db.Decimal(10, 2)
+  actualHours       Decimal?            @db.Decimal(10, 2)
+  actualCost        Decimal?            @db.Decimal(19, 4)
+  actualRevenue     Decimal?            @db.Decimal(19, 4)
+  billRate          Decimal?            @db.Decimal(12, 4)
+  completedAt       DateTime?
+  // Tracking
+  classId           String?
+  locationId        String?
+  managerId         String? // Employee ID
+  // Notes
+  notes             String?
+  tags              String[]
+  createdBy         String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  budgetLines       ProjectBudgetLine[]
+  timeEntries       ProjectTimeEntry[]
+  projectExpenses   ProjectExpense[]
+  tasks             Task[]              @relation("TaskProject")
+  timesheets        Timesheet[]         @relation("TimesheetProject")
+  expenses          Expense[]           @relation("ExpenseProject")
+  invoices          Invoice[]           @relation("ProjectInvoices")
+
+  // Back-relations
+  invoiceLineItems InvoiceLineItem[] @relation("InvoiceLineProject")
+  timesheetEntries TimesheetEntry[]  @relation("TimesheetEntryProject")
+
+  @@unique([organizationId, projectNumber])
+  @@index([customerId])
+  @@index([status])
+}
+
+model ProjectBudgetLine {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  accountId    String?
+  category     String // Labor, Materials, Subcontractors, etc.
+  description  String?
+  budgetAmount Decimal  @db.Decimal(19, 4)
+  actualAmount Decimal  @default(0) @db.Decimal(19, 4)
+  variance     Decimal  @default(0) @db.Decimal(19, 4)
+  percentUsed  Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model ProjectTimeEntry {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         Employee  @relation(fields: [employeeId], references: [id])
+  taskId           String?
+  date             DateTime
+  hours            Decimal   @db.Decimal(10, 2)
+  description      String?
+  // Billing
+  isBillable       Boolean   @default(true)
+  hourlyRate       Decimal?  @db.Decimal(12, 4)
+  amount           Decimal?  @db.Decimal(19, 4)
+  // Cost
+  costRate         Decimal?  @db.Decimal(12, 4) // Employee's actual cost
+  costAmount       Decimal?  @db.Decimal(19, 4)
+  // Invoicing
+  isInvoiced       Boolean   @default(false)
+  invoiceId        String?
+  invoicedAt       DateTime?
+  // Timesheet link
+  timesheetEntryId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([employeeId])
+  @@index([date])
+  @@index([isBillable])
+}
+
+model ProjectExpense {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  expenseId      String?
+  expense        Expense?  @relation(fields: [expenseId], references: [id])
+  date           DateTime
+  description    String
+  amount         Decimal   @db.Decimal(19, 4)
+  category       String?
+  // Billing
+  isBillable     Boolean   @default(true)
+  markupPercent  Decimal?  @db.Decimal(5, 2)
+  billableAmount Decimal?  @db.Decimal(19, 4)
+  // Invoicing
+  isInvoiced     Boolean   @default(false)
+  invoiceId      String?
+  invoicedAt     DateTime?
+  // Receipt
+  hasReceipt     Boolean   @default(false)
+  receiptPath    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([date])
+  @@index([isBillable])
+}
+
+// ============================================================================
+// PHASE 20: PROGRESS INVOICING
+// ============================================================================
+
+enum MilestoneStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  INVOICED
+  PAID
+}
+
+model ProgressInvoice {
+  id                String   @id @default(cuid())
+  invoiceId         String   @unique
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  estimateId        String
+  estimate          Estimate @relation(fields: [estimateId], references: [id])
+  sequenceNumber    Int // 1st, 2nd, 3rd progress invoice
+  // Progress tracking
+  percentComplete   Decimal  @db.Decimal(5, 2) // 0-100
+  previousBilled    Decimal  @db.Decimal(19, 4)
+  currentBilled     Decimal  @db.Decimal(19, 4)
+  totalBilled       Decimal  @db.Decimal(19, 4)
+  remainingAmount   Decimal  @db.Decimal(19, 4)
+  // Retention
+  retentionPercent  Decimal? @db.Decimal(5, 2)
+  retentionAmount   Decimal? @db.Decimal(19, 4)
+  retentionReleased Decimal? @db.Decimal(19, 4)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([estimateId])
+}
+
+model ProgressMilestone {
+  id             String          @id @default(cuid())
+  estimateId     String
+  estimate       Estimate        @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  sequenceNumber Int
+  // Amounts
+  amount         Decimal         @db.Decimal(19, 4)
+  percentOfTotal Decimal         @db.Decimal(5, 2)
+  // Status
+  status         MilestoneStatus @default(NOT_STARTED)
+  completedDate  DateTime?
+  // Invoicing
+  invoiceId      String?
+  invoicedAmount Decimal?        @db.Decimal(19, 4)
+  invoicedAt     DateTime?
+  // Due date (optional)
+  dueDate        DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([estimateId, sequenceNumber])
+  @@index([status])
+}
+
+// ============================================================================
+// PHASE 21: CUSTOMER PORTAL & STATEMENTS
+// ============================================================================
+
+model CustomerStatement {
+  id              String                  @id @default(cuid())
+  organizationId  String
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer                @relation(fields: [customerId], references: [id])
+  statementNumber String
+  statementDate   DateTime
+  periodStart     DateTime
+  periodEnd       DateTime
+  // Balances
+  openingBalance  Decimal                 @db.Decimal(19, 4)
+  totalCharges    Decimal                 @db.Decimal(19, 4)
+  totalPayments   Decimal                 @db.Decimal(19, 4)
+  totalCredits    Decimal                 @db.Decimal(19, 4)
+  closingBalance  Decimal                 @db.Decimal(19, 4)
+  // Aging
+  current         Decimal                 @default(0) @db.Decimal(19, 4)
+  days1to30       Decimal                 @default(0) @db.Decimal(19, 4)
+  days31to60      Decimal                 @default(0) @db.Decimal(19, 4)
+  days61to90      Decimal                 @default(0) @db.Decimal(19, 4)
+  over90          Decimal                 @default(0) @db.Decimal(19, 4)
+  // Delivery
+  sentAt          DateTime?
+  sentMethod      String? // EMAIL, MAIL, PORTAL
+  viewedAt        DateTime?
+  // Document
+  documentPath    String? // PDF path
+  notes           String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  lineItems       CustomerStatementLine[]
+
+  @@unique([organizationId, statementNumber])
+  @@index([customerId])
+  @@index([statementDate])
+}
+
+model CustomerStatementLine {
+  id          String            @id @default(cuid())
+  statementId String
+  statement   CustomerStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  lineNumber  Int
+  date        DateTime
+  type        String // INVOICE, PAYMENT, CREDIT_MEMO, DEBIT_MEMO
+  reference   String // Invoice number, payment reference, etc.
+  description String?
+  amount      Decimal           @db.Decimal(19, 4) // Positive = charge, Negative = payment/credit
+  balance     Decimal           @db.Decimal(19, 4) // Running balance
+  dueDate     DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@unique([statementId, lineNumber])
+}
+
+model CustomerPortalAccess {
+  id                        String              @id @default(cuid())
+  organizationId            String?
+  customerId                String              @unique
+  customer                  Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  email                     String?
+  passwordHash              String?
+  accessToken               String?
+  accessUrl                 String?
+  allowInvoiceView          Boolean?            @default(true)
+  allowPayments             Boolean?            @default(true)
+  allowEstimates            Boolean?            @default(true)
+  allowDocuments            Boolean?            @default(true)
+  lastAccessedAt            DateTime?
+  // Status
+  isActive                  Boolean             @default(true)
+  isEmailVerified           Boolean             @default(false)
+  // Session management
+  lastLoginAt               DateTime?
+  lastLoginIp               String?
+  failedLoginAttempts       Int                 @default(0)
+  lockedUntil               DateTime?
+  // Password reset
+  resetToken                String?
+  resetTokenExpires         DateTime?
+  // Settings
+  receiveEmailNotifications Boolean             @default(true)
+  // Audit
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+  invoiceViews              PortalInvoiceView[]
+
+  @@unique([organizationId, email])
+  @@index([customerId])
+}
+
+model PortalInvoiceView {
+  id             String               @id @default(cuid())
+  portalAccessId String
+  portalAccess   CustomerPortalAccess @relation(fields: [portalAccessId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        Invoice              @relation(fields: [invoiceId], references: [id])
+  viewedAt       DateTime             @default(now())
+  ipAddress      String?
+  userAgent      String?
+
+  @@index([invoiceId])
+  @@index([viewedAt])
+}
+
+// ============================================================================
+// PHASE 22: EMAIL TEMPLATES & NOTIFICATIONS
+// ============================================================================
+
+enum EmailTemplateType {
+  INVOICE
+  INVOICE_REMINDER
+  INVOICE_OVERDUE
+  STATEMENT
+  ESTIMATE
+  PAYMENT_RECEIPT
+  PAYMENT_THANK_YOU
+  PORTAL_WELCOME
+  PORTAL_PASSWORD_RESET
+  PAYROLL_PAYSTUB
+  CUSTOM
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+  UNSUBSCRIBED
+}
+
+model EmailTemplate {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            EmailTemplateType
+  name            String
+  isDefault       Boolean           @default(false)
+  // Content
+  subject         String
+  bodyHtml        String            @db.Text
+  bodyText        String?           @db.Text
+  // Merge fields available
+  availableFields String[] // e.g., ["customer_name", "invoice_number", ...]
+  // Settings
+  fromName        String?
+  replyTo         String?
+  ccAddresses     String[]
+  bccAddresses    String[]
+  // Attachments
+  attachPdf       Boolean           @default(true)
+  attachmentTypes String[] // What to attach
+  // Status
+  isActive        Boolean           @default(true)
+  createdBy       String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([organizationId, type, name])
+  @@index([type])
+}
+
+model EmailLog {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  templateId       String?
+  templateType     EmailTemplateType?
+  // Recipients
+  toEmail          String
+  toName           String?
+  fromEmail        String
+  fromName         String?
+  replyTo          String?
+  ccEmails         String[]
+  bccEmails        String[]
+  // Content
+  subject          String
+  bodyHtml         String?            @db.Text
+  bodyText         String?            @db.Text
+  // Related entity
+  entityType       String? // Invoice, Statement, Estimate, etc.
+  entityId         String?
+  // Attachments
+  attachments      Json? // [{name, path, size}]
+  // Status tracking
+  status           EmailStatus        @default(PENDING)
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  openedAt         DateTime?
+  clickedAt        DateTime?
+  bouncedAt        DateTime?
+  failedAt         DateTime?
+  // Provider info
+  providerId       String? // SendGrid message ID, etc.
+  providerResponse Json?
+  // Error info
+  errorCode        String?
+  errorMessage     String?
+  // Tracking
+  openCount        Int                @default(0)
+  clickCount       Int                @default(0)
+  // Metadata
+  metadata         Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([toEmail])
+  @@index([entityType, entityId])
+  @@index([status])
+  @@index([sentAt])
+}
+
+// ============================================================================
+// QUICKBOOKS PARITY - GAP CLOSURE FEATURES
+// ============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. CHECK PRINTING
+// -----------------------------------------------------------------------------
+
+enum CheckStatus {
+  DRAFT
+  PRINTED
+  VOIDED
+  CLEARED
+  STALE_DATED
+  PENDING
+}
+
+enum CheckType {
+  BILL_PAYMENT
+  PAYROLL
+  EXPENSE
+  REFUND
+  MANUAL
+}
+
+model CheckTemplate {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String // e.g., "Standard Check", "Voucher Check"
+  isDefault           Boolean      @default(false)
+  bankAccountId       String?
+  bankAccount         BankAccount? @relation("CheckTemplateBank", fields: [bankAccountId], references: [id])
+  // Check Layout (in points/inches)
+  paperSize           String       @default("LETTER") // LETTER, A4, CUSTOM
+  checkPosition       String       @default("TOP") // TOP, MIDDLE, BOTTOM
+  checksPerPage       Int          @default(3)
+  // Field Positions (JSON with x, y, width, height for each field)
+  datePosition        Json?
+  payeePosition       Json?
+  amountPosition      Json?
+  amountWordsPosition Json?
+  memoPosition        Json?
+  signaturePosition   Json?
+  // Numeric field coordinates
+  includeVoucher      Boolean?     @default(true)
+  payeeNameX          Int?
+  payeeNameY          Int?
+  amountNumericX      Int?
+  amountNumericY      Int?
+  amountWordsX        Int?
+  amountWordsY        Int?
+  dateX               Int?
+  dateY               Int?
+  memoX               Int?
+  memoY               Int?
+  signatureLineX      Int?
+  signatureLineY      Int?
+  logoUrl             String?
+  customCss           String?
+  // MICR Line
+  micrPosition        Json?
+  micrFont            String       @default("E13B") // E13B or CMC7
+  // Stub/Voucher Config
+  includeStub         Boolean      @default(true)
+  stubPosition        String? // TOP, BOTTOM
+  stubFields          Json? // Fields to include on stub
+  // Logo/Branding
+  logoPath            String?
+  logoPosition        Json?
+  // Status
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  checks              CheckPrint[]
+  batches             CheckBatch[] @relation("CheckBatchTemplate")
+
+  @@unique([organizationId, name])
+}
+
+model CheckPrint {
+  id              String        @id @default(cuid())
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  templateId      String
+  template        CheckTemplate @relation(fields: [templateId], references: [id])
+  bankAccountId   String?
+  checkNumber     Int
+  checkDate       DateTime
+  checkType       CheckType?
+  status          CheckStatus   @default(DRAFT)
+  // Payee Information
+  payeeType       String // VENDOR, EMPLOYEE, CUSTOMER, OTHER
+  payeeId         String?
+  payeeName       String
+  payeeAddress    Json? // Full address for mailing
+  // Amount
+  amount          Decimal       @db.Decimal(19, 4)
+  amountInWords   String?
+  amountWords     String?
+  billId          String?
+  memo            String?
+  // Related Transactions
+  vendorPaymentId String? // If paying bills
+  paycheckId      String? // If payroll
+  expenseId       String? // If expense reimbursement
+  refundId        String? // If customer refund
+  // Printing
+  printedAt       DateTime?
+  printedBy       String?
+  printerName     String?
+  batchId         String?
+  batch           CheckBatch?   @relation(fields: [batchId], references: [id])
+  // Voiding
+  voidedAt        DateTime?
+  voidedBy        String?
+  voidReason      String?
+  // Clearing
+  clearedAt       DateTime?
+  clearedAmount   Decimal?      @db.Decimal(19, 4)
+  // Journal
+  journalId       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([organizationId, bankAccountId, checkNumber])
+  @@index([checkDate])
+  @@index([status])
+  @@index([payeeId])
+}
+
+model CheckBatch {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batchNumber         String?
+  bankAccountId       String?
+  templateId          String?
+  template            CheckTemplate? @relation("CheckBatchTemplate", fields: [templateId], references: [id])
+  startingCheckNum    String?
+  endingCheckNum      String?
+  startingCheckNumber Int?
+  endingCheckNumber   Int?
+  totalChecks         Int?
+  checkCount          Int            @default(0)
+  totalAmount         Decimal        @default(0) @db.Decimal(19, 4)
+  status              String         @default("PENDING") // PENDING, PRINTING, COMPLETED, CANCELLED
+  createdBy           String?
+  printedAt           DateTime?
+  printedBy           String?
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  checks              CheckPrint[]
+
+  @@unique([organizationId, batchNumber])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// 2. BUNDLE/KIT ITEMS (Inventory Assembly)
+// -----------------------------------------------------------------------------
+
+enum BundleType {
+  BUNDLE // Fixed set, sold together
+  KIT // Customizable set
+  ASSEMBLY // Manufactured from components
+}
+
+enum AssemblyStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model InventoryBundle {
+  id                 String                @id @default(cuid())
+  organizationId     String
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sku                String
+  name               String
+  description        String?
+  bundleType         BundleType            @default(BUNDLE)
+  // Pricing
+  sellingPrice       Decimal               @db.Decimal(19, 4)
+  totalComponentCost Decimal?              @db.Decimal(19, 4)
+  pricingMethod      String                @default("FIXED") // FIXED, CALCULATED (sum of components)
+  marginPercent      Decimal?              @db.Decimal(5, 2) // Markup over component cost
+  // Inventory
+  trackInventory     Boolean               @default(false) // For assemblies
+  quantityOnHand     Decimal               @default(0) @db.Decimal(12, 4)
+  reorderPoint       Decimal?              @db.Decimal(12, 4)
+  // Accounts
+  incomeAccountId    String?
+  cogsAccountId      String?
+  assetAccountId     String? // For assemblies tracking WIP
+  // Status
+  isActive           Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  components         InventoryBundleItem[]
+  assemblies         AssemblyBuild[]
+
+  @@unique([organizationId, sku])
+  @@index([bundleType])
+}
+
+model InventoryBundleItem {
+  id                 String          @id @default(cuid())
+  bundleId           String
+  bundle             InventoryBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem   @relation("BundleItemInventory", fields: [inventoryItemId], references: [id])
+  quantity           Decimal         @db.Decimal(12, 4)
+  unitCostAtCreation Decimal?        @db.Decimal(19, 4)
+  // For kits - can be optional or have alternatives
+  isOptional         Boolean         @default(false)
+  isDefault          Boolean         @default(true)
+  sortOrder          Int             @default(0)
+  // Pricing override
+  priceOverride      Decimal?        @db.Decimal(19, 4)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([bundleId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+model AssemblyBuild {
+  id              String              @id @default(cuid())
+  organizationId  String
+  bundleId        String
+  bundle          InventoryBundle     @relation(fields: [bundleId], references: [id])
+  buildNumber     String?
+  buildDate       DateTime
+  status          AssemblyStatus      @default(PENDING)
+  quantityToBuild Decimal?            @db.Decimal(12, 4)
+  quantityBuilt   Decimal             @default(0) @db.Decimal(12, 4)
+  // Costs
+  laborCost       Decimal             @default(0) @db.Decimal(19, 4)
+  overheadCost    Decimal             @default(0) @db.Decimal(19, 4)
+  componentCost   Decimal             @default(0) @db.Decimal(19, 4)
+  totalCost       Decimal             @default(0) @db.Decimal(19, 4)
+  unitCost        Decimal             @default(0) @db.Decimal(19, 4)
+  // Processing
+  startedAt       DateTime?
+  completedAt     DateTime?
+  completedBy     String?
+  // Journal entry for inventory adjustment
+  journalId       String?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  consumedItems   AssemblyBuildItem[]
+
+  @@unique([organizationId, buildNumber])
+  @@index([status])
+  @@index([buildDate])
+}
+
+model AssemblyBuildItem {
+  id               String        @id @default(cuid())
+  buildId          String
+  build            AssemblyBuild @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  inventoryItemId  String
+  inventoryItem    InventoryItem @relation("AssemblyBuildItemInventory", fields: [inventoryItemId], references: [id])
+  quantityRequired Decimal?      @db.Decimal(12, 4)
+  quantityUsed     Decimal       @default(0) @db.Decimal(12, 4)
+  unitCost         Decimal       @db.Decimal(19, 4)
+  totalCost        Decimal       @db.Decimal(19, 4)
+  // Lot/Serial tracking
+  lotNumber        String?
+  serialNumbers    String[]
+  createdAt        DateTime      @default(now())
+
+  @@index([inventoryItemId])
+}
+
+// -----------------------------------------------------------------------------
+// 3. DIRECT DEPOSIT / ACH PROCESSING
+// -----------------------------------------------------------------------------
+
+enum ACHBatchStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SUBMITTED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  RETURNED
+  CANCELLED
+  PENDING
+  GENERATED
+}
+
+enum ACHTransactionType {
+  CREDIT // Deposit to account (payroll, refund)
+  DEBIT // Withdrawal from account (bill pay)
+}
+
+enum ACHTransactionStatus {
+  PENDING
+  SUBMITTED
+  SETTLED
+  RETURNED
+  CANCELLED
+}
+
+enum ACHReturnCode {
+  R01 // Insufficient Funds
+  R02 // Account Closed
+  R03 // No Account/Unable to Locate
+  R04 // Invalid Account Number
+  R05 // Unauthorized Debit Entry
+  R06 // Returned per ODFI Request
+  R07 // Authorization Revoked
+  R08 // Payment Stopped
+  R09 // Uncollected Funds
+  R10 // Customer Advises Not Authorized
+  R11 // Check Truncation Entry Return
+  R12 // Branch Sold to Another DFI
+  R13 // RDFI Not Qualified
+  R14 // Representative Payee Deceased
+  R15 // Beneficiary Deceased
+  R16 // Account Frozen
+  R17 // File Record Edit Criteria
+  R20 // Non-Transaction Account
+  R21 // Invalid Company Identification
+  R22 // Invalid Individual ID Number
+  R23 // Credit Entry Refused by Receiver
+  R24 // Duplicate Entry
+  R29 // Corporate Customer Advises Not Authorized
+  R31 // Permissible Return Entry
+  R33 // Return of XCK Entry
+}
+
+model EmployeeBankAccount {
+  id                 String           @id @default(cuid())
+  employeeId         String
+  employee           Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  accountType        String           @default("CHECKING") // CHECKING, SAVINGS
+  bankName           String
+  routingNumber      String // ABA routing number
+  accountNumber      String // Encrypted
+  accountLast4       String // Last 4 digits for display
+  nameOnAccount      String
+  // Verification
+  isVerified         Boolean          @default(false)
+  verifiedAt         DateTime?
+  verificationMethod String? // MICRO_DEPOSIT, PLAID, MANUAL
+  // Allocation
+  isActive           Boolean          @default(true)
+  isPrimary          Boolean          @default(true)
+  status             String?
+  depositType        String           @default("FULL") // FULL, FIXED_AMOUNT, PERCENTAGE
+  depositAmount      Decimal?         @db.Decimal(19, 4)
+  depositPercent     Decimal?         @db.Decimal(5, 2)
+  // Prenote sent
+  prenoteStatus      String? // PENDING, SENT, VERIFIED, FAILED
+  prenoteSentAt      DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  achTransactions    ACHTransaction[]
+
+  @@index([employeeId])
+}
+
+model ACHBatch {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batchNumber      String
+  batchType        String // PAYROLL, VENDOR_PAYMENT, CUSTOMER_REFUND
+  // Company Information (Originator)
+  companyName      String
+  companyId        String // Tax ID or assigned ID
+  companyEntryDesc String? // e.g., "PAYROLL", "VENDOR PAY"
+  // Settlement
+  effectiveDate    DateTime
+  settlementDate   DateTime?
+  // Bank Information
+  originatingDFI   String? // Bank routing number
+  bankAccountId    String // Source account
+  bankAccount      BankAccount      @relation("ACHBatchBankAccount", fields: [bankAccountId], references: [id])
+  createdBy        String?
+  nachaFileContent String?          @db.Text
+  generatedAt      DateTime?
+  // Totals
+  transactionCount Int              @default(0)
+  totalCredits     Decimal          @default(0) @db.Decimal(19, 4)
+  totalDebits      Decimal          @default(0) @db.Decimal(19, 4)
+  // Status
+  status           ACHBatchStatus   @default(DRAFT)
+  // NACHA File
+  fileId           String? // Reference to generated file
+  fileCreatedAt    DateTime?
+  fileHash         String?
+  // Submission
+  submittedAt      DateTime?
+  submittedBy      String?
+  // Approval
+  approvedAt       DateTime?
+  approvedBy       String?
+  // Completion
+  completedAt      DateTime?
+  returnCount      Int              @default(0)
+  returnAmount     Decimal          @default(0) @db.Decimal(19, 4)
+  // Error handling
+  errorCode        String?
+  errorMessage     String?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  transactions     ACHTransaction[]
+
+  @@unique([organizationId, batchNumber])
+  @@index([status])
+  @@index([effectiveDate])
+}
+
+model ACHTransaction {
+  id                    String               @id @default(cuid())
+  batchId               String
+  batch                 ACHBatch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  transactionType       ACHTransactionType
+  status                ACHTransactionStatus @default(PENDING)
+  // Receiver Information
+  receiverType          String // EMPLOYEE, VENDOR, CUSTOMER
+  receiverId            String?
+  receiverName          String
+  employeeBankAccountId String?
+  employeeBankAccount   EmployeeBankAccount? @relation(fields: [employeeBankAccountId], references: [id])
+  // Bank Details (for non-employee)
+  routingNumber         String?
+  accountNumber         String? // Encrypted
+  accountType           String? // CHECKING, SAVINGS
+  // Amount
+  amount                Decimal              @db.Decimal(19, 4)
+  // Related Entity
+  relatedType           String? // PAYCHECK, VENDOR_PAYMENT, REFUND
+  relatedId             String?
+  // Identification
+  traceNumber           String? // ACH trace number
+  individualId          String? // Employee ID or Invoice #
+  addendaRecord         String? // Additional payment info
+  // Processing
+  processedAt           DateTime?
+  settledAt             DateTime?
+  // Returns
+  returnedAt            DateTime?
+  returnCode            ACHReturnCode?
+  returnReason          String?
+  // Reversal
+  isReversal            Boolean              @default(false)
+  reversalOf            String? // Original transaction ID
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([status])
+  @@index([receiverType, receiverId])
+  @@index([traceNumber])
+}
+
+// -----------------------------------------------------------------------------
+// 4. AUTO TAX FILING - IRS EFTPS INTEGRATION
+// -----------------------------------------------------------------------------
+
+enum EFTPSStatus {
+  DRAFT
+  SCHEDULED
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  PROCESSED
+  FAILED
+}
+
+enum TaxPaymentType {
+  FEDERAL_941 // Quarterly employment taxes
+  FEDERAL_940 // Annual FUTA
+  FEDERAL_944 // Annual employment taxes (small employers)
+  FEDERAL_945 // Annual withheld federal income tax
+  FEDERAL_1042 // Foreign persons withholding
+  STATE_WITHHOLDING
+  STATE_UNEMPLOYMENT
+  LOCAL_TAX
+}
+
+model PayrollTaxFiling {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollRunId        String?
+  payrollRun          PayrollRun?        @relation(fields: [payrollRunId], references: [id])
+  filingType          TaxPaymentType?
+  filingFrequency     String?
+  // Period
+  taxYear             Int?
+  taxPeriod           String // Q1, Q2, Q3, Q4, ANNUAL, or month
+  periodStart         DateTime?
+  periodEnd           DateTime?
+  // Amounts
+  totalWages          Decimal?           @db.Decimal(19, 4)
+  federalWithholding  Decimal            @db.Decimal(19, 4)
+  socialSecurityTax   Decimal            @db.Decimal(19, 4)
+  medicareTax         Decimal            @db.Decimal(19, 4)
+  additionalMedicare  Decimal?           @db.Decimal(19, 4)
+  federalUnemployment Decimal?           @db.Decimal(19, 4)
+  form941Liability    Decimal?           @db.Decimal(19, 4)
+  totalTaxDue         Decimal            @db.Decimal(19, 4)
+  // Deposits Made
+  depositsThisPeriod  Decimal            @default(0) @db.Decimal(19, 4)
+  // Balance
+  balanceDue          Decimal?           @db.Decimal(19, 4)
+  // Due Date
+  dueDate             DateTime
+  // Filing
+  status              String             @default("DRAFT") // DRAFT, FILED, ACCEPTED, REJECTED
+  filedAt             DateTime?
+  filedBy             String?
+  confirmationNumber  String?
+  createdBy           String?
+  // Form Data (JSON of form fields)
+  formData            Json?
+  // Document
+  documentId          String?
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  deposits            EFTPSTransaction[]
+
+  @@unique([organizationId, filingType, taxYear, taxPeriod])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model EFTPSTransaction {
+  id                String            @id @default(cuid())
+  organizationId    String?
+  organization      Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filingId          String?
+  filing            PayrollTaxFiling? @relation(fields: [filingId], references: [id])
+  enrollmentId      String?
+  enrollment        EFTPSEnrollment?  @relation(fields: [enrollmentId], references: [id])
+  // Tax Identification
+  ein               String? // Employer Identification Number
+  taxType           TaxPaymentType
+  taxYear           Int?
+  taxPeriod         String // Q1, Q2, Q3, Q4, ANNUAL, or month
+  // Payment Details
+  amount            Decimal           @db.Decimal(19, 4)
+  settlementDate    DateTime? // When payment will be withdrawn
+  // Scheduling
+  scheduledDate     DateTime? // When payment was scheduled
+  scheduledBy       String?
+  // Status
+  status            EFTPSStatus       @default(DRAFT)
+  // EFTPS Response
+  eftpsConfirmation String? // EFTPS confirmation number
+  eftpsTraceId      String? // ACH trace from EFTPS
+  submittedAt       DateTime?
+  submittedBy       String?
+  acceptedAt        DateTime?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  processedAt       DateTime?
+  errorMessage      String?
+  // Bank Account
+  bankAccountId     String?
+  bankRoutingNumber String?
+  bankAccountLast4  String?
+  // Audit
+  createdBy         String?
+  approvedBy        String?
+  approvedAt        DateTime?
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([status])
+  @@index([settlementDate])
+  @@index([ein, taxYear])
+}
+
+model EFTPSEnrollment {
+  id                String             @id @default(cuid())
+  organizationId    String             @unique
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Enrollment Details
+  ein               String
+  enrollmentStatus  String             @default("NOT_ENROLLED") // NOT_ENROLLED, PENDING, ENROLLED, SUSPENDED
+  enrolledAt        DateTime?
+  // Business Details
+  businessName      String?
+  businessAddress   String?
+  businessCity      String?
+  businessState     String?
+  businessZip       String?
+  contactName       String?
+  contactPhone      String?
+  contactEmail      String?
+  // EFTPS Credentials (encrypted)
+  eftpsPin          String? // Encrypted PIN
+  eftpsTaxpayerKey  String? // Encrypted taxpayer key
+  // Bank Account for EFTPS
+  bankAccountId     String?
+  bankAccount       BankAccount?       @relation("EFTPSEnrollmentBank", fields: [bankAccountId], references: [id])
+  // Notification Settings
+  emailConfirmation Boolean            @default(true)
+  emailReminders    Boolean            @default(true)
+  reminderDays      Int                @default(3) // Days before due date
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  transactions      EFTPSTransaction[]
+}
+
+// -----------------------------------------------------------------------------
+// 5. MOBILE CHECK DEPOSIT
+// -----------------------------------------------------------------------------
+
+enum MobileDepositStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  ACCEPTED
+  REJECTED
+  FUNDED
+  RETURNED
+  PENDING
+  APPROVED
+  CLEARED
+}
+
+model MobileDeposit {
+  id               String              @id @default(cuid())
+  organizationId   String
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccountId    String
+  bankAccount      BankAccount         @relation("MobileDepositBank", fields: [bankAccountId], references: [id])
+  depositDate      DateTime?
+  referenceNumber  String?
+  // Check Information
+  checkAmount      Decimal             @db.Decimal(19, 4)
+  checkNumber      String?
+  checkDate        DateTime?
+  payerName        String?
+  payerAddress     String?
+  payerBankName    String?
+  routingNumber    String? // From MICR
+  accountNumber    String? // From MICR, masked
+  micr             String?
+  ocrConfidence    Float?
+  // Images
+  frontImagePath   String?
+  backImagePath    String?
+  frontImageHash   String? // For duplicate detection
+  // Processing
+  status           MobileDepositStatus @default(PENDING_UPLOAD)
+  processedAt      DateTime?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  availableAt      DateTime?
+  clearedAt        DateTime?
+  fundedAt         DateTime?
+  fundedAmount     Decimal?            @db.Decimal(19, 4)
+  // Bank Response
+  bankReferenceId  String?
+  bankConfirmation String?
+  // Holds
+  holdAmount       Decimal?            @db.Decimal(19, 4)
+  holdReleaseDate  DateTime?
+  // Rejection/Return
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  returnedAt       DateTime?
+  returnReason     String?
+  returnCode       String?
+  // Related
+  journalId        String?
+  // Mobile App Info
+  deviceId         String?
+  appVersion       String?
+  uploadedBy       String
+  uploadedAt       DateTime?
+  // Location (for fraud detection)
+  latitude         Float?
+  longitude        Float?
+  ipAddress        String?
+  notes            String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([bankAccountId])
+  @@index([status])
+  @@index([depositDate])
+  @@index([frontImageHash]) // Duplicate detection
+}
+
+// Vendor Bank Account for ACH payments
+model VendorBankAccount {
+  id                 String    @id @default(cuid())
+  vendorId           String
+  vendor             Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  accountType        String    @default("CHECKING")
+  bankName           String
+  routingNumber      String
+  accountNumber      String // Encrypted
+  accountLast4       String
+  nameOnAccount      String
+  // Verification
+  isVerified         Boolean   @default(false)
+  verifiedAt         DateTime?
+  verificationMethod String?
+  // Status
+  isActive           Boolean   @default(true)
+  isPrimary          Boolean   @default(true)
+  status             String?
+  // Prenote
+  prenoteStatus      String?
+  prenoteSentAt      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([vendorId])
+}
+
+// --- Added 2026-07-15: models the API code requires that the schema was missing ---
+// (local API auth users + async report-export jobs + in-app notifications)
+
+model Payment {
+  id             String    @id @default(cuid())
+  organizationId String
+  date           DateTime?
+  type           String?
+  amount         Decimal   @default(0) @db.Decimal(19, 4)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+}
+
+model IncomeStatement {
+  id              String   @id @default(cuid())
+  organizationId  String
+  periodStartDate DateTime
+  periodEndDate   DateTime
+  data            String   @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String   @unique
+  password       String
+  firstName      String
+  lastName       String
+  role           String   @default("USER")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model ReportExport {
+  id             String    @id @default(cuid())
+  organizationId String
+  reportType     String
+  format         String
+  parameters     Json?
+  filters        Json?
+  status         String    @default("QUEUED")
+  requestedBy    String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  fileUrl        String?
+  fileSize       Int?
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId])
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String?
+  type           String
+  title          String
+  message        String
+  priority       String    @default("NORMAL")
+  entityType     String?
+  entityId       String?
+  actionUrl      String?
+  isRead         Boolean   @default(false)
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, userId])
+}

@@ -1,0 +1,17 @@
+{
+  "name": "synergysites",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SynergySites - block-based website/landing-page builder (suite + MSP engine)",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/search": "*",
+    "@synergy/server": "*",
+    "express": "^4.19.2"
+  }
+}

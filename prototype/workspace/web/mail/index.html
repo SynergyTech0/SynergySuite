@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synergy Mail</title>
+<link rel="stylesheet" href="/shared/m3.css">
+<style>
+  .mail-nav { width: 256px; flex: none; padding: 8px 0 8px 8px; overflow-y: auto; }
+  .list-toolbar {
+    display: flex; align-items: center; gap: 2px; padding: 4px 8px 4px 12px;
+    height: 48px; flex: none; border-bottom: 1px solid var(--divider);
+  }
+  .msg {
+    display: flex; align-items: center; gap: 8px; padding: 0 12px 0 8px; height: 40px;
+    border-bottom: 1px solid var(--surface-c-low); cursor: pointer; font-size: 14px;
+  }
+  .msg:hover { box-shadow: var(--elev-1); z-index: 1; position: relative; }
+  .msg.unread { background: var(--surface); font-weight: 700; }
+  .msg.read { background: var(--surface-c-low); color: var(--on-surface-variant); font-weight: 400; }
+  .msg.checked { background: var(--blue-50); }
+  .msg .from { width: 180px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .msg .subj { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .msg .subj .snip { font-weight: 400; color: var(--on-surface-variant); }
+  .msg .when { width: 76px; flex: none; text-align: right; font-size: 12px; }
+  .msg .hover-acts { display: none; gap: 2px; }
+  .msg:hover .hover-acts { display: flex; }
+  .msg:hover .when { display: none; }
+
+  .reader { flex: 1; overflow-y: auto; padding: 0 24px 40px; background: var(--surface); }
+  .reader h1 { font-family: var(--font); font-weight: 400; font-size: 22px; margin: 20px 0 16px; }
+  .reader .body { white-space: pre-wrap; line-height: 1.6; font-size: 14px; margin-top: 16px; }
+
+  .compose {
+    position: fixed; right: 24px; bottom: 0; width: 520px; max-width: calc(100vw - 48px);
+    background: var(--surface); border-radius: var(--r-lg) var(--r-lg) 0 0;
+    box-shadow: var(--elev-4); z-index: 200; display: flex; flex-direction: column;
+  }
+  .compose header {
+    background: var(--surface-c-max); color: var(--on-surface); padding: 10px 12px;
+    border-radius: var(--r-lg) var(--r-lg) 0 0; display: flex; align-items: center;
+    font-size: 14px; font-weight: 500;
+  }
+  .compose input, .compose textarea {
+    border: none; outline: none; padding: 8px 16px; font-size: 14px;
+    font-family: var(--font-body); background: transparent; color: var(--on-surface);
+    border-bottom: 1px solid var(--divider);
+  }
+  .compose textarea { flex: 1; min-height: 240px; resize: none; border-bottom: none; }
+  .compose footer { padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="app-root">
+  <div id="shell"></div>
+  <div class="app-body">
+    <nav class="nav mail-nav" id="nav"></nav>
+    <main class="app-main col" id="main" style="display:flex;flex-direction:column"></main>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

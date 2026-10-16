@@ -1,0 +1,23 @@
+{
+  "name": "@synergy/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Suite app registry, port map and environment helpers.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "files": [
+    "dist",
+    "apps.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./apps.json": "./apps.json"
+  }
+}
