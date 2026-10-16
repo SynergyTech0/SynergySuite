@@ -30,6 +30,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   stream: ["video", "comment", "project"],
   whiteboard: ["board"],
   loop: ["page", "component"],
+  campaigns: ["campaign", "template"],
   sites: ["page"],
 };
 

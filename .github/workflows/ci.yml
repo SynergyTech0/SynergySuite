@@ -83,6 +83,7 @@ jobs:
           npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/loop
           npx tsc --noEmit -p apps/crm
+          npx tsc --noEmit -p addons/campaigns
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/diagrams
           npx tsc --noEmit -p apps/devices
@@ -164,6 +165,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE bookings_test"
           npm test --workspace apps/bookings
+      - name: Campaigns tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/campaigns_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE campaigns_test"
+          npm test --workspace addons/campaigns
       - name: Loop tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loop_test

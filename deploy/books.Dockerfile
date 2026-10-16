@@ -29,6 +29,7 @@ COPY apps/whiteboard/package.json apps/whiteboard/
 COPY apps/groups/package.json apps/groups/
 COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
+COPY addons/campaigns/package.json addons/campaigns/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/books/api --workspace apps/books/web --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
 COPY apps/books apps/books

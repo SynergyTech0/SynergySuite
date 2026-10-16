@@ -474,6 +474,26 @@ bookings.{$SUITE_DOMAIN} {
 	}
 }
 
+campaigns.{$SUITE_DOMAIN} {
+	# What recipients open from an email needs no suite account: open and click tracking,
+	# unsubscribe, the browser copy and the signup form. Everything else is for staff.
+	@public path /t/* /u/* /v/* /f/*
+	handle @public {
+		# These pages never need to know who is visiting, so no identity reaches the app.
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Dev-User
+		import to_app campaigns:3400
+	}
+	handle {
+		import signed_in
+		import to_app campaigns:3400
+	}
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.

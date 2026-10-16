@@ -11,8 +11,8 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery, sensitivity labels and DLP | yes | early | People and sign-in blocking over SCIM, app health, suite-wide sensitivity labels (Mail, Drive, Docs, Sheets, Slides), data loss prevention rules with alerts for Mail, Drive and Chat, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Groups, Devices, Ops, HR, Whiteboard and Loop, audit log |
-| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Ops, Office, Planner, Sites, Base, Builder, Insights, Phone, Diagrams, Projects, Devices, HR, Whiteboard, Loop and Flow, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery, sensitivity labels and DLP | yes | early | People and sign-in blocking over SCIM, app health, suite-wide sensitivity labels (Mail, Drive, Docs, Sheets, Slides), data loss prevention rules with alerts for Mail, Drive and Chat, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Groups, Devices, Ops, HR, Whiteboard, Loop and Campaigns, audit log |
+| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Ops, Office, Planner, Sites, Base, Builder, Insights, Phone, Diagrams, Projects, Devices, HR, Whiteboard, Loop, Flow and Campaigns, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
@@ -51,7 +51,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | HR (`apps/hr`) | Dynamics 365 Human Resources, payroll | yes | early | Employee records with HR-only and self-service fields, org chart, time off with balances, approvals and company holidays, onboarding and leaver checklists, US payroll (salary and hourly, 2026 federal withholding, Social Security, Medicare, FUTA, a flat state rate, pre-tax and Roth deductions with employer match), pay runs with approval, printable pay stubs, quarterly tax summary, paid runs posted to Books as a journal entry |
 | Portal add-on (`addons/portal`) | (customer portal) | yes | early | Client records with private share links |
 | Sign add-on (`addons/sign`) | (DocuSign-style) | no | standalone | E-signature with multi-party signing and templates; has its own sign-in |
-| Campaigns add-on (`addons/campaigns`) | (Mailchimp-style) | no | prototype | Audiences, email builder, campaigns; sending relies on a separate mailer that is not in this repository |
+| Campaigns add-on (`addons/campaigns`) | Dynamics 365 Marketing, Mailchimp | yes | early | Audiences from CRM contacts and leads, Contacts groups, spreadsheets and a double opt-in signup form, kept in sync before each send; tags, custom fields and segments; a block email builder with merge tags, live preview and AI subject lines on your own model; campaigns sent now or on a schedule through the suite's mail server or any SMTP relay, throttled, with pause and cancel; welcome and tag automations; open and click tracking, a browser copy, one-click unsubscribe, bounce and spam-report handling over IMAP and a suite-wide do-not-email list; reports per link and per recipient; templates; roles; eDiscovery and suite search |
 | Desktop and mobile app (`clients/app`) | Microsoft 365 desktop and mobile apps | installers from CI | early | Windows, macOS, Linux, Android and iOS app that opens your suite's apps in a native window: launcher, outside links in the browser; on desktop an app menu with shortcuts and downloads to the Downloads folder. Android debug APK from CI; no store builds yet |
 | Android UI (`mobile/synergy-ui`) | | no | prototype | Kotlin UI component library; no app yet |
 
@@ -127,7 +127,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/trust` | Purview Compliance Manager | Next.js 16 + postgres.js (raw SQL migrations, row-level security) |
 | `prototype/workspace` | 365 home, Groups | zero-dependency Node prototype, kept as a reference; Admin, Purview, People and To Do were ported into `apps/` |
 | `addons/sign` | (DocuSign-style) | Next.js 14 + Prisma |
-| `addons/campaigns` | (Mailchimp-style) | Next.js 15 |
+| `addons/campaigns` | Dynamics 365 Marketing, Mailchimp | Next.js 16 + Postgres, Nodemailer, ImapFlow |
 | `addons/portal` | customer portal | Express + React/Vite |
 | `clients/app` | Microsoft 365 desktop and mobile apps | Tauri 2 (Rust) + TypeScript launcher page |
 | `mobile/synergy-ui` | Android UI library | Kotlin |
@@ -146,7 +146,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `@synergy/shell` | `<synergy-app-bar>`, the shared header with the app launcher and the suite search box |
 | `@synergy/ai` | Bring your own AI model: one setting for the whole suite, any OpenAI-compatible server (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Azure, Groq) or Anthropic |
 
-Calendar, chat, drive, forms, mail, meet, notes, office, photo, planner, sites and hr use them today, as does the portal add-on; sign uses `@synergy/ai`. The campaigns add-on follows. Auth is the identity provider the others sign in through, so it stays standalone.
+Calendar, chat, drive, forms, mail, meet, notes, office, photo, planner, sites and hr use them today, as do the portal and campaigns add-ons; sign uses `@synergy/ai`. Auth is the identity provider the others sign in through, so it stays standalone.
 
 ## Running locally
 

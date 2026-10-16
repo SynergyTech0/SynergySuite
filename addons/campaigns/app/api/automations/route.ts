@@ -1,16 +1,7 @@
-import { NextResponse } from 'next/server';
-import { listAutomations, createAutomation } from '@/lib/repo';
+import { body, route } from "@/lib/api";
+import { createAutomation, listAutomations } from "@/lib/automations";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json(await listAutomations());
-}
-
-export async function POST(req: Request) {
-  const { name, trigger, audience_id, template_id, delay_min } = await req.json();
-  if (!name?.trim() || !audience_id || !template_id)
-    return NextResponse.json({ error: 'name, audience_id, template_id required' }, { status: 400 });
-  return NextResponse.json(await createAutomation(
-    name.trim(), trigger || 'contact_added', audience_id, template_id, Number(delay_min ?? 0)));
-}
+export const GET = route(async () => listAutomations());
+export const POST = route(async (ctx, req) => createAutomation(ctx, await body(req)));
