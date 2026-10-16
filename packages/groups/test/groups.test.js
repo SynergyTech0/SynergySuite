@@ -64,3 +64,21 @@ test("principal strings", () => {
   assert.equal(groupsInternalUrl({ NODE_ENV: "production" }), "http://groups:3830");
   assert.equal(groupsInternalUrl({ GROUPS_INTERNAL_URL: "http://h:1/" }), "http://h:1");
 });
+
+test("another app links and unlinks what it made for a group", async () => {
+  const calls = [];
+  const f = async (url, init) => {
+    calls.push({ url, init });
+    return new Response("{}", { status: init.method === "DELETE" ? 404 : 200 });
+  };
+  const c = createGroupsClient({ url: "http://g", secret: "s3", fetch: f });
+  await c.addResource(ID, { app: "sites", ref: "7", name: "Sales site", url: "https://sites.x.test/s/7" });
+  assert.equal(calls[0].url, `http://g/api/svc/groups/${ID}/resources`);
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers["x-proxy-auth-secret"], "s3");
+  assert.deepEqual(JSON.parse(calls[0].init.body), { app: "sites", ref: "7", name: "Sales site", url: "https://sites.x.test/s/7" });
+  // A link that's already gone is fine.
+  await c.removeResource(ID, "sites");
+  assert.equal(calls[1].url, `http://g/api/svc/groups/${ID}/resources?app=sites`);
+  await assert.rejects(c.addResource("nope", { app: "sites", ref: "", name: "", url: "https://x" }));
+});

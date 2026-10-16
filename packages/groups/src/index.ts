@@ -64,6 +64,9 @@ export function groupsInternalUrl(env: NodeJS.ProcessEnv = process.env): string 
 
 export class GroupsUnavailable extends Error {}
 
+/** Something another app made for a group (a Sites team site), shown as a button on the group's page. */
+export type GroupResource = { app: string; ref: string; name: string; url: string };
+
 export type GroupsClient = {
   /** Every group the person is in, directly or through a nested group. */
   groupsOf(email: string): Promise<Membership[]>;
@@ -72,6 +75,10 @@ export type GroupsClient = {
   isGroupMember(id: string, email: string): Promise<boolean>;
   /** The person's email and "group:<id>" for each of their groups, for matching access lists. */
   principalsFor(email: string): Promise<string[]>;
+  /** Links what this app made for the group; one per app, a second call replaces it. */
+  addResource(id: string, resource: GroupResource): Promise<void>;
+  /** Removes this app's link from the group. */
+  removeResource(id: string, app: string): Promise<void>;
   /** Forget cached answers, e.g. right after changing a group. */
   clear(): void;
 };
@@ -80,20 +87,27 @@ export function createGroupsClient(opts: GroupsClientOptions = {}): GroupsClient
   const ttl = opts.ttlMs ?? 30_000;
   const cache = new Map<string, { at: number; value: Promise<unknown> }>();
 
-  async function get<T>(path: string): Promise<T | null> {
+  async function call(method: string, path: string, body?: unknown): Promise<Response> {
     const base = opts.url ?? groupsInternalUrl();
     const secret = opts.secret ?? process.env.PROXY_SHARED_SECRET ?? "";
     const f = opts.fetch ?? fetch;
-    let res: Response;
+    const headers: Record<string, string> = secret ? { "x-proxy-auth-secret": secret } : {};
+    if (body !== undefined) headers["content-type"] = "application/json";
     try {
-      res = await f(`${base}${path}`, {
-        headers: secret ? { "x-proxy-auth-secret": secret } : {},
+      return await f(`${base}${path}`, {
+        method,
+        headers,
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(5000),
         redirect: "manual",
       });
     } catch {
       throw new GroupsUnavailable("The Groups app didn't answer");
     }
+  }
+
+  async function get<T>(path: string): Promise<T | null> {
+    const res = await call("GET", path);
     if (res.status === 404) return null;
     if (!res.ok) throw new GroupsUnavailable(`The Groups app answered ${res.status}`);
     return (await res.json()) as T;
@@ -126,6 +140,16 @@ export function createGroupsClient(opts: GroupsClientOptions = {}): GroupsClient
       const e = email.trim().toLowerCase();
       return [e, ...(await client.groupsOf(e)).map((g) => GROUP_PREFIX + g.id)];
     },
+    async addResource(id, resource) {
+      if (!UUID.test(id)) throw new Error(`not a group id: ${id}`);
+      const res = await call("POST", `/api/svc/groups/${id.toLowerCase()}/resources`, resource);
+      if (!res.ok) throw new GroupsUnavailable(`The Groups app answered ${res.status}`);
+    },
+    async removeResource(id, app) {
+      if (!UUID.test(id)) return;
+      const res = await call("DELETE", `/api/svc/groups/${id.toLowerCase()}/resources?app=${encodeURIComponent(app)}`);
+      if (!res.ok && res.status !== 404) throw new GroupsUnavailable(`The Groups app answered ${res.status}`);
+    },
     clear() {
       cache.clear();
     },
@@ -144,3 +168,5 @@ export const groupsOf = (email: string) => groups().groupsOf(email);
 export const groupMembers = (id: string) => groups().groupMembers(id);
 export const isGroupMember = (id: string, email: string) => groups().isGroupMember(id, email);
 export const principalsFor = (email: string) => groups().principalsFor(email);
+export const addResource = (id: string, resource: GroupResource) => groups().addResource(id, resource);
+export const removeResource = (id: string, app: string) => groups().removeResource(id, app);

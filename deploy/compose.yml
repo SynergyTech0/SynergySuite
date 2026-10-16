@@ -41,6 +41,8 @@ x-app-env: &app-env
   # Without COMPLIANCE_TOKEN there is no Admin center link: no holds, no retention, no searches.
   COMPLIANCE_TOKEN: ${COMPLIANCE_TOKEN:-}
   ADMIN_INTERNAL_URL: ${COMPLIANCE_TOKEN:+http://admin:3700}
+  # Groups (teams, lists, shared mailboxes): apps ask it who is in what through @synergy/groups.
+  GROUPS_INTERNAL_URL: http://groups:3830
 
 # Demo mode's shared login, read by auth (shown on the sign-in page) and the demo service.
 x-demo-env: &demo-env
@@ -972,8 +974,6 @@ services:
       MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:?set STALWART_ADMIN_PASSWORD}
       # Suggests recipients from Contacts as you type; Mail works without it.
       CONTACTS_INTERNAL_URL: http://contacts:3190
-      # Shared mailboxes each person may open, from the Groups app.
-      GROUPS_INTERNAL_URL: http://groups:3830
 
   # Mail server (SMTP, IMAP, JMAP). Settings live in its database; deploy/stalwart/plan.template.ndjson
   # is applied on every start by stalwart-init. Its admin UI is on 127.0.0.1:8080 (log in as admin).

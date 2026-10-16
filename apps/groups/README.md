@@ -47,7 +47,8 @@ Chat, Drive and Mail are called with `x-proxy-auth-secret: $PROXY_SHARED_SECRET`
 network; the gateway never forwards `/api/svc/` for them.
 
 Other apps ask Groups who is in what through `@synergy/groups` (`groupsOf`, `groupMembers`,
-`isGroupMember`, `principalsFor`). It calls these routes, which also need `PROXY_SHARED_SECRET`:
+`isGroupMember`, `principalsFor`, and `addResource`/`removeResource` to link what an app made for a
+group). It calls these routes, which also need `PROXY_SHARED_SECRET`:
 
 - `GET /api/svc/memberships?email=` every group a person is in, nested groups included
 - `GET /api/svc/groups/<id>` a group's owners and flattened members
