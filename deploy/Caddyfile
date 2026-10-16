@@ -398,6 +398,15 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+contracts.{$SUITE_DOMAIN} {
+	# The signing service reports progress on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	import signed_in
+	import to_app contracts:3860
+}
+
 projects.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app projects:3820
