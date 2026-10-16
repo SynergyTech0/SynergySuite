@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Synergy",
+  "version": "0.1.0",
+  "identifier": "cloud.synergytech.suite",
+  "build": {
+    "beforeDevCommand": "npx vite",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npx vite build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "dmg", "app", "deb", "rpm", "appimage"],
+    "category": "Productivity",
+    "shortDescription": "Synergy office and business suite",
+    "longDescription": "Mail, calendar, chat, meetings, Office, Drive and the rest of the Synergy suite in their own window.",
+    "copyright": "Synergy Technologies. Licensed under AGPL-3.0.",
+    "licenseFile": "../../../LICENSE",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "linux": {
+      "deb": { "depends": [] }
+    },
+    "android": {
+      "minSdkVersion": 24
+    },
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  }
+}

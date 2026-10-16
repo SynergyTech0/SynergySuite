@@ -25,6 +25,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/books/api/package.json apps/books/api/
 COPY apps/books/web/package.json apps/books/web/
+COPY apps/bookings/package.json apps/bookings/
 COPY apps/admin/package.json apps/admin/
 COPY apps/base/package.json apps/base/
 COPY apps/cad/package.json apps/cad/

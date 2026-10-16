@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <link rel="icon" type="image/png" href="/src/mark.png" />
+    <title>Synergy</title>
+  </head>
+  <body>
+    <main id="connect" hidden>
+      <img class="mark" src="/src/mark.png" alt="" width="72" height="72" />
+      <h1>Connect to your Synergy</h1>
+      <form id="connect-form">
+        <label for="server">Your Synergy address</label>
+        <input id="server" name="server" placeholder="example.com" autocomplete="url" autocapitalize="off"
+               spellcheck="false" required />
+        <p class="hint">The domain your suite runs on, or the address of any of its apps, like
+          mail.example.com. Use <b>localhost</b> for a suite running on this computer.</p>
+        <p class="error" id="connect-error" role="alert"></p>
+        <div class="actions">
+          <button type="button" id="connect-cancel" class="secondary" hidden>Cancel</button>
+          <button type="submit">Connect</button>
+        </div>
+      </form>
+    </main>
+
+    <main id="launcher" hidden>
+      <header>
+        <img class="mark small" src="/src/mark.png" alt="" width="32" height="32" />
+        <span class="brand">Synergy</span>
+        <span class="server" id="server-name"></span>
+        <button type="button" class="link" id="change-server">Change</button>
+      </header>
+      <input id="filter" type="search" placeholder="Find an app" aria-label="Find an app" />
+      <ul id="apps" class="apps"></ul>
+      <footer id="version"></footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
