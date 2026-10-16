@@ -48,3 +48,9 @@ button { font: inherit; }
 .field-row label.row { display: flex; gap: 4px; align-items: center; font-size: 12.5px; margin: 0; }
 
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--bad); color: #fff; padding: 9px 18px; border-radius: 8px; z-index: 60; }
+
+fieldset.builder { border: none; padding: 0; margin: 0; min-width: 0; }
+.share-panel { max-width: 760px; margin: 0 0 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-alt); }
+.share-panel h3 { margin: 0; font-size: 16px; }
+.share-panel label { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 13px; margin: 10px 0; }
+.share-panel select, .share-panel input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
