@@ -18,3 +18,13 @@ keys:
 # Turn off telemetry/analytics phone-home for a self-hosted, private deployment.
 turn:
   enabled: false
+
+# Synergy Phone. Uncomment webhook to use Phone at all: it tells Phone who joined and left each
+# call. Uncomment redis too for real phone numbers: it links this server to the SIP service
+# (apps/phone/deploy/docker-compose.sip.yml).
+# webhook:
+#   api_key: __LIVEKIT_API_KEY__
+#   urls:
+#     - https://phone.__SUITE_DOMAIN__/api/livekit/webhook
+# redis:
+#   address: 127.0.0.1:6379

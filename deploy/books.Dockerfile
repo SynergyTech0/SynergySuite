@@ -16,6 +16,7 @@ COPY apps/chat/package.json apps/chat/
 COPY apps/forms/package.json apps/forms/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/
+COPY apps/phone/package.json apps/phone/
 COPY apps/notes/package.json apps/notes/
 COPY apps/office/package.json apps/office/
 COPY apps/planner/package.json apps/planner/

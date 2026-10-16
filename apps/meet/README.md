@@ -1,6 +1,6 @@
 # Meet (Teams meetings equivalent)
 
-Video meetings for the suite on [LiveKit](https://livekit.io): instant rooms, scheduled meetings with email invitations (`.ics` files that Outlook, Gmail and Apple Calendar treat as real invites), guest links for people outside the company, breakout rooms, host moderation, recording, and live transcripts and captions from a self-hosted worker.
+Video meetings for the suite on [LiveKit](https://livekit.io): instant rooms, scheduled meetings with email invitations (`.ics` files that Outlook, Gmail and Apple Calendar treat as real invites), guest links for people outside the company, breakout rooms, host moderation, recording, and live transcripts and captions from a self-hosted worker. With [Phone](../phone/README.md), hosts can call phone numbers into a meeting, and a phone call can be opened as a meeting without hanging up.
 
 - **App:** Next.js 15 + React 19 (port 3420). Scheduled meetings and their invitees are kept in Postgres; everything else lives in LiveKit.
 - **Who can join:** staff are signed in by the suite gateway (`@synergy/identity`), and Meet never runs its own login. Guests never sign in; they join an existing room under a name they type.
@@ -40,6 +40,8 @@ The meetings table is created on first use. Invitations are only emailed when th
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Mail server for invitations. Port defaults to 465; `SMTP_FROM` defaults to `SMTP_USER`. No email is sent unless host, user and password are set, or when `DEMO_MODE=1`. |
 | `TURN_HOST` / `TURN_STATIC_SECRET` | Optional TURN relay for people behind strict firewalls. Give it a different public IP from the LiveKit server. |
 | `CAPTIONS_WORKER_URL` | The transcription and captions worker (default `http://host.docker.internal:9081`). |
+| `PHONE_SVC_TOKEN` | Shared with Synergy Phone. When set, hosts can call a phone number into a meeting from the People panel; the call goes out from their own number. |
+| `PHONE_INTERNAL_URL` | Where Meet reaches Phone (default `http://phone:3440` in production). |
 | `PROXY_SHARED_SECRET` | Shared secret the gateway sends, so the app can't be reached around it. |
 
 ## Production

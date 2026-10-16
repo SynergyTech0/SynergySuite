@@ -7,6 +7,7 @@
 | People (Contacts) | Address book, org directory | `apps/contacts` | Have |
 | Teams chat | Channels, DMs, threads | synergychat | Have |
 | Teams meetings | Video calls, guests, recording | synergymeet (LiveKit) | Have |
+| Teams Phone | Calling, phone numbers, voicemail | `apps/phone` (LiveKit + LiveKit SIP, any SIP trunk or PBX) | Have |
 | Word | Documents, co-editing | synergydocs (Tiptap + Hocuspocus) | Have |
 | Excel | Spreadsheets | synergydocs (Univer) + workspace `sheets` | Have |
 | PowerPoint | Slides | synergydocs slides + workspace `slides` | Have |

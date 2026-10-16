@@ -9,6 +9,9 @@ type App = (typeof apps)[number];
  * The header every suite app shares: product name, the app launcher ("waffle") and the
  * signed-in user, with a search box that opens the Search app. Framework-agnostic, so the Next.js, Vite/React and plain-HTML apps can
  * all use the same element. Without a `domain`, launcher links point at localhost ports.
+ *
+ * With a `domain` and a signed-in `user`, it also listens to Phone, so a call rings on whichever
+ * suite page you have open (calls="off" turns that off; Phone's own pages ring by themselves).
  */
 const ICONS: Record<string, string> = {
   grid: "M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z",
@@ -20,24 +23,102 @@ function urlFor(app: App, domain: string | null): string {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+type Ring = { id: string; fromName: string; via: string | null };
+
 export class SynergyAppBar extends HTMLElement {
-  static observedAttributes = ["app", "user", "domain"];
+  static observedAttributes = ["app", "user", "domain", "calls"];
   private open = false;
+  private events: EventSource | null = null;
+  private retry: ReturnType<typeof setTimeout> | null = null;
+  private backoff = 15_000;
+  private rings = new Map<string, Ring>();
 
   connectedCallback() {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this.render();
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("click", this.onDocumentClick);
+    this.listenForCalls();
   }
 
   disconnectedCallback() {
     document.removeEventListener("keydown", this.onKeydown);
     document.removeEventListener("click", this.onDocumentClick);
+    this.stopListening();
   }
 
-  attributeChangedCallback() {
-    if (this.shadowRoot) this.render();
+  private phoneUrl(): string | null {
+    const domain = this.getAttribute("domain");
+    const phone = apps.find((a) => a.id === "phone");
+    if (!domain || !phone || !this.getAttribute("user")) return null;
+    if (this.getAttribute("app") === "phone" || this.getAttribute("calls") === "off") return null;
+    return urlFor(phone, domain);
+  }
+
+  private stopListening() {
+    this.events?.close();
+    this.events = null;
+    if (this.retry) clearTimeout(this.retry);
+    this.retry = null;
+  }
+
+  /** Phone's live events, sent with the suite's sign-in cookie. Backs off when Phone isn't there. */
+  private listenForCalls() {
+    this.stopListening();
+    const base = this.phoneUrl();
+    if (!base || typeof EventSource === "undefined") return;
+    const es = new EventSource(`${base}/api/events`, { withCredentials: true });
+    this.events = es;
+    es.onopen = () => (this.backoff = 15_000);
+    es.onmessage = (m) => {
+      let e: { type?: string; call?: { id: string; fromName: string; via: string | null }; callId?: string };
+      try {
+        e = JSON.parse(m.data);
+      } catch {
+        return;
+      }
+      if (e.type === "ring" && e.call) {
+        this.rings.set(e.call.id, { id: e.call.id, fromName: e.call.fromName, via: e.call.via });
+        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+          const n = new Notification(`Call from ${e.call.fromName}`, { body: "Answer in Synergy Phone", tag: e.call.id });
+          n.onclick = () => {
+            window.open(base, "synergy-phone");
+            n.close();
+          };
+        }
+      } else if (e.type === "ring-stop" && e.callId) this.rings.delete(e.callId);
+      else return;
+      this.renderRings();
+    };
+    es.onerror = () => {
+      es.close();
+      this.events = null;
+      this.retry = setTimeout(() => this.listenForCalls(), this.backoff);
+      this.backoff = Math.min(this.backoff * 2, 600_000);
+    };
+  }
+
+  private renderRings() {
+    const box = this.shadowRoot?.querySelector(".rings");
+    const base = this.phoneUrl();
+    if (!box || !base) return;
+    box.innerHTML = [...this.rings.values()]
+      .map((r) => `<div class="ring" role="alert"><div><strong>${esc(r.fromName)}</strong><br><small>${r.via ? `Put through by ${esc(r.via)}` : "is calling you"}</small></div>
+        <a href="${esc(base)}/" target="synergy-phone">Answer in Phone</a><button data-dismiss="${esc(r.id)}" aria-label="Dismiss">×</button></div>`)
+      .join("");
+    box.querySelectorAll<HTMLButtonElement>("button[data-dismiss]").forEach((b) =>
+      b.addEventListener("click", () => {
+        this.rings.delete(b.dataset.dismiss!);
+        this.renderRings();
+      }),
+    );
+  }
+
+  attributeChangedCallback(name: string) {
+    if (!this.shadowRoot) return;
+    this.render();
+    if (name !== "calls" && name !== "domain" && name !== "user" && name !== "app") return;
+    if (this.isConnected) this.listenForCalls();
   }
 
   /** Show or hide the launcher without re-rendering, so focus stays on the launcher button. */
@@ -100,6 +181,11 @@ export class SynergyAppBar extends HTMLElement {
         nav a:hover, nav a:focus-visible { background: #f3f4f6; }
         nav a[aria-current] { font-weight: 600; }
         svg { width: 20px; height: 20px; fill: currentColor; }
+        .rings { position: fixed; top: 56px; right: 12px; z-index: 1001; display: flex; flex-direction: column; gap: 8px; }
+        .ring { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff; color: #111827; border-radius: 12px;
+                box-shadow: 0 10px 30px rgba(0,0,0,.22); border-left: 4px solid #107c41; }
+        .ring a { background: #107c41; color: #fff; text-decoration: none; padding: 7px 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+        .ring button { width: 26px; height: 26px; font-size: 18px; }
       </style>
       <header>
         <button aria-label="App launcher" aria-expanded="${this.open}"><svg viewBox="0 0 24 24"><path d="${ICONS.grid}"/></svg></button>
@@ -111,7 +197,8 @@ export class SynergyAppBar extends HTMLElement {
         ${launchable
           .map((a) => `<a href="${esc(urlFor(a, domain))}" ${a.id === current ? 'aria-current="page"' : ""}>${esc(a.name)}</a>`)
           .join("")}
-      </nav>`;
+      </nav>
+      <div class="rings"></div>`;
 
     this.shadowRoot!.querySelector("button")!.addEventListener("click", () => this.setOpen(!this.open));
     const form = this.shadowRoot!.querySelector("form");
@@ -120,6 +207,7 @@ export class SynergyAppBar extends HTMLElement {
       const q = form.querySelector("input")!.value.trim();
       if (q) window.location.href = `${searchUrl}/?q=${encodeURIComponent(q)}`;
     });
+    this.renderRings();
   }
 }
 

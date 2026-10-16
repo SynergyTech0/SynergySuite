@@ -11,8 +11,8 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM and Desk, audit log |
-| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites and Base, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk and Phone, audit log |
+| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites, Base and Phone, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
@@ -21,6 +21,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Calendar (`apps/calendar`) | Outlook Calendar | yes | early | Week view, personal and company calendars, attendees, free/busy API; no recurring events or month view yet |
 | Chat (`apps/chat`) | Teams chat | yes | usable | Channels, direct messages, threads, reactions, mentions, unread counts, search, real-time updates |
 | Meet (`apps/meet`) | Teams meetings | yes | early | Video rooms on LiveKit, scheduling, guest links; the media server is deployed separately and is not part of the local quickstart |
+| Phone (`apps/phone`) | Teams Phone | yes | early | Calls between colleagues in the browser, real phone numbers through any SIP provider or office PBX, voicemail with greetings and transcripts, forwarding, do not disturb, ring your mobile too, add people and transfer, move a call into Meet, call a phone into a meeting; uses Meet's LiveKit media server plus LiveKit SIP |
 | Office (`apps/office`) | Word, Excel, PowerPoint | yes | early | Documents with live co-editing, comments and DOCX import; spreadsheets (Univer) and slides are more basic |
 | Drive (`apps/drive`) | OneDrive | yes | early | Folders, drag-and-drop and folder uploads, previews (images, PDF, video, audio, text), version history, sharing with people, view links, shared libraries, recycle bin, search inside text files, zip downloads, storage quotas, AI summaries |
 | Forms (`apps/forms`) | Forms | yes | early | Form builder, public form links, responses, CSV export |
@@ -76,6 +77,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/calendar` | Outlook calendar | Express + React/Vite |
 | `apps/chat` | Teams chat | Express + ws + React/Vite |
 | `apps/meet` | Teams meetings | Next.js 15 + LiveKit |
+| `apps/phone` | Teams Phone | Next.js 16 + Postgres + LiveKit SIP |
 | `apps/office` | Word, Excel, PowerPoint | Next.js 15 + Tiptap/Hocuspocus + Univer |
 | `apps/drive` | OneDrive | Next.js 16 + Postgres, file contents on disk |
 | `apps/contacts` | Outlook People | Next.js 16 + Postgres |

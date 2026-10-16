@@ -255,6 +255,21 @@ desk.{$SUITE_DOMAIN} {
 	}
 }
 
+phone.{$SUITE_DOMAIN} {
+	# The media server's webhooks are signed with its API secret, checked by the app.
+	handle /api/livekit/webhook {
+		import to_app phone:3440
+	}
+	# Meet reaches Phone's machine API on the internal network only.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app phone:3440
+	}
+}
+
 todo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app todo:3195

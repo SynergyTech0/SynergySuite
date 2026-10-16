@@ -26,6 +26,7 @@
     "apps/photo",
     "apps/sites",
     "apps/todo",
+    "apps/phone",
     "apps/trust",
     "addons/people",
     "addons/portal"
