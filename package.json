@@ -10,6 +10,7 @@
     "apps/admin",
     "apps/search",
     "apps/base",
+    "apps/builder",
     "apps/cad",
     "apps/calendar",
     "apps/chat",

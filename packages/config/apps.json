@@ -18,6 +18,7 @@
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
   { "id": "insights",  "name": "Insights",  "m365": "Power BI",             "port": 3720, "icon": "chart",    "dir": "apps/insights",  "core": true },
   { "id": "base",      "name": "Base",      "m365": "Access, Lists",        "port": 3680, "icon": "table",    "dir": "apps/base",      "core": true },
+  { "id": "builder",   "name": "Builder",   "m365": "Power Apps",           "port": 3745, "icon": "apps",     "dir": "apps/builder",   "core": true },
   { "id": "sites",     "name": "Sites",     "m365": "SharePoint",           "port": 3170, "icon": "globe",    "dir": "apps/sites",     "core": true },
   { "id": "notes",     "name": "Notes",     "m365": "OneNote",              "port": 3135, "icon": "note",     "dir": "apps/notes",     "core": true },
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },

@@ -378,6 +378,31 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/base
 
+  # Low-code apps (Power Apps equivalent): screens, galleries and forms with formulas, on Base
+  # tables. Reads and writes Base as the person using the app, so Base's sharing rules apply.
+  builder:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-builder:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: builder } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      builder-db: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/builder
+
+  # Makes the builder database on installs that started before Builder. Runs once per `up`.
+  builder-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'builder'\" | grep -q 1 || psql -c 'CREATE DATABASE builder'"]
+
   # Image editing (Photoshop/Designer equivalent): the PhotoCraft engine compiled to WebAssembly.
   photo:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-photo:${SYNERGY_IMAGE_TAG:-latest}

@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, contacts, crm, desk, drive, forms, insights, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, builder, cad, calendar, chat, contacts, crm, desk, drive, forms, insights, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -43,7 +43,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `forms`, `insights`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `builder`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `forms`, `insights`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.

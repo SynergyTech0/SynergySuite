@@ -204,6 +204,11 @@ base.{$SUITE_DOMAIN} {
 	}
 }
 
+builder.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app builder:3745
+}
+
 photo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app photo:3650
