@@ -280,9 +280,6 @@ jobs:
       - name: Service API unit tests
         working-directory: apps/books/api
         run: npx jest --preset ts-jest src/modules/svc
-      - name: Books service API tests
-        working-directory: apps/books/api
-        run: npx jest --preset ts-jest src/modules/svc
       - name: Build Books
         run: |
           npm run build -w @synergy/books-web
