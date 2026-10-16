@@ -341,6 +341,11 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+projects.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app projects:3820
+}
+
 whiteboard.{$SUITE_DOMAIN} {
 	# Meet and Chat ask for their boards on the internal network; never from outside.
 	handle /api/svc/* {

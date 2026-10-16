@@ -93,6 +93,7 @@ jobs:
           npx tsc --noEmit -p apps/cad
           npx tsc --noEmit -p apps/planner
           npx tsc --noEmit -p apps/base
+          npx tsc --noEmit -p apps/projects
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -167,6 +168,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE desk_test"
           npm test --workspace apps/desk
+      - name: Projects tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/projects_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE projects_test"
+          npm test --workspace apps/projects
       - name: Ops tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ops_test
@@ -281,6 +288,10 @@ jobs:
           # The Portal's invoice feed refuses a missing token and answers with the right one.
           test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:3055/api/svc/invoices?email=a@example.com')" = 401 || { kill $pid; exit 1; }
           curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" 'localhost:3055/api/svc/invoices?email=a@example.com' | grep -qx '\[\]' || { kill $pid; exit 1; }
+          # Projects bills into Books as draft invoices through the same token.
+          inv='{"customer":{"name":"CI client","email":"client@example.com"},"invoiceDate":"2026-10-16","reference":"PRJ-0001","currency":"USD","lines":[{"description":"Design","quantity":2,"unitPrice":150}]}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "$inv" localhost:3055/api/svc/invoices)" = 401 || { kill $pid; exit 1; }
+          curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' -d "$inv" localhost:3055/api/svc/invoices | grep -q '"number"' || { kill $pid; exit 1; }
           # HR's payroll journal endpoint refuses a missing token and checks what it is sent.
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' localhost:3055/api/svc/journals)" = 401 || { kill $pid; exit 1; }
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' -d '{}' localhost:3055/api/svc/journals)" = 400 || { kill $pid; exit 1; }

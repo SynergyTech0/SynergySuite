@@ -552,6 +552,24 @@ services:
       ENGAGE_AI_API_KEY: ${ENGAGE_AI_API_KEY:-}
       ENGAGE_AI_MODEL: ${ENGAGE_AI_MODEL:-}
 
+  # Microsoft Project and Dynamics 365 Project Operations equivalent: plans with a Gantt chart,
+  # teams and rates, weekly timesheets, expenses with receipts, approvals, and billing that
+  # lands in Books as draft invoices (needs BOOKS_SVC_TOKEN on both). Imports Planner boards.
+  projects:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-projects:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: projects } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/projects
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      BOOKS_INTERNAL_URL: http://books:3055
+      PLANNER_INTERNAL_URL: http://planner:3600
+      PROJECTS_AI_PROVIDER: ${PROJECTS_AI_PROVIDER:-}
+      PROJECTS_AI_BASE_URL: ${PROJECTS_AI_BASE_URL:-}
+      PROJECTS_AI_API_KEY: ${PROJECTS_AI_API_KEY:-}
+      PROJECTS_AI_MODEL: ${PROJECTS_AI_MODEL:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:

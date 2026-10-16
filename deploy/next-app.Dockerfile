@@ -1,4 +1,4 @@
-# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, mail, meet, office, ops, planner, search, todo, trust, whiteboard). Run from the repository root:
+# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, mail, meet, office, ops, planner, projects, search, todo, trust, whiteboard). Run from the repository root:
 #   docker build -f deploy/next-app.Dockerfile --build-arg APP=office -t synergy/office .
 ARG APP
 
@@ -38,6 +38,7 @@ COPY apps/search/package.json apps/search/
 COPY apps/sites/package.json apps/sites/
 COPY apps/stream/package.json apps/stream/
 COPY apps/todo/package.json apps/todo/
+COPY apps/projects/package.json apps/projects/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
 COPY apps/hr/package.json apps/hr/
