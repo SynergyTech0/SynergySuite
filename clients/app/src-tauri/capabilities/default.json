@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher",
+  "description": "The bundled launcher page. Suite pages from the server are remote and get none of this.",
+  "windows": ["*"],
+  "permissions": ["core:default", "allow-get-state", "allow-set-server", "allow-open-app"]
+}
