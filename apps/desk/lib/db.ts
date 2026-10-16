@@ -61,6 +61,31 @@ CREATE TABLE IF NOT EXISTS kb_articles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Who works the desk (lib/agents.ts). Anyone else only sees the tickets they asked for.
+CREATE TABLE IF NOT EXISTS agents (
+  email      TEXT PRIMARY KEY,
+  name       TEXT NOT NULL DEFAULT '',
+  role       TEXT NOT NULL DEFAULT 'agent' CHECK (role IN ('admin','agent')),
+  scope      TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all','assigned')),
+  added_by   TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS desk_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+-- Once, when agents arrive on an existing desk: everyone who already worked as staff becomes an agent.
+INSERT INTO agents (email, added_by)
+  SELECT DISTINCT lower(e), 'existing staff' FROM (
+    SELECT assignee AS e FROM tickets
+    UNION SELECT author FROM ticket_messages WHERE direction IN ('outbound','note')
+    UNION SELECT created_by FROM canned_replies
+    UNION SELECT updated_by FROM kb_articles
+  ) staff
+  WHERE e LIKE '%_@_%' AND NOT EXISTS (SELECT 1 FROM desk_meta WHERE key = 'agents_seeded')
+ON CONFLICT DO NOTHING;
+INSERT INTO desk_meta (key, value) VALUES ('agents_seeded', now()::text) ON CONFLICT DO NOTHING;
 `;
 
 type Db = ReturnType<typeof createDb>;
