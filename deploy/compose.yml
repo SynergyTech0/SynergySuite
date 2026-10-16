@@ -328,7 +328,8 @@ services:
       ENCRYPTION_KEY: ${BOOKS_ENCRYPTION_KEY:-}
       BOOKS_COMPANY_NAME: ${BOOKS_COMPANY_NAME:-}
       EMAIL_FROM: ${BOOKS_EMAIL_FROM:-}
-      # Lets the Portal add-on list a client's invoices (/api/svc/invoices). Empty turns the feed off.
+      # Lets the Portal add-on list a client's invoices (/api/svc/invoices) and Ops send stock moves
+      # and fixed assets (/api/svc/stock-moves, /api/svc/fixed-assets). Empty turns these off.
       BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
 
   # Job queue for Books (background tax and bank classification).
@@ -513,6 +514,20 @@ services:
       DESK_SMTP_USER: ${DESK_SMTP_USER:-}
       DESK_SMTP_PASSWORD: ${DESK_SMTP_PASSWORD:-}
       DESK_SMTP_FROM: ${DESK_SMTP_FROM:-}
+
+  # Dynamics 365 Supply Chain Management equivalent: manufacturing (bills of materials,
+  # routings, work orders, MRP) and assets (register, preventive maintenance, repairs).
+  # With BOOKS_SVC_TOKEN set it sends stock moves and fixed assets to Books.
+  ops:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-ops:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: ops } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/ops
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      OPS_BOOKS_URL: ${OPS_BOOKS_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
 
   # Outlook equivalent: the web mailbox, backed by the Stalwart mail server below.
   mail:

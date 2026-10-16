@@ -255,6 +255,19 @@ desk.{$SUITE_DOMAIN} {
 	}
 }
 
+ops.{$SUITE_DOMAIN} {
+	# Demand and purchase-request feeds for other services (bearer OPS_API_TOKEN, checked in the app).
+	@svc path /api/svc/*
+	handle @svc {
+		import maybe_signed_in
+		import to_app ops:3760
+	}
+	handle {
+		import signed_in
+		import to_app ops:3760
+	}
+}
+
 todo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app todo:3195

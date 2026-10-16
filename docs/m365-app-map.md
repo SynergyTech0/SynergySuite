@@ -28,6 +28,7 @@
 | Dynamics 365 Sales | Accounts, leads, opportunity pipeline | `apps/crm` | Have |
 | Dynamics 365 Customer Service | Help desk tickets, knowledge base | `apps/desk` | Have |
 | Dynamics 365 Business Central | Accounting, quotes, invoices | `apps/books` | Have |
+| Dynamics 365 Supply Chain Management | Manufacturing (BOMs, routings, work orders, MRP), asset management and maintenance | `apps/ops` | Have |
 | Entra ID | Sign-in, SSO, MFA, directory | synergyauth | Have, strongest piece |
 | Admin center | Users, licences, settings | `apps/admin` + synergyauth admin console | Have |
 | Purview / eDiscovery | Retention, legal hold, search | `apps/admin` Compliance, `@synergy/compliance` in each app | Have |
