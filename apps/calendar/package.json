@@ -5,7 +5,8 @@
   "description": "SynergyCal - team calendar with free/busy service API",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node e2e/month.e2e.mjs"
   },
   "dependencies": {
     "@synergy/compliance": "*",

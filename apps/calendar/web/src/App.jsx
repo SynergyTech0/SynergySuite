@@ -1,4 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { addDays, addMonths, monthGrid, startOfDay, startOfMonth, startOfWeek, eventKey } from './dates.js';
+import { AgendaView, MiniMonth, MonthView, TimeGrid } from './views.jsx';
+import { EventEditor, ScopeDialog } from './editor.jsx';
 
 const DEV_AS = new URLSearchParams(location.search).get('as');
 async function req(method, url, body) {
@@ -15,14 +18,34 @@ const api = {
   events: (from, to) => req('GET', `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`),
   create: e => req('POST', '/api/events', e),
   update: (id, e) => req('PATCH', `/api/events/${id}`, e),
-  remove: id => req('DELETE', `/api/events/${id}`),
+  remove: (id, scope, occurrence) =>
+    req('DELETE', `/api/events/${id}${scope ? `?scope=${scope}${occurrence ? `&occurrence=${encodeURIComponent(occurrence)}` : ''}` : ''}`),
 };
 
-const HOUR_START = 7, HOUR_END = 21;
-const startOfWeek = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; };
-const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
-const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
-const fmtTime = d => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const VIEWS = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['agenda', 'Agenda']];
+const AGENDA_DAYS = 30;
+
+function rangeFor(view, cursor) {
+  if (view === 'day') { const from = startOfDay(cursor); return { from, to: addDays(from, 1) }; }
+  if (view === 'week') { const from = startOfWeek(cursor); return { from, to: addDays(from, 7) }; }
+  if (view === 'agenda') { const from = startOfDay(cursor); return { from, to: addDays(from, AGENDA_DAYS) }; }
+  const days = monthGrid(cursor);
+  return { from: days[0], to: addDays(days[41], 1) };
+}
+
+function title(view, cursor, range) {
+  if (view === 'day') return cursor.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  if (view === 'month') return cursor.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  const last = addDays(range.to, -1);
+  const md = d => d.toLocaleDateString([], { month: 'long', day: 'numeric' });
+  if (range.from.getMonth() === last.getMonth()) return `${md(range.from)} – ${last.getDate()}, ${last.getFullYear()}`;
+  if (range.from.getFullYear() === last.getFullYear()) return `${md(range.from)} – ${md(last)}, ${last.getFullYear()}`;
+  return `${md(range.from)}, ${range.from.getFullYear()} – ${md(last)}, ${last.getFullYear()}`;
+}
+
+function savedView() {
+  try { const v = localStorage.getItem('cal.view'); return VIEWS.some(([k]) => k === v) ? v : null; } catch { return null; }
+}
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -32,202 +55,152 @@ export default function App() {
     const at = new Date(p.get('at') || '');
     return { event: Number(p.get('event')) || null, at: isNaN(at) ? null : at };
   });
-  const [weekStart, setWeekStart] = useState(startOfWeek(link.at || new Date()));
+  const [view, setViewState] = useState(() => (link.event ? 'week' : savedView() || 'week'));
+  const [cursor, setCursor] = useState(() => startOfDay(link.at || new Date()));
+  const [miniMonth, setMiniMonth] = useState(() => startOfMonth(link.at || new Date()));
   const [events, setEvents] = useState([]);
-  const [editor, setEditor] = useState(null); // {event?, startAt?, endAt?}
+  const [editor, setEditor] = useState(null); // { event?, startAt?, endAt?, allDay? }
+  const [scope, setScope] = useState(null); // { action, allowThis, run(scope) }
   const [error, setError] = useState('');
   const flash = useCallback(e => { setError(String(e.message || e)); setTimeout(() => setError(''), 5000); }, []);
 
-  const refresh = useCallback(async ws => {
-    try { setEvents(await api.events(ws, addDays(ws, 7))); } catch (e) { flash(e); }
-  }, [flash]);
+  const setView = v => { setViewState(v); try { localStorage.setItem('cal.view', v); } catch { /* private mode */ } };
+  const range = useMemo(() => rangeFor(view, cursor), [view, cursor]);
+  const refresh = useCallback(async () => {
+    try { setEvents(await api.events(range.from, range.to)); } catch (e) { flash(e); }
+  }, [range, flash]);
 
   useEffect(() => { api.me().then(setMe).catch(flash); }, []); // eslint-disable-line
-  useEffect(() => { refresh(weekStart); }, [weekStart, refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { setMiniMonth(startOfMonth(cursor)); }, [cursor]);
+
   const [linkOpened, setLinkOpened] = useState(false);
   useEffect(() => {
     if (linkOpened || !link.event) return;
-    const e = events.find(x => Number(x.id) === link.event);
-    if (e) { setLinkOpened(true); setEditor({ event: e }); }
+    const near = e => Math.abs(new Date(e.start_at) - link.at);
+    const matches = events.filter(x => Number(x.id) === link.event).sort((a, b) => near(a) - near(b));
+    if (matches.length) { setLinkOpened(true); setEditor({ event: matches[0] }); }
   }, [events, link, linkOpened]);
 
-  const days = useMemo(() => [...Array(7)].map((_, i) => addDays(weekStart, i)), [weekStart]);
-  const now = new Date();
+  function step(n) {
+    if (view === 'day') setCursor(addDays(cursor, n));
+    else if (view === 'week') setCursor(addDays(cursor, 7 * n));
+    else if (view === 'agenda') setCursor(addDays(cursor, AGENDA_DAYS * n));
+    else setCursor(addMonths(cursor, n));
+  }
 
-  function eventsFor(day) {
-    const dayEnd = addDays(day, 1);
-    return events.filter(e => !e.all_day && new Date(e.start_at) < dayEnd && new Date(e.end_at) > day);
+  // Keyboard: t today, d/w/m/a views, arrows or j/k to move, n new event.
+  useEffect(() => {
+    const onKey = e => {
+      if (editor || scope || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if (k === 't') setCursor(startOfDay(new Date()));
+      else if (k === 'd') setView('day');
+      else if (k === 'w') setView('week');
+      else if (k === 'm') setView('month');
+      else if (k === 'a') setView('agenda');
+      else if (k === 'arrowleft' || k === 'k') step(-1);
+      else if (k === 'arrowright' || k === 'j') step(1);
+      else if (k === 'n') newEvent(nextHour());
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
+  const nextHour = () => { const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); return s; };
+  function newEvent(at, allDay = false) {
+    if (allDay) {
+      const s = new Date(Date.UTC(at.getFullYear(), at.getMonth(), at.getDate()));
+      setEditor({ startAt: s, endAt: addDays(s, 1), allDay: true });
+    } else setEditor({ startAt: at, endAt: new Date(at.getTime() + 3600000) });
   }
-  function allDayFor(day) {
-    const dayEnd = addDays(day, 1);
-    return events.filter(e => e.all_day && new Date(e.start_at) < dayEnd && new Date(e.end_at) > day);
+
+  async function run(fn) {
+    try { await fn(); setEditor(null); setScope(null); refresh(); } catch (e) { flash(e); }
   }
-  function posFor(e, day) {
-    const s = Math.max(new Date(e.start_at), day.getTime() + HOUR_START * 3600000);
-    const en = Math.min(new Date(e.end_at), day.getTime() + HOUR_END * 3600000);
-    const top = ((s - day.getTime()) / 3600000 - HOUR_START) * 48;
-    const height = Math.max(20, ((en - s) / 3600000) * 48 - 2);
-    return { top, height };
+
+  function save(payload, meta) {
+    const ev = editor.event;
+    if (!ev) return run(() => api.create(payload));
+    if (!ev.recurring) return run(() => api.update(ev.id, payload));
+    setScope({
+      action: 'edit',
+      allowThis: !meta.repeatChanged,
+      run: s => run(() => api.update(ev.id, { ...payload, scope: s, occurrence: ev.occurrence })),
+    });
   }
+
+  function remove() {
+    const ev = editor.event;
+    if (!ev.recurring) {
+      if (confirm('Delete event?')) run(() => api.remove(ev.id));
+      return;
+    }
+    setScope({ action: 'delete', allowThis: true, run: s => run(() => api.remove(ev.id, s, ev.occurrence)) });
+  }
+
+  const days = view === 'day' ? [startOfDay(cursor)] : [...Array(7)].map((_, i) => addDays(range.from, i));
+  const open = e => setEditor({ event: e });
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand"><span className="brand-mark">S</span> SynergyCal</div>
         <div className="nav-week">
-          <button className="mini" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))}>←</button>
-          <b>{weekStart.toLocaleDateString([], { month: 'long', year: 'numeric' })}</b>
-          <button className="mini" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))}>→</button>
-          <button className="mini" onClick={() => setWeekStart(startOfWeek(new Date()))}>Today</button>
+          <button className="mini" onClick={() => setCursor(startOfDay(new Date()))}>Today</button>
+          <button className="mini" aria-label={`Previous ${view}`} onClick={() => step(-1)}>←</button>
+          <button className="mini" aria-label={`Next ${view}`} onClick={() => step(1)}>→</button>
+          <b className="range-title" aria-live="polite">{title(view, cursor, range)}</b>
+        </div>
+        <div className="views" role="tablist" aria-label="View">
+          {VIEWS.map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => setView(k)}>{label}</button>
+          ))}
         </div>
         <div>
-          <button className="primary" onClick={() => {
-            const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1);
-            setEditor({ startAt: s, endAt: new Date(s.getTime() + 3600000) });
-          }}>+ Event</button>
+          <button className="primary" onClick={() => newEvent(nextHour())}>+ Event</button>
           <span className="hint"> {me?.email}</span>
         </div>
       </header>
 
-      <div className="grid-wrap">
-        <div className="grid">
-          <div className="gutter">
-            <div className="day-head" />
-            {[...Array(HOUR_END - HOUR_START)].map((_, i) => (
-              <div key={i} className="hour-label">{fmtHour(HOUR_START + i)}</div>
-            ))}
+      <div className="body">
+        <aside className="side">
+          <MiniMonth month={miniMonth} setMonth={setMiniMonth} selected={cursor} range={view === 'week' ? range : { from: cursor, to: cursor }}
+            onPick={d => setCursor(startOfDay(d))} />
+          <div className="legend">
+            <span><i className="dot personal" /> Personal</span>
+            <span><i className="dot company" /> Company</span>
+            <span><i className="dot booking" /> Bookings</span>
           </div>
-          {days.map(day => (
-            <div key={day.toISOString()} className={`day-col ${day.toDateString() === now.toDateString() ? 'today' : ''}`}>
-              <div className="day-head">
-                {day.toLocaleDateString([], { weekday: 'short' })} <b>{day.getDate()}</b>
-                {allDayFor(day).map(e => (
-                  <button type="button" key={e.id} className="allday-chip" onClick={() => setEditor({ event: e })}>{e.title}</button>
-                ))}
-              </div>
-              <div className="day-body"
-                onClick={ev => {
-                  if (ev.target !== ev.currentTarget) return;
-                  const rect = ev.currentTarget.getBoundingClientRect();
-                  const hour = HOUR_START + Math.floor((ev.clientY - rect.top) / 48);
-                  const s = new Date(day); s.setHours(hour, 0, 0, 0);
-                  setEditor({ startAt: s, endAt: new Date(s.getTime() + 3600000) });
-                }}>
-                {[...Array(HOUR_END - HOUR_START)].map((_, i) => <div key={i} className="hour-line" style={{ top: i * 48 }} />)}
-                {eventsFor(day).map(e => {
-                  const { top, height } = posFor(e, day);
-                  const mine = e.owner_email === me?.email;
-                  return (
-                    <button type="button" key={e.id}
-                      className={`event ${e.calendar} ${e.source === 'booking' ? 'booking' : ''} ${mine ? '' : 'other'}`}
-                      style={{ top, height }}
-                      onClick={() => setEditor({ event: e })}>
-                      <span className="ev-title">{e.title}</span>
-                      <span className="ev-time">{fmtTime(e.start_at)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        </aside>
+        <main className="main">
+          {view === 'month' && (
+            <MonthView cursor={cursor} events={events} me={me} onOpen={open}
+              onNew={d => { const s = new Date(d); s.setHours(9, 0, 0, 0); newEvent(s); }}
+              onDay={d => { setCursor(startOfDay(d)); setView('day'); }} />
+          )}
+          {(view === 'week' || view === 'day') && (
+            <TimeGrid days={days} events={events} me={me} onOpen={open} onNew={s => newEvent(s)} />
+          )}
+          {view === 'agenda' && <AgendaView from={range.from} days={AGENDA_DAYS} events={events} me={me} onOpen={open} />}
+        </main>
       </div>
 
       {editor && (
         <EventEditor
+          key={editor.event ? eventKey(editor.event) : 'new'}
           me={me}
           event={editor.event}
           defaults={editor}
           onClose={() => setEditor(null)}
-          onSave={async payload => {
-            try {
-              editor.event ? await api.update(editor.event.id, payload) : await api.create(payload);
-              setEditor(null); refresh(weekStart);
-            } catch (e) { flash(e); }
-          }}
-          onDelete={editor.event ? async () => {
-            try { await api.remove(editor.event.id); setEditor(null); refresh(weekStart); } catch (e) { flash(e); }
-          } : null}
+          onSave={save}
+          onDelete={editor.event ? remove : null}
         />
       )}
+      {scope && <ScopeDialog action={scope.action} allowThis={scope.allowThis} onPick={scope.run} onClose={() => setScope(null)} />}
 
-      {error && <div className="toast">{error}</div>}
+      {error && <div className="toast" role="alert">{error}</div>}
     </div>
   );
-}
-
-const toLocal = d => {
-  const x = new Date(d);
-  x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
-  return x.toISOString().slice(0, 16);
-};
-
-function EventEditor({ me, event, defaults, onClose, onSave, onDelete }) {
-  const [f, setF] = useState({
-    title: event?.title || '',
-    description: event?.description || '',
-    location: event?.location || '',
-    calendar: event?.calendar || 'personal',
-    startAt: toLocal(event?.start_at || defaults.startAt),
-    endAt: toLocal(event?.end_at || defaults.endAt),
-    attendees: (event?.attendees || []).join(', '),
-  });
-  const set = p => setF(prev => ({ ...prev, ...p }));
-  const mine = !event || event.owner_email === me?.email;
-  useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div className="backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="event-editor-title"
-        onClick={e => e.stopPropagation()}>
-        <h3 id="event-editor-title">{event ? (mine ? 'Edit event' : event.title) : 'New event'}</h3>
-        {mine ? (
-          <>
-            <label>Title <input autoFocus value={f.title} onChange={e => set({ title: e.target.value })} /></label>
-            <div className="row2">
-              <label>Start <input type="datetime-local" value={f.startAt} onChange={e => set({ startAt: e.target.value })} /></label>
-              <label>End <input type="datetime-local" value={f.endAt} onChange={e => set({ endAt: e.target.value })} /></label>
-            </div>
-            <label>Calendar
-              <select value={f.calendar} onChange={e => set({ calendar: e.target.value })}>
-                <option value="personal">Personal</option>
-                <option value="company">Company (everyone sees)</option>
-              </select>
-            </label>
-            <label>Location / link <input value={f.location} onChange={e => set({ location: e.target.value })} /></label>
-            <label>Attendees <input placeholder="emails, comma separated" value={f.attendees} onChange={e => set({ attendees: e.target.value })} /></label>
-            <label>Notes <input value={f.description} onChange={e => set({ description: e.target.value })} /></label>
-            <div className="modal-actions">
-              {onDelete && <button className="bad" onClick={() => confirm('Delete event?') && onDelete()}>Delete</button>}
-              <button onClick={onClose}>Cancel</button>
-              <button className="primary" disabled={!f.title.trim()}
-                onClick={() => onSave({
-                  title: f.title, description: f.description, location: f.location,
-                  calendar: f.calendar,
-                  startAt: new Date(f.startAt).toISOString(),
-                  endAt: new Date(f.endAt).toISOString(),
-                  attendees: f.attendees.split(',').map(s => s.trim()).filter(Boolean),
-                })}>Save</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p>{fmtRange(event)}</p>
-            {event.location && <p>📍 {event.location}</p>}
-            {event.description && <p className="hint">{event.description}</p>}
-            <p className="hint">Owner: {event.owner_email} · {event.calendar}</p>
-            <div className="modal-actions"><button onClick={onClose}>Close</button></div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function fmtRange(e) {
-  const s = new Date(e.start_at), en = new Date(e.end_at);
-  return `${s.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} – ${en.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
