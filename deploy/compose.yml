@@ -181,6 +181,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
     depends_on: [oauth2-proxy]
+    # flow: to reach the flow designer (flow-engine), which is on no other network.
+    networks: [default, flow]
 
   calendar:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-calendar:${SYNERGY_IMAGE_TAG:-latest}
@@ -355,6 +357,28 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/office
       COLLAB_ADDRESS: 0.0.0.0
       COLLAB_PORT: "3071"
+
+  # Microsoft Loop equivalent: shared workspaces and pages with live components (task lists,
+  # polls, tables, trackers, Q&A) that stay in sync wherever they're shared, Chat included.
+  loop:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-loop:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: loop } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/loop
+
+  # Loop's live collaboration server (Hocuspocus), reached through the gateway at /collab.
+  loop-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-loop:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: loop } }
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/loop
+      COLLAB_ADDRESS: 0.0.0.0
+      COLLAB_PORT: "3771"
 
   # Books (Dynamics 365 Business Central equivalent): API and web app in one container.
   books:
@@ -688,6 +712,82 @@ services:
       SEARCH_AI_MODEL: ${SEARCH_AI_MODEL:-}
       SEARCH_APP_URLS: ${SEARCH_APP_URLS:-}
 
+  # Power Automate equivalent: flows that act across the suite and outside services. Flow is the
+  # suite-facing app (your flows, recipes, run history, the Synergy steps); the designer and the
+  # engine that runs flows are Activepieces Community Edition (MIT), served at flow-studio.
+  # The engine, its database and its queue sit on their own network, so a flow can't reach the
+  # suite's database or apps directly; Synergy steps go through Flow, which acts as the flow's owner.
+  flow:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-flow:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    depends_on: [flow-engine]
+    build: { <<: *next-build, args: { APP: flow } }
+    networks: [default, flow]
+    environment:
+      <<: *app-env
+      # Signs people in to the engine and makes their Synergy keys; changing it revokes every key.
+      FLOW_SECRET: ${FLOW_SECRET:-}
+      FLOW_ENGINE_URL: http://flow-engine:80
+      FLOW_INTERNAL_URL: http://flow:3780
+      FLOW_ENGINE_VERSION: ${FLOW_ENGINE_VERSION:-0.92.3}
+      FLOW_APP_URLS: ${FLOW_APP_URLS:-}
+
+  flow-engine:
+    image: ${FLOW_ENGINE_IMAGE:-ghcr.io/activepieces/activepieces}:${FLOW_ENGINE_VERSION:-0.92.3}
+    restart: unless-stopped
+    depends_on:
+      flow-db: { condition: service_healthy }
+      flow-redis: { condition: service_healthy }
+    networks: [flow]
+    environment:
+      AP_EDITION: ce
+      AP_ENVIRONMENT: prod
+      AP_FRONTEND_URL: https://flow-studio.${SUITE_DOMAIN}
+      AP_DB_TYPE: POSTGRES
+      AP_POSTGRES_HOST: flow-db
+      AP_POSTGRES_PORT: "5432"
+      AP_POSTGRES_DATABASE: activepieces
+      AP_POSTGRES_USERNAME: postgres
+      AP_POSTGRES_PASSWORD: ${FLOW_DB_PASSWORD:-}
+      AP_REDIS_HOST: flow-redis
+      AP_REDIS_PORT: "6379"
+      # 32 hex characters; encrypts the connections people save in the designer.
+      AP_ENCRYPTION_KEY: ${FLOW_ENCRYPTION_KEY:-}
+      AP_JWT_SECRET: ${FLOW_JWT_SECRET:-}
+      # Flow creates each person's engine account; the gateway blocks the engine's own sign-up page.
+      AP_ALLOW_OPEN_SIGN_UP: "true"
+      AP_TELEMETRY_ENABLED: "false"
+      # Code steps run in V8 isolates, without the engine's environment or network.
+      AP_EXECUTION_MODE: SANDBOX_CODE_ONLY
+      AP_TRIGGER_DEFAULT_POLL_INTERVAL: ${FLOW_POLL_MINUTES:-5}
+    volumes:
+      - flow-cache:/usr/src/app/cache
+
+  flow-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [flow]
+    environment:
+      POSTGRES_PASSWORD: ${FLOW_DB_PASSWORD:-}
+      POSTGRES_DB: activepieces
+    volumes:
+      - flow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  flow-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [flow]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   # Power BI equivalent: dashboards and reports over the suite's business data. The report
   # designer and charts are Metabase (open source edition, AGPL), served at /studio on Insights'
   # own host; Insights signs people in to it with their suite account and connects Books, CRM,
@@ -922,5 +1022,11 @@ volumes:
   drive-files: {}
   admin-exports: {}
   caddy-data: {}
+  flow-cache: {}
+  flow-pgdata: {}
   stalwart-data: {}
   stalwart-plan: {}
+
+networks:
+  default: {}
+  flow: {}

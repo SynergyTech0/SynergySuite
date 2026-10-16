@@ -147,6 +147,16 @@ meet.{$SUITE_DOMAIN} {
 	}
 }
 
+loop.{$SUITE_DOMAIN} {
+	import signed_in
+	handle /collab* {
+		import to_app loop-collab:3771
+	}
+	handle {
+		import to_app loop:3770
+	}
+}
+
 office.{$SUITE_DOMAIN} {
 	import signed_in
 	handle /collab* {
@@ -254,6 +264,38 @@ admin.{$SUITE_DOMAIN} {
 search.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app search:3710
+}
+
+flow.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app flow:3780
+}
+
+# The flow designer and engine (Activepieces). People are signed in to it by Flow, through
+# /synergy/sso on this host; the engine's own sign-in and sign-up pages are closed.
+flow-studio.{$SUITE_DOMAIN} {
+	# Webhook triggers are called by outside services, which have no suite account.
+	@public path /api/v1/webhooks/* /api/v1/app-events/*
+	handle @public {
+		reverse_proxy flow-engine:80
+	}
+	@engine_auth path /api/v1/authentication/* /api/v1/authn/* /api/v1/otp* /api/v1/user-invitations/accept*
+	handle @engine_auth {
+		respond 403
+	}
+	@engine_signin path /sign-in* /sign-up* /forget-password* /reset-password* /verify-email* /invitation*
+	handle @engine_signin {
+		import signed_in
+		redir * /synergy/sso
+	}
+	handle /synergy/* {
+		import signed_in
+		import to_app flow:3780
+	}
+	handle {
+		import signed_in
+		reverse_proxy flow-engine:80
+	}
 }
 
 crm.{$SUITE_DOMAIN} {

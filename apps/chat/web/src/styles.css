@@ -274,6 +274,7 @@ button { font-family: inherit; }
 .msg-text a { color: var(--link); text-decoration: none; }
 .msg-text a:hover { text-decoration: underline; }
 .msg-text del { color: var(--muted); }
+.loop-embed { display: block; width: 100%; max-width: 760px; border: 0; margin: 6px 0 2px; background: transparent; }
 .mention { background: var(--mention-bg); color: var(--mention-fg); border-radius: 3px; padding: 0 2px; font-weight: 700; }
 
 .msg-actions {

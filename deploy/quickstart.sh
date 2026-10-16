@@ -78,8 +78,13 @@ else
   if [ "${DEMO_MODE:-}" = 1 ]; then setvar DEMO_MODE 1; fi
 fi
 
-# Settings added since an existing .env was written.
-if [ -z "$(getvar INSIGHTS_SECRET)" ]; then setvar INSIGHTS_SECRET "$(hex 32)"; fi
+# Settings added since an existing .env was written, filled in once (new and old files alike).
+fill() { [ -n "$(getvar "$1")" ] || setvar "$1" "$2"; }
+fill INSIGHTS_SECRET "$(hex 32)"
+fill FLOW_SECRET "$(hex 32)"
+fill FLOW_DB_PASSWORD "$(hex 24)"
+fill FLOW_ENCRYPTION_KEY "$(hex 16)"
+fill FLOW_JWT_SECRET "$(hex 32)"
 
 domain=$(getvar SUITE_DOMAIN)
 [ -n "$domain" ] || die "SUITE_DOMAIN is empty in $ENV_FILE."
@@ -103,7 +108,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1"
-  for h in auth sso admin base books builder bookings calendar chat commerce contacts crm desk devices diagrams drive engage forms insights mail meet notes office ops people hr phone planner portal projects search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin base books builder bookings calendar chat commerce contacts crm desk devices diagrams drive engage flow flow-studio forms insights loop mail meet notes office ops people hr phone planner portal projects search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi
@@ -127,15 +132,32 @@ attempts="${SYNERGY_BUILD_ATTEMPTS:-3}"
 registry="${SYNERGY_REGISTRY:-ghcr.io/synergytech0}"
 case "$batch_size" in ''|*[!0-9]*|0) die "SYNERGY_BUILD_PARALLEL must be a whole number above 0." ;; esac
 
-# The services whose suite image isn't on this machine. Every image is named after the service
-# that builds it (office-collab runs the office image, so it shows up as office).
+# Every image the chosen services run, the suite's and third-party ones (postgres, caddy ...).
+all_images() {
+  "${COMPOSE[@]}" config --images ${services[@]+"${services[@]}"} | sort -u
+}
+
+# The suite images that aren't on this machine yet.
 missing_images() {
-  "${COMPOSE[@]}" config --images ${services[@]+"${services[@]}"} | sort -u | while IFS= read -r img; do
+  all_images | while IFS= read -r img; do
     case "$img" in "$registry"/synergysuite-*) ;; *) continue ;; esac
-    docker image inspect "$img" >/dev/null 2>&1 && continue
-    img="${img#"$registry"/synergysuite-}"
-    printf '%s\n' "${img%%:*}"
+    docker image inspect "$img" >/dev/null 2>&1 || printf '%s\n' "$img"
   done
+}
+
+# Download images one by one, SYNERGY_PULL_PARALLEL (default 6) at a time. `compose pull`
+# cancels every other download as soon as one image is missing from the registry (an app that
+# was just added and isn't published yet), so each image gets its own `docker pull` instead.
+pull_images() {
+  printf '%s\n' "$@" | xargs -P "${SYNERGY_PULL_PARALLEL:-6}" -I{} \
+    sh -c 'docker pull -q "$1" >/dev/null 2>&1 && echo "  downloaded $1" || echo "  not downloaded: $1"' _ {}
+}
+
+# The service that builds a suite image: each one is named after it (office-collab runs the
+# office image, so it shows up as office).
+image_service() {
+  local name="${1#"$registry"/synergysuite-}"
+  printf '%s\n' "${name%%:*}"
 }
 
 to_build=()
@@ -147,17 +169,21 @@ if [ "${SYNERGY_BUILD:-pull}" = local ]; then
   fi
 else
   say "Downloading the suite's images ..."
-  "${COMPOSE[@]}" pull --ignore-pull-failures ${services[@]+"${services[@]}"} || true
+  images=()
+  while IFS= read -r img; do [ -n "$img" ] && images+=("$img"); done < <(all_images)
+  pull_images "${images[@]}"
   attempt=1
   while :; do
-    to_build=()
-    while IFS= read -r s; do [ -n "$s" ] && to_build+=("$s"); done < <(missing_images)
-    if [ ${#to_build[@]} -eq 0 ] || [ "$attempt" -ge "$attempts" ]; then break; fi
+    missing=()
+    while IFS= read -r img; do [ -n "$img" ] && missing+=("$img"); done < <(missing_images)
+    if [ ${#missing[@]} -eq 0 ] || [ "$attempt" -ge "$attempts" ]; then break; fi
     attempt=$((attempt + 1))
-    say "${#to_build[@]} images didn't download. Trying them again, attempt $attempt of $attempts ..."
+    say "${#missing[@]} images didn't download. Trying them again, attempt $attempt of $attempts ..."
     sleep 10
-    "${COMPOSE[@]}" pull --ignore-pull-failures "${to_build[@]}" || true
+    pull_images "${missing[@]}"
   done
+  to_build=()
+  for img in ${missing[@]+"${missing[@]}"}; do to_build+=("$(image_service "$img")"); done
   if [ ${#to_build[@]} -gt 0 ]; then
     say ""
     say "These images couldn't be downloaded, so they are built here: ${to_build[*]}"
@@ -193,7 +219,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|crm|desk|devices|diagrams|drive|engage|forms|insights|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""

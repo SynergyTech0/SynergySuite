@@ -27,6 +27,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   hr: ["employee", "timeoff", "paycheck"],
   stream: ["video", "comment", "project"],
   whiteboard: ["board"],
+  loop: ["page", "component"],
 };
 
 /** Every app in the registry except this one. */

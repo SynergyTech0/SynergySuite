@@ -73,6 +73,7 @@ jobs:
         run: |
           npx tsc --noEmit -p apps/admin
           npx tsc --noEmit -p apps/search
+          npx tsc --noEmit -p apps/flow
           npx tsc --noEmit -p apps/drive
           npx tsc --noEmit -p apps/contacts
           npx tsc --noEmit -p apps/todo
@@ -80,6 +81,7 @@ jobs:
           npx tsc --noEmit -p apps/insights
           npx tsc --noEmit -p apps/engage
           npx tsc --noEmit -p apps/bookings
+          npx tsc --noEmit -p apps/loop
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/diagrams
@@ -106,6 +108,8 @@ jobs:
           npm test --workspace apps/admin
       - name: Search tests
         run: npm test --workspace apps/search
+      - name: Flow tests
+        run: npm test --workspace apps/flow
       - name: Insights tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
@@ -158,6 +162,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE bookings_test"
           npm test --workspace apps/bookings
+      - name: Loop tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loop_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE loop_test"
+          npm test --workspace apps/loop
       - name: CRM tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm_test
