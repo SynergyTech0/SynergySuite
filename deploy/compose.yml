@@ -310,6 +310,28 @@ services:
       COLLAB_ADDRESS: 0.0.0.0
       COLLAB_PORT: "3071"
 
+  # Microsoft Loop equivalent: shared workspaces and pages with live components (task lists,
+  # polls, tables, trackers, Q&A) that stay in sync wherever they're shared, Chat included.
+  loop:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-loop:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: loop } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/loop
+
+  # Loop's live collaboration server (Hocuspocus), reached through the gateway at /collab.
+  loop-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-loop:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: loop } }
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/loop
+      COLLAB_ADDRESS: 0.0.0.0
+      COLLAB_PORT: "3731"
+
   # Books (Dynamics 365 Business Central equivalent): API and web app in one container.
   books:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-books:${SYNERGY_IMAGE_TAG:-latest}

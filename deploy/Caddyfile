@@ -142,6 +142,16 @@ meet.{$SUITE_DOMAIN} {
 	}
 }
 
+loop.{$SUITE_DOMAIN} {
+	import signed_in
+	handle /collab* {
+		import to_app loop-collab:3731
+	}
+	handle {
+		import to_app loop:3730
+	}
+}
+
 office.{$SUITE_DOMAIN} {
 	import signed_in
 	handle /collab* {
