@@ -117,10 +117,26 @@ const flow = (email: string, method: string, path: string, body?: unknown) => ca
 /** Whether this suite has Synergy Flow to run flows with. */
 export const flowsAvailable = () => !!flowUrl();
 
+/** Thrown when this suite's Flow doesn't serve the app endpoints yet. */
+export class FlowsNotReady extends HttpError {
+  constructor() {
+    super(501, "This suite's Synergy Flow can't run flows from apps yet");
+  }
+}
+
 /** Flows this person can start from an app (a manual trigger). */
 export async function listFlows(email: string): Promise<FlowInfo[]> {
   if (!flowsAvailable()) return [];
-  const r = await flow(email, "GET", "/flows?trigger=manual");
+  let r: any;
+  try {
+    r = await flow(email, "GET", "/flows?trigger=manual");
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) throw new FlowsNotReady();
+    throw e;
+  }
+  // A Flow from before the app endpoints ignores ?trigger and answers with its UI's list
+  // (flows and runs), which would offer flows that can't be started from an app.
+  if (!r || !Array.isArray(r.flows) || "runs" in r) throw new FlowsNotReady();
   return (r.flows ?? []).map((f: any) => ({ id: String(f.id), name: String(f.name), inputs: Array.isArray(f.inputs) ? f.inputs : [] }));
 }
 
@@ -136,6 +152,12 @@ export async function runFlow(email: string, idOrName: string, inputs: Record<st
     const byName = list.find((f) => f.name.toLowerCase() === idOrName.toLowerCase());
     if (byName) id = byName.id;
   }
-  const r = await flow(email, "POST", `/flows/${encodeURIComponent(id)}/run`, { inputs });
+  let r: any;
+  try {
+    r = await flow(email, "POST", `/flows/${encodeURIComponent(id)}/run`, { inputs });
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 404) throw new HttpError(404, `There's no flow "${idOrName}" that you can run from an app`);
+    throw e;
+  }
   return { runId: String(r.runId ?? ""), status: String(r.status ?? "running"), outputs: r.outputs ?? null };
 }
