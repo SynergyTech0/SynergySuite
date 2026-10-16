@@ -126,6 +126,25 @@ CREATE TABLE IF NOT EXISTS ai_calls (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Who can see what (lib/access.ts). rep_read is 'own' (the default) or 'all'.
+CREATE TABLE IF NOT EXISTS crm_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- A record shared, read-only, with a person (email), a suite group (group:<uuid>) or everyone (*).
+CREATE TABLE IF NOT EXISTS record_shares (
+  kind       TEXT NOT NULL CHECK (kind IN ('account','contact','lead','opportunity')),
+  record_id  UUID NOT NULL,
+  principal  TEXT NOT NULL,
+  shared_by  TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (kind, record_id, principal)
+);
+CREATE INDEX IF NOT EXISTS record_shares_principal_idx ON record_shares (principal);
+CREATE INDEX IF NOT EXISTS opportunities_owner_idx ON opportunities (owner);
+CREATE INDEX IF NOT EXISTS contacts_owner_idx ON contacts (owner);
+
 -- Records deleted while their owner was on legal hold, kept whole for eDiscovery (lib/ediscovery.ts).
 CREATE TABLE IF NOT EXISTS held_records (
   id         UUID PRIMARY KEY,

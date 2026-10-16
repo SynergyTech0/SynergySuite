@@ -1,4 +1,5 @@
 // Accounts: the companies you sell to. Deleting one takes its contacts, deals and their activities with it.
+import { visible } from "./access";
 import { q, tx } from "./db";
 import { assertCanEdit } from "./permissions";
 import { OWNER_NAME, audit, merged, ownerFor, type AuditRow } from "./records";
@@ -33,8 +34,8 @@ function fields(b: Record<string, unknown>) {
 export type ListAccounts = { q?: string; type?: string; mine?: boolean };
 
 export async function list(ctx: Ctx, f: ListAccounts = {}): Promise<Account[]> {
-  const where: string[] = [];
   const params: unknown[] = [];
+  const where: string[] = [visible(ctx, "account", "a", params)];
   if (f.q) {
     params.push(likeTerm(f.q));
     where.push(`(a.name ILIKE $${params.length} OR a.industry ILIKE $${params.length} OR a.website ILIKE $${params.length} OR a.phone ILIKE $${params.length})`);
@@ -47,23 +48,30 @@ export async function list(ctx: Ctx, f: ListAccounts = {}): Promise<Account[]> {
     params.push(ctx.email);
     where.push(`a.owner = $${params.length}`);
   }
-  const rows = await q<Row>(`${SELECT} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY lower(a.name) LIMIT 1000`, params);
+  const rows = await q<Row>(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(a.name) LIMIT 1000`, params);
   return rows.map((r) => accountRow(ctx, r));
 }
 
-async function load(id: string): Promise<Row> {
-  const [row] = await q<Row>(`${SELECT} WHERE a.id = $1`, [id]);
+async function load(ctx: Ctx, id: string): Promise<Row> {
+  const params: unknown[] = [id];
+  const [row] = await q<Row>(`${SELECT} WHERE a.id = $1 AND ${visible(ctx, "account", "a", params)}`, params);
   if (!row) throw new UserError("Account not found", 404);
   return row;
 }
 
 export async function get(ctx: Ctx, id: string): Promise<Account & { contacts: Contact[]; opportunities: Opportunity[] }> {
-  const row = await load(id);
+  const row = await load(ctx, id);
+  const cp: unknown[] = [id, row.name];
   const contacts = await q<ContactRow>(
-    `SELECT c.*, $2::text AS account_name, ${OWNER_NAME("c")} FROM contacts c WHERE c.account_id = $1 ORDER BY lower(c.name)`,
-    [id, row.name],
+    `SELECT c.*, $2::text AS account_name, ${OWNER_NAME("c")} FROM contacts c
+     WHERE c.account_id = $1 AND ${visible(ctx, "contact", "c", cp)} ORDER BY lower(c.name)`,
+    cp,
   );
-  const opps = await q<OppRow>(`${OPP_SELECT} WHERE o.account_id = $1 ORDER BY o.close_date NULLS LAST, lower(o.name)`, [id]);
+  const op: unknown[] = [id];
+  const opps = await q<OppRow>(
+    `${OPP_SELECT} WHERE o.account_id = $1 AND ${visible(ctx, "opportunity", "o", op)} ORDER BY o.close_date NULLS LAST, lower(o.name)`,
+    op,
+  );
   return { ...accountRow(ctx, row), contacts: contacts.map((c) => contactRow(ctx, c)), opportunities: opps.map((o) => oppRow(ctx, o)) };
 }
 
@@ -75,11 +83,11 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Acco
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
     [v.name, v.industry, v.website, v.phone, v.address, v.type, owner, ctx.email],
   );
-  return accountRow(ctx, await load(row.id));
+  return accountRow(ctx, await load(ctx, row.id));
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Account> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
   const v = fields(merged({ name: cur.name, industry: cur.industry, website: cur.website, phone: cur.phone, address: cur.address, type: cur.type }, b));
   const owner = await ownerFor(ctx, b.owner, cur.owner);
@@ -88,11 +96,11 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
      WHERE id = $1`,
     [id, v.name, v.industry, v.website, v.phone, v.address, v.type, owner, ctx.email],
   );
-  return accountRow(ctx, await load(id));
+  return accountRow(ctx, await load(ctx, id));
 }
 
 export async function remove(ctx: Ctx, id: string): Promise<void> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
   await tx(async (tq) => {
     // Activities point at records by id with no foreign key, so they go explicitly.

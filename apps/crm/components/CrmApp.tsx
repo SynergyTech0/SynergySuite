@@ -33,6 +33,7 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
   const [me, setMe] = useState(initialMe);
   const [members, setMembers] = useState<Member[]>([]);
   const [ai, setAi] = useState(false);
+  const [repRead, setRepRead] = useState<"own" | "all">("own");
   const [version, setVersion] = useState(0);
   const [myDayCount, setMyDayCount] = useState<number | null>(null);
   const [toast, setToast] = useState("");
@@ -45,11 +46,12 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
   }, []);
 
   useEffect(() => {
-    void api<{ me: Ctx; members: Member[]; ai: boolean }>("/api/me")
+    void api<{ me: Ctx; members: Member[]; ai: boolean; repRead: "own" | "all" }>("/api/me")
       .then((r) => {
         setMe(r.me);
         setMembers(r.members);
         setAi(r.ai);
+        setRepRead(r.repRead);
       })
       .catch((e) => say(e.message));
   }, [say]);
@@ -59,10 +61,10 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
   }, [version]);
 
   const app: AppCtx = useMemo(() => ({
-    me, members, ai, version, say,
+    me, members, ai, repRead, setRepRead, version, say,
     go: (view: View, id?: string | null) => go({ view, id: id ?? null }),
     changed: () => setVersion((v) => v + 1),
-  }), [me, members, ai, version, say, go]);
+  }), [me, members, ai, repRead, version, say, go]);
 
   const Editor = creating
     ? ({ leads: LeadEditor, accounts: AccountEditor, contacts: ContactEditor, opportunities: OpportunityEditor }[creating] as

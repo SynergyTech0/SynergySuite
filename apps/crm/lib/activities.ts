@@ -1,4 +1,5 @@
 // Activities: tasks, events, calls and notes attached to any record by type and id.
+import { visible } from "./access";
 import { q, tx } from "./db";
 import { keepHeld } from "./ediscovery";
 import { assertMember } from "./members";
@@ -40,7 +41,11 @@ function activityRow(ctx: Ctx, r: Row): Activity {
 export async function forRecord(ctx: Ctx, type: unknown, id: unknown): Promise<Activity[]> {
   const t = oneOf(type, RECORD_TYPES, "account", "record type");
   if (!isUuid(id)) return [];
-  const rows = await q<Row>(`${SELECT} WHERE t.related_type = $1 AND t.related_id = $2 ORDER BY t.created_at DESC`, [t, id]);
+  const params: unknown[] = [t, id];
+  const rows = await q<Row>(
+    `${SELECT} WHERE t.related_type = $1 AND t.related_id = $2 AND ${visible(ctx, "activity", "t", params)} ORDER BY t.created_at DESC`,
+    params,
+  );
   return rows.map((r) => activityRow(ctx, r));
 }
 
@@ -55,7 +60,8 @@ export async function myDay(ctx: Ctx): Promise<Activity[]> {
 }
 
 async function load(ctx: Ctx, id: string): Promise<Row> {
-  const [row] = await q<Row>(`${SELECT} WHERE t.id = $1`, [id]);
+  const params: unknown[] = [id];
+  const [row] = await q<Row>(`${SELECT} WHERE t.id = $1 AND ${visible(ctx, "activity", "t", params)}`, params);
   if (!row) throw new UserError("Activity not found", 404);
   return row;
 }
@@ -73,7 +79,8 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Acti
   const relatedType = oneOf(b.relatedType, RECORD_TYPES, "account", "record type");
   const relatedId = String(b.relatedId ?? "");
   if (!isUuid(relatedId)) throw new UserError("Pick a record");
-  const [parent] = await q(`SELECT 1 FROM ${TABLE[relatedType]} WHERE id = $1`, [relatedId]);
+  const pp: unknown[] = [relatedId];
+  const [parent] = await q(`SELECT 1 FROM ${TABLE[relatedType]} r WHERE r.id = $1 AND ${visible(ctx, relatedType, "r", pp)}`, pp);
   if (!parent) throw new UserError("That record no longer exists", 404);
   const type = oneOf(b.type, ACTIVITY_TYPES, "note", "activity type");
   // A note is a record of something done; the rest start open.

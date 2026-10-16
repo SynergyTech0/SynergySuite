@@ -5,6 +5,7 @@ const { baseApp, requireUser, requireBearer, wrap, errorHandler, serveSpa } = re
 const { portFor } = require('@synergy/config');
 const { createCompliance } = require('./compliance');
 const { createSearch } = require('./search');
+const access = require('./access');
 const { SearchInputError } = require('@synergy/search');
 
 const PORT = portFor('forms');
@@ -36,6 +37,21 @@ CREATE INDEX IF NOT EXISTS submissions_form_idx ON submissions (form_id, id DESC
 -- Legal hold: a form its held owner deleted stays, with its responses, hidden from the app
 -- but found by compliance search.
 ALTER TABLE forms ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
+-- Sharing (server/access.js). principal is an email, group:<uuid>, or * for everyone.
+CREATE TABLE IF NOT EXISTS form_shares (
+    form_id   BIGINT NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+    principal TEXT NOT NULL,
+    role      TEXT NOT NULL CHECK (role IN ('view','edit')),
+    PRIMARY KEY (form_id, principal)
+);
+CREATE INDEX IF NOT EXISTS form_shares_principal_idx ON form_shares (principal);
+-- Forms from before sharing were open to everyone: they stay shared with everyone as editors,
+-- once. New forms get sharing_ready = true and start private to their owner.
+ALTER TABLE forms ADD COLUMN IF NOT EXISTS sharing_ready BOOLEAN NOT NULL DEFAULT false;
+INSERT INTO form_shares (form_id, principal, role)
+  SELECT id, '*', 'edit' FROM forms WHERE NOT sharing_ready ON CONFLICT DO NOTHING;
+UPDATE forms SET sharing_ready = true WHERE NOT sharing_ready;
+ALTER TABLE forms ALTER COLUMN sharing_ready SET DEFAULT true;
 `;
 
 const FIELD_TYPES = ['text', 'textarea', 'email', 'select', 'checkbox'];
@@ -58,19 +74,74 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 
 const router = express.Router();
 
+/** The form with the person's role on it, or null when they can't open it (or it is gone). */
+async function formFor(email, id) {
+  const n = Number(id);
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  const { rows } = await q(
+    `SELECT f.*, ${access.roleSql('f', 2, 3)} AS role FROM forms f WHERE f.id = $1 AND ${access.visibleSql('f', 2, 3)}`,
+    [n, email, access.principalsFor(email)]);
+  return rows[0] || null;
+}
+
+/** Loads the form and checks the person may `need` ('view', 'edit' or 'owner'); answers 404/403 otherwise. */
+async function guard(req, res, need) {
+  const f = await formFor(req.userEmail, req.params.id);
+  if (!f) { res.status(404).json({ error: 'not found' }); return null; }
+  if (!access.allows(f.role, need)) {
+    res.status(403).json({ error: need === 'owner' ? 'only the owner can do that' : 'you can only view this form' });
+    return null;
+  }
+  return f;
+}
+
+async function sharesOf(id) {
+  return (await q('SELECT principal, role FROM form_shares WHERE form_id = $1 ORDER BY principal', [id])).rows;
+}
+
 router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail })));
 
+// The forms the person owns or that are shared with them.
 router.get('/forms', wrap(async (req, res) => {
   res.json((await q(
-    `SELECT f.id, f.slug, f.title, f.published, f.updated_at,
+    `SELECT f.id, f.slug, f.title, f.published, f.updated_at, f.created_by AS owner, ${access.roleSql('f', 1, 2)} AS role,
        (SELECT count(*) FROM submissions s WHERE s.form_id = f.id)::int AS submission_count
-     FROM forms f WHERE f.held_deleted_at IS NULL ORDER BY f.updated_at DESC`)).rows);
+     FROM forms f WHERE ${access.visibleSql('f', 1, 2)} ORDER BY f.updated_at DESC`,
+    [req.userEmail, access.principalsFor(req.userEmail)])).rows);
 }));
 
 router.get('/forms/:id', wrap(async (req, res) => {
-  const f = (await q('SELECT * FROM forms WHERE id = $1 AND held_deleted_at IS NULL', [Number(req.params.id)])).rows[0];
-  if (!f) return res.status(404).json({ error: 'not found' });
-  res.json(f);
+  const f = await guard(req, res, 'view');
+  if (!f) return;
+  res.json({ ...f, shares: await sharesOf(f.id) });
+}));
+
+// Who the form is shared with; only the owner changes it. Replaces the whole list.
+router.put('/forms/:id/shares', wrap(async (req, res) => {
+  const f = await guard(req, res, 'owner');
+  if (!f) return;
+  let shares;
+  try {
+    shares = access.cleanShares(req.body && req.body.shares, f.created_by);
+  } catch (e) {
+    if (e instanceof access.ShareError) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM form_shares WHERE form_id = $1', [f.id]);
+    for (const s of shares) {
+      await client.query('INSERT INTO form_shares (form_id, principal, role) VALUES ($1,$2,$3)', [f.id, s.principal, s.role]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  res.json(await sharesOf(f.id));
 }));
 
 router.post('/forms', wrap(async (req, res) => {
@@ -82,7 +153,7 @@ router.post('/forms', wrap(async (req, res) => {
       `INSERT INTO forms (slug, title, description, fields, created_by)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [slug, title.trim(), description, JSON.stringify(cleanFields(fields)), req.userEmail]);
-    res.json(rows[0]);
+    res.json({ ...rows[0], role: 'owner', shares: [] });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'a form with that title exists' });
     throw e;
@@ -90,6 +161,7 @@ router.post('/forms', wrap(async (req, res) => {
 }));
 
 router.patch('/forms/:id', wrap(async (req, res) => {
+  if (!(await guard(req, res, 'edit'))) return;
   const { title, description, fields, published } = req.body || {};
   const { rows } = await q(
     `UPDATE forms SET
@@ -107,11 +179,13 @@ router.patch('/forms/:id', wrap(async (req, res) => {
 }));
 
 router.delete('/forms/:id', wrap(async (req, res) => {
+  if (!(await guard(req, res, 'owner'))) return;
   await compliance.deleteForms([Number(req.params.id)]);
   res.json({ ok: true });
 }));
 
 router.get('/forms/:id/submissions', wrap(async (req, res) => {
+  if (!(await guard(req, res, 'view'))) return;
   res.json((await q(
     `SELECT s.* FROM submissions s JOIN forms f ON f.id = s.form_id AND f.held_deleted_at IS NULL
      WHERE s.form_id = $1 ORDER BY s.id DESC LIMIT 1000`,
@@ -119,8 +193,8 @@ router.get('/forms/:id/submissions', wrap(async (req, res) => {
 }));
 
 router.get('/forms/:id/export', wrap(async (req, res) => {
-  const f = (await q('SELECT * FROM forms WHERE id = $1 AND held_deleted_at IS NULL', [Number(req.params.id)])).rows[0];
-  if (!f) return res.status(404).json({ error: 'not found' });
+  const f = await guard(req, res, 'view');
+  if (!f) return;
   const subs = (await q('SELECT * FROM submissions WHERE form_id = $1 ORDER BY id', [f.id])).rows;
   const fields = f.fields;
   const head = ['submitted_at', ...fields.map(x => x.label)];
