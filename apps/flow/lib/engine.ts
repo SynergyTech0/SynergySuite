@@ -48,7 +48,7 @@ export class EngineError extends Error {
   }
 }
 
-async function api<T>(method: string, p: string, opts: EngineOptions & { token?: string; json?: unknown; form?: FormData } = {}): Promise<T> {
+export async function api<T>(method: string, p: string, opts: EngineOptions & { token?: string; json?: unknown; form?: FormData } = {}): Promise<T> {
   const f = opts.fetch ?? fetch;
   const headers: Record<string, string> = {};
   if (opts.token) headers.authorization = `Bearer ${opts.token}`;
