@@ -592,6 +592,7 @@ services:
       BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
       COMMERCE_CHECKOUT_URL: ${COMMERCE_CHECKOUT_URL:-}
       COMMERCE_CHECKOUT_TOKEN: ${COMMERCE_CHECKOUT_TOKEN:-}
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
 
   # Outlook equivalent: the web mailbox, backed by the Stalwart mail server below.
   mail:

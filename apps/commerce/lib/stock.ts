@@ -35,7 +35,7 @@ export async function move(tq: Tq, m: Move): Promise<number> {
   );
   if (!p) throw new UserError("Product not found", 404);
   let unitCost = Number(p.cost);
-  if (m.kind === "receive" && m.unitCost !== undefined) {
+  if ((m.kind === "receive" || m.kind === "mfg_receipt") && m.unitCost !== undefined) {
     const next = movingAverage(Number(p.total), unitCost, m.qty, m.unitCost);
     await tq("UPDATE products SET cost = $2, modified_at = now() WHERE id = $1", [m.productId, next]);
     unitCost = m.unitCost;

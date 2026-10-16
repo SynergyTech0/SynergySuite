@@ -38,6 +38,7 @@ describe.skipIf(!url)("commerce", async () => {
   const ediscovery = await import("../lib/ediscovery");
   const { parseSearch } = await import("../lib/compliance");
   const { balanced } = await import("../lib/books");
+  const svc = await import("../lib/svc");
 
   let loc: string;
   let register: string;
@@ -49,7 +50,7 @@ describe.skipIf(!url)("commerce", async () => {
   beforeAll(async () => {
     await q("SELECT 1");
     await q(`TRUNCATE members, settings, postings, refunds, payments, order_lines, orders, shifts, registers, receipt_lines, receipts,
-      po_lines, purchase_orders, movements, stock, products, vendors, locations CASCADE`);
+      po_lines, purchase_orders, svc_moves, movements, stock, products, vendors, locations CASCADE`);
     (globalThis as { __commerceSetup?: unknown }).__commerceSetup = undefined;
   });
   afterAll(async () => {
@@ -228,6 +229,42 @@ describe.skipIf(!url)("commerce", async () => {
     const ex = await ediscovery.exportItems([ed.hits[0].id, pos.hits[0].id]);
     expect(ex.items.map((i) => i.kind)).toEqual(["order", "purchase_order"]);
     expect((ex.items[0].metadata.lines as unknown[]).length).toBe(2);
+  });
+
+  it("moves stock for Operations through the service API, once per reference", async () => {
+    expect(svc.svcAuthorized("Bearer s3cret", "s3cret")).toBe(true);
+    expect(svc.svcAuthorized("Bearer nope", "s3cret")).toBe(false);
+    expect(svc.svcAuthorized("Bearer ", "")).toBe(false);
+    const [g] = await svc.svcItems({ skus: ["G-1"] });
+    expect(g).toMatchObject({ sku: "G-1", cost: "12.0000" });
+    expect(g.byLocation).toEqual([{ locationId: loc, onHand: g.onHand }]);
+    expect((await svc.svcLocations())[0].id).toBe(loc);
+
+    const issue = { reference: "ops:wo-issue:1", sku: "G-1", qty: -2, kind: "mfg_issue", account: "1300" };
+    const first = await svc.stockMove(issue);
+    expect(first).toEqual({ onHand: g.onHand - 2, unitCost: "12.0000" });
+    expect(await svc.stockMove(issue)).toEqual({ duplicate: true, onHand: g.onHand - 2, unitCost: "12.0000" });
+    const [p] = await q<{ payload: { kind: string; lines: { account: string; debit: number; credit: number }[] } }>(
+      "SELECT payload FROM postings WHERE reference = 'commerce:svc:ops:wo-issue:1'",
+    );
+    expect(p.payload.kind).toBe("adjustment");
+    expect(p.payload.lines).toMatchObject([{ account: "1300", debit: 2400 }, { account: "1200", credit: 2400 }]);
+
+    // Made at a different cost, which moves the average; no account given uses the adjustment account.
+    const made = await svc.stockMove({ reference: "ops:wo-receipt:1", sku: "G-1", qty: 2, unitCost: "15", kind: "mfg_receipt" });
+    expect(made).toEqual({ onHand: g.onHand, unitCost: "15.0000" });
+    expect((await svc.svcItems({ q: "gadget" }))[0].cost).not.toBe("12.0000");
+    const [r] = await q<{ payload: { lines: { account: string; debit: number; credit: number }[] } }>(
+      "SELECT payload FROM postings WHERE reference = 'commerce:svc:ops:wo-receipt:1'",
+    );
+    expect(r.payload.lines).toMatchObject([{ account: "1200", debit: 3000 }, { account: "5000", credit: 3000 }]);
+
+    await expect(svc.stockMove({ reference: "ops:x:1", sku: "G-1", qty: -(g.onHand + 1), kind: "maint_issue" })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.stockMove({ reference: "ops:x:2", sku: "G-1", qty: 1, kind: "mfg_issue" })).rejects.toThrow(/negative qty/);
+    await expect(svc.stockMove({ reference: "ops:x:3", sku: "NOPE", qty: -1, kind: "mfg_issue" })).rejects.toMatchObject({ status: 404 });
+    await expect(svc.stockMove({ reference: "ops:x:4", sku: "GIFTWRAP", qty: -1, kind: "mfg_issue" })).rejects.toThrow(/stock-tracked/);
+    await expect(svc.stockMove({ reference: "ops:x:5", sku: "G-1", qty: -1, kind: "sale" })).rejects.toThrow(/kind must be/);
+    expect((await svc.svcItems({ skus: ["G-1"] }))[0].onHand).toBe(g.onHand);
   });
 
   it("keeps every queued posting balanced", async () => {

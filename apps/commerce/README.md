@@ -28,6 +28,7 @@ Admins also change settings. The first person to open the app is its admin.
 | `DATABASE_URL` | Postgres database for Commerce. Existing installs need `CREATE DATABASE commerce;` once. |
 | `BOOKS_SVC_TOKEN` | The same token Books has. Empty = nothing is posted (postings wait in the queue). |
 | `BOOKS_INTERNAL_URL` | Where Books answers inside the deployment (default `http://books:3055`). |
+| `COMMERCE_SVC_TOKEN` | Lets other suite apps use the stock API below. Empty = off. |
 | `COMMERCE_CHECKOUT_URL`, `COMMERCE_CHECKOUT_TOKEN` | A payment provider for online card payment (below). Empty = pay at pickup or on delivery. |
 
 The account each kind of money posts to is set in Settings and defaults to Books' standard chart
@@ -46,6 +47,22 @@ protocol so any provider can be plugged in:
 2. Once the money is taken, the provider sends `POST <callback_url>`
    (`https://commerce.<domain>/api/store/payments`) with the same bearer token and
    `{ order, amount, ref }`. Commerce records each `ref` once and marks the order paid.
+
+## Stock API for other apps
+
+Operations (production and maintenance) keeps no stock of its own. It calls Commerce with
+`Authorization: Bearer $COMMERCE_SVC_TOKEN`:
+
+- `GET /api/svc/items?q=` or `?sku=A,B,C`: `[{ id, sku, name, unit, cost, onHand, byLocation: [{ locationId, onHand }] }]`.
+- `GET /api/svc/locations`: `[{ id, name, kind }]`.
+- `POST /api/svc/stock-moves` with `{ reference, sku, locationId?, qty, unitCost?, kind, account?, note? }`.
+  - `kind` is `mfg_issue` or `maint_issue` (parts used, negative `qty`, valued at average cost) or
+    `mfg_receipt` (product made, positive `qty`, at `unitCost`, which moves the average).
+  - The value posts to Books against `account`, such as work in progress. By default that is the
+    stock adjustment account.
+  - `locationId` defaults to the first location.
+  - It answers `{ onHand, unitCost }`, with `duplicate: true` when the `reference` was already
+    recorded. It answers 409 when there isn't enough on hand.
 
 ## Why not Medusa
 

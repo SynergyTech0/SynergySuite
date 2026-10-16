@@ -73,6 +73,17 @@ export function adjustmentLines(s: Settings, ref: string, value: number, note: s
     : tidy([line(s, "shrinkage", -value, 0, d), line(s, "inventory", 0, -value, d)]);
 }
 
+/**
+ * Stock another app used or made (Operations: production, maintenance), valued at cost, against the
+ * account it names, such as work in progress. Positive value is stock in, negative is stock out.
+ */
+export function offsetLines(s: Settings, account: string, value: number, description: string): JLine[] {
+  const inv = s.accounts.inventory;
+  return value >= 0
+    ? tidy([{ account: inv, debit: value, credit: 0, description }, { account, debit: 0, credit: value, description }])
+    : tidy([{ account, debit: -value, credit: 0, description }, { account: inv, debit: 0, credit: -value, description }]);
+}
+
 /** Queues an entry inside the caller's transaction. Nothing to post (all zero) queues nothing. */
 export async function enqueue(tq: Tq, p: PostingPayload): Promise<void> {
   if (!p.lines.length) return;

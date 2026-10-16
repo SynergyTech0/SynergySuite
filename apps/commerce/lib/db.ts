@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS movements (
   location_id UUID NOT NULL REFERENCES locations(id),
   qty         NUMERIC(14,3) NOT NULL,
   unit_cost   NUMERIC(14,4) NOT NULL DEFAULT 0,
-  kind        TEXT NOT NULL CHECK (kind IN ('receive', 'sale', 'return', 'adjust', 'count', 'transfer_in', 'transfer_out', 'cancel')),
+  kind        TEXT NOT NULL CHECK (kind IN ('receive', 'sale', 'return', 'adjust', 'count', 'transfer_in', 'transfer_out', 'cancel', 'mfg_issue', 'mfg_receipt', 'maint_issue')),
   ref_type    TEXT,
   ref_id      TEXT,
   note        TEXT NOT NULL DEFAULT '',
@@ -260,6 +260,16 @@ CREATE TABLE IF NOT EXISTS postings (
   tried_at   TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   posted_at  TIMESTAMPTZ
+);
+-- Stock moves other suite apps (Operations) sent through /api/svc/stock-moves, one per reference,
+-- so a retried request gets the first answer back instead of moving stock twice.
+CREATE TABLE IF NOT EXISTS svc_moves (
+  reference  TEXT PRIMARY KEY,
+  product_id UUID NOT NULL REFERENCES products(id),
+  qty        NUMERIC(14,3) NOT NULL,
+  unit_cost  NUMERIC(14,4) NOT NULL,
+  on_hand    NUMERIC(14,3) NOT NULL,
+  at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS postings_open_idx ON postings (id) WHERE status <> 'posted';
 `;

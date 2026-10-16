@@ -25,7 +25,7 @@ export type Product = {
 
 export type StockLevel = { locationId: string; locationName: string; onHand: number };
 
-export const MOVEMENT_KINDS = ["receive", "sale", "return", "adjust", "count", "transfer_in", "transfer_out", "cancel"] as const;
+export const MOVEMENT_KINDS = ["receive", "sale", "return", "adjust", "count", "transfer_in", "transfer_out", "cancel", "mfg_issue", "mfg_receipt", "maint_issue"] as const;
 export type MovementKind = (typeof MOVEMENT_KINDS)[number];
 
 export type Movement = {
@@ -115,6 +115,7 @@ export const LABELS: Record<string, string> = {
   store: "Store", warehouse: "Warehouse",
   receive: "Received", sale: "Sold", return: "Returned", adjust: "Adjusted", count: "Counted",
   transfer_in: "Transferred in", transfer_out: "Transferred out", cancel: "Order cancelled",
+  mfg_issue: "Used in production", mfg_receipt: "Made", maint_issue: "Used in maintenance",
   draft: "Draft", ordered: "Ordered", partial: "Partly received", received: "Received", cancelled: "Cancelled",
   pending: "Awaiting payment", paid: "Paid", partially_refunded: "Partly refunded", refunded: "Refunded",
   unfulfilled: "To pick", ready: "Ready", fulfilled: "Fulfilled",

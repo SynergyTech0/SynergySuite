@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { identify, optionsFromEnv } from "@synergy/identity";
 import { join } from "./members";
+import { svcAuthorized } from "./svc";
 import type { Ctx } from "./types";
 import { UserError } from "./util";
 
@@ -79,3 +80,15 @@ export async function body<T = Record<string, unknown>>(req: Request): Promise<T
 }
 
 export type Params<K extends string> = { params: Promise<Record<K, string>> };
+
+/** For other suite apps calling /api/svc/* with Bearer COMMERCE_SVC_TOKEN (see lib/svc.ts). */
+export function svcRoute(fn: (req: Request) => Promise<unknown>) {
+  return async (req: Request): Promise<Response> => {
+    if (!svcAuthorized(req.headers.get("authorization"))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    try {
+      return NextResponse.json(await fn(req));
+    } catch (err) {
+      return fail(err);
+    }
+  };
+}
