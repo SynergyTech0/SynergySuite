@@ -45,6 +45,7 @@ COPY apps/engage/package.json apps/engage/
 COPY apps/forms/package.json apps/forms/
 COPY apps/hr/package.json apps/hr/
 COPY apps/insights/package.json apps/insights/
+COPY apps/loop/package.json apps/loop/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/
 COPY apps/notes/package.json apps/notes/

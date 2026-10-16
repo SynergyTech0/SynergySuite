@@ -87,6 +87,7 @@ const suiteApp = (id) => `${location.protocol}//${location.hostname.replace(/^[^
 const MEET_BASE = suiteApp('meet'); // SynergyMeet — video huddles
 const PHONE_BASE = suiteApp('phone'); // Synergy Phone — voice calls
 const DRIVE_BASE = suiteApp('drive'); // SynergyDrive — files
+const LOOP_BASE = suiteApp('loop'); // Synergy Loop — live components
 // Optional Synapse integration; the button only shows when VITE_SYNAPSE_URL is set at build time.
 const SYNAPSE_URL = import.meta.env.VITE_SYNAPSE_URL || '';
 
@@ -120,6 +121,39 @@ const ICON = {
   send: 'M4 12l16-8-6 16-2-6-8-2z',
   board: 'M3 4h18v12H3zM8 20l4-4 4 4M7 12c2-3 3-3 5-1s3 1 5-2',
 };
+// ---------- Loop components ----------
+// A Loop component link in a message shows the component itself, live: everyone in the
+// conversation sees the same task list, poll or table and edits it in place.
+const LOOP_LINK = /https?:\/\/[^\s/<>"]+\/(?:c|embed)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+function loopComponentsIn(body) {
+  const ids = [];
+  for (const m of String(body || '').matchAll(LOOP_LINK)) {
+    let origin = '';
+    try { origin = new URL(m[0]).origin; } catch { continue; }
+    const id = m[1].toLowerCase();
+    if (origin === LOOP_BASE && !ids.includes(id)) ids.push(id);
+  }
+  return ids.slice(0, 3);
+}
+
+function LoopEmbed({ id }) {
+  const ref = useRef(null);
+  const [height, setHeight] = useState(140);
+  useEffect(() => {
+    // The component reports its own height, so the frame never needs a scroll bar.
+    const onMessage = (e) => {
+      if (e.origin !== LOOP_BASE || e.source !== ref.current?.contentWindow) return;
+      if (e.data?.type === 'synergy-loop:height' && e.data.id === id && Number.isFinite(e.data.height)) {
+        setHeight(Math.min(Math.max(Math.round(e.data.height), 48), 900));
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [id]);
+  return <iframe ref={ref} className="loop-embed" title="Loop component" src={`${LOOP_BASE}/embed/${id}`} style={{ height }} loading="lazy" />;
+}
+
 function Icon({ name, size = 18, className }) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -861,6 +895,7 @@ function MessageList({ messages, me, users, usersById, onOpenThread, flashError,
             ) : (
               <div className="msg-text" dangerouslySetInnerHTML={{ __html: renderBody(m.body, users) }} />
             )}
+            {editing !== m.id && loopComponentsIn(m.body).map(id => <LoopEmbed key={id} id={id} />)}
             <div className="rx-row">
               {Object.entries(rx).map(([emoji, info]) => (
                 <button key={emoji} className={`rx ${info.mine ? 'mine' : ''}`}

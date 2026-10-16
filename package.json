@@ -27,6 +27,7 @@
     "apps/forms",
     "apps/hr",
     "apps/insights",
+    "apps/loop",
     "apps/mail",
     "apps/meet",
     "apps/notes",
