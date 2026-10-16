@@ -6,7 +6,7 @@ OneDrive for the Synergy suite: everyone's files, plus shared libraries for team
 - Previews for images, PDF, video, audio and text, with arrows between files
 - Version history: saving a file with the same name keeps the old one; any version can be downloaded or restored
 - Share with people (can view / can edit, inherited by everything inside a folder), and view links that need no account, optionally expiring
-- Shared libraries (SharePoint document libraries) with owners, members and visitors. Each site in Sites has one too, whose people Sites keeps in step with the site's (`/api/svc/libraries`, Bearer `DRIVE_SVC_TOKEN`); change those in Sites
+- Shared libraries (SharePoint document libraries) with owners, members and visitors. Each site in Sites has one too, whose people Sites keeps in step with the site's (`/api/svc/managed-libraries`, Bearer `DRIVE_SVC_TOKEN`); change those in Sites
 - Recent, Starred, Shared with me / by me, search by name and by words inside text files
 - Recycle bin, emptied after `DRIVE_TRASH_DAYS`
 - Storage quota per person, AI summaries of text files through `@synergy/ai`

@@ -1,4 +1,4 @@
-// Each site's document library is a Drive shared library (Drive's /api/svc/libraries, Bearer
+// Each site's document library is a Drive shared library (Drive's /api/svc/managed-libraries, Bearer
 // DRIVE_SVC_TOKEN). Sites decides who is in it: the site's owners, members and visitors become the
 // library's owners, editors and viewers, with groups expanded to their people, and Drive leaves
 // those libraries' membership to Sites. Files themselves (uploads, versions, previews, sharing
@@ -23,7 +23,7 @@ function libraryWebUrl(libraryId) {
 }
 
 async function call(method, path, body) {
-  const res = await fetch(`${driveUrl()}/api/svc/libraries${path}`, {
+  const res = await fetch(`${driveUrl()}/api/svc/managed-libraries${path}`, {
     method,
     headers: { authorization: `Bearer ${token()}`, ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,

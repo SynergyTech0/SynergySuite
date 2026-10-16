@@ -558,7 +558,7 @@ services:
       DRIVE_MAX_FILE_MB: ${DRIVE_MAX_FILE_MB:-}
       DRIVE_TRASH_DAYS: ${DRIVE_TRASH_DAYS:-}
       DRIVE_VERSIONS: ${DRIVE_VERSIONS:-}
-      # Sites makes and staffs its sites' document libraries through /api/svc/libraries.
+      # Sites makes and staffs its sites' document libraries through /api/svc/managed-libraries.
       DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
     volumes:
       - drive-files:/data/drive

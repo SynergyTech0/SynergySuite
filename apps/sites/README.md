@@ -42,7 +42,7 @@ The tables are created on first start. Add `?as=other@example.com` to the URL to
 | `SUITE_DOMAIN` | The suite's domain. Form blocks embed `https://forms.<domain>/f/<slug>`; without it they use the local forms port. |
 | `SITES_BOOKING_URL` | Base URL of the Bookings app (compose sets `https://bookings.<domain>`). A Booking block embeds `<url>/book/<page>` or `<url>/book/<page>/<service>`, using the block's owner and slug fields, and is left out when this is unset. |
 | `SITES_DRIVE_URL` | Drive on the internal network (compose sets `http://drive:3180`). With `DRIVE_SVC_TOKEN`, each site gets a document library. |
-| `DRIVE_SVC_TOKEN` | Shared with Drive, for its `/api/svc/libraries`. Empty = no document libraries. |
+| `DRIVE_SVC_TOKEN` | Shared with Drive, for its `/api/svc/managed-libraries`. Empty = no document libraries. |
 | `SITES_DRIVE_PUBLIC_URL` | Where people open Drive (default `https://drive.<SUITE_DOMAIN>`). |
 | `SITES_SYNC_MINUTES` | How often libraries of sites with group access are re-synced with the groups (default 5). |
 | `GROUPS_INTERNAL_URL` | The Groups app, read by `@synergy/groups`. Without it there are no groups. |

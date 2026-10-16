@@ -53,12 +53,12 @@ test('team sites', { skip: !url && 'TEST_DATABASE_URL not set' }, async t => {
   const setGroups = g => fs.writeFileSync(groupsFile, JSON.stringify(g));
   setGroups({ crew: { name: 'Harbour crew', kind: 'team', owners: [carol], members: [dan] } });
 
-  // Drive's /api/svc/libraries.
+  // Drive's /api/svc/managed-libraries.
   const libs = new Map();
   let nextLib = 1;
   const drive = await fakeServer((req, body) => {
     if (req.headers.authorization !== 'Bearer drive-token') return { status: 401, body: { error: 'bad token' } };
-    const m = /^\/api\/svc\/libraries(?:\/([^/?]+))?(\/items)?/.exec(req.url);
+    const m = /^\/api\/svc\/managed-libraries(?:\/([^/?]+))?(\/items)?/.exec(req.url);
     const lib = m[1] && libs.get(m[1]);
     if (req.method === 'POST' && !m[1]) {
       const id = `00000000-0000-0000-0000-${String(nextLib++).padStart(12, '0')}`;

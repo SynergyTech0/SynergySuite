@@ -1,5 +1,5 @@
 /**
- * The service API other suite apps use for libraries they keep the people of (`/api/svc/libraries`,
+ * The service API other suite apps use for libraries they keep the people of (`/api/svc/managed-libraries`,
  * Bearer DRIVE_SVC_TOKEN). Sites makes one library per site and sets its members whenever the
  * site's permissions change; Drive marks it `managed_by` so its owners change people in Sites, not here.
  */
@@ -26,7 +26,7 @@ export function svcRoute<A extends unknown[]>(fn: (req: Request, ...rest: A) => 
     } catch (err) {
       if (err instanceof UserError) return NextResponse.json({ error: err.message }, { status: err.status });
       if ((err as { code?: string })?.code === "22P02") return NextResponse.json({ error: "Not found" }, { status: 404 });
-      console.error("[drive svc]", err);
+      console.error("[drive managed]", err);
       return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
     }
   };
