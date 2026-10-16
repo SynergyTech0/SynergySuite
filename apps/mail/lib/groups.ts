@@ -25,7 +25,7 @@ export async function putGroup(address: string, spec: GroupSpec): Promise<GroupR
   const domainId = await domainOf(url, domains, domain);
   if (!domainId) throw new UserError(`This suite's mail server doesn't host ${domain} addresses`, 403);
   if (spec.kind === "list") {
-    await putList(url, local, domainId, spec);
+    await putList(url, address, local, domainId, spec);
     return { address, provisioned: true };
   }
   const skipped = await putShared(url, address, local, domainId, spec, domains);
@@ -40,7 +40,7 @@ export async function deleteGroup(address: string): Promise<GroupResult> {
   const { local, domain } = split(address);
   const domainId = await domainOf(url, new Map(), domain);
   if (!domainId) return { address, provisioned: true };
-  const listId = await first(url, "x:MailingList/query", { filter: { name: local, domainId } });
+  const listId = await listOf(url, address, local, domainId);
   if (listId) await set(url, "x:MailingList/set", { destroy: [listId] }, listId, "notDestroyed");
   const groupId = await first(url, "x:Account/query", { filter: { name: local, domainId } });
   if (groupId && (await typeOf(url, groupId)) === "Group") {
@@ -50,16 +50,27 @@ export async function deleteGroup(address: string): Promise<GroupResult> {
       const update = Object.fromEntries(granted.map((r) => [r.user_id, { [`memberGroupIds/${groupId}`]: null }]));
       await call(url, [["x:Account/set", { update }, "m"]]);
     }
-    await set(url, "x:Account/set", { destroy: [groupId] }, groupId, "notDestroyed");
+    // Stalwart won't destroy a group anyone still belongs to (objectIsLinked), and it names them:
+    // members added on the server itself, or whose grant Mail lost. Take them out too, then retry.
+    const res = await call(url, [["x:Account/set", { destroy: [groupId] }, "s"]]);
+    const linked: { object?: string; id?: string }[] = res?.notDestroyed?.[groupId]?.linkedObjects ?? [];
+    const others = linked.filter((o) => o.object === "Account" && o.id).map((o) => o.id!);
+    if (res?.notDestroyed?.[groupId] && others.length) {
+      await call(url, [["x:Account/set", { update: Object.fromEntries(others.map((id) => [id, { [`memberGroupIds/${groupId}`]: null }])) }, "m"]]);
+      await set(url, "x:Account/set", { destroy: [groupId] }, groupId, "notDestroyed");
+    } else if (res?.notDestroyed?.[groupId]) {
+      console.error("[mail] mail server refused", "x:Account/set", JSON.stringify(res.notDestroyed[groupId]));
+      throw new UserError("The mail server refused a group change", 502);
+    }
   }
   await q("DELETE FROM shared_mailbox_grants WHERE address = $1", [address]);
   return { address, provisioned: true };
 }
 
-async function putList(url: string, local: string, domainId: string, spec: GroupSpec): Promise<void> {
+async function putList(url: string, address: string, local: string, domainId: string, spec: GroupSpec): Promise<void> {
   // The whole recipients set each time: exactly the members, whoever was there before.
   const recipients = Object.fromEntries(spec.members.map((m) => [m, true]));
-  const id = await first(url, "x:MailingList/query", { filter: { name: local, domainId } });
+  const id = await listOf(url, address, local, domainId);
   if (id) await set(url, "x:MailingList/set", { update: { [id]: { description: spec.name, recipients } } }, id, "notUpdated");
   else await set(url, "x:MailingList/set", { create: { l: { name: local, domainId, description: spec.name, recipients } } }, "l", "notCreated");
 }
@@ -130,6 +141,15 @@ async function domainOf(url: string, cache: Map<string, string | null>, domain: 
 
 async function first(url: string, method: string, args: object): Promise<string | undefined> {
   return (await call(url, [[method, args, "q"]]))?.ids?.[0];
+}
+
+/** Stalwart can't filter mailing lists by name, so search their text for the address and pick the exact one. */
+async function listOf(url: string, address: string, local: string, domainId: string): Promise<string | undefined> {
+  const ids: string[] = (await call(url, [["x:MailingList/query", { filter: { text: address } }, "q"]]))?.ids ?? [];
+  if (!ids.length) return undefined;
+  const lists: { id: string; name?: string; domainId?: string }[] =
+    (await call(url, [["x:MailingList/get", { ids, properties: ["id", "name", "domainId"] }, "g"]]))?.list ?? [];
+  return lists.find((l) => l.name?.toLowerCase() === local && l.domainId === domainId)?.id;
 }
 
 async function typeOf(url: string, id: string): Promise<string | undefined> {

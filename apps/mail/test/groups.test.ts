@@ -37,7 +37,9 @@ function stalwart([method, args]: Call) {
   switch (method) {
     case "x:Domain/query": return { ids: args.filter.name === "example.com" ? ["d1"] : [] };
     case "x:Account/query": return { ids: accounts.has(key) ? [accounts.get(key)!.id] : [] };
-    case "x:MailingList/query": return { ids: lists.has(key) ? [lists.get(key)] : [] };
+    // Like Stalwart: no filter on a list's name, only a text search (which also matches recipients).
+    case "x:MailingList/query": return { ids: args.filter.name === undefined ? [...lists.values()].filter(() => /@example\.com$/.test(args.filter.text)) : [] };
+    case "x:MailingList/get": return { list: [...lists].filter(([, id]) => args.ids.includes(id)).map(([k, id]) => ({ id, name: k.split("|")[0], domainId: k.split("|")[1] })) };
     case "x:Account/get": return { list: [...accounts.values()].filter((a) => args.ids.includes(a.id)).map((a) => ({ id: a.id, "@type": a.type })) };
     case "x:Account/set":
     case "x:MailingList/set": {
