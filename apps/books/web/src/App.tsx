@@ -27,6 +27,8 @@ import { InventoryBundles } from './pages/InventoryBundles';
 import { DirectDeposit } from './pages/DirectDeposit';
 import { TaxFiling } from './pages/TaxFiling';
 import { MobileDeposit } from './pages/MobileDeposit';
+import { Budgets } from './pages/Budgets';
+import { Consolidation } from './pages/Consolidation';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useAuth((s) => s.user);
@@ -79,6 +81,8 @@ function App() {
         <Route path="banking/transactions" element={<BankTransactions />} />
         <Route path="projects" element={<Projects />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="budgets" element={<Budgets />} />
+        <Route path="consolidation" element={<Consolidation />} />
         <Route path="tax-classification" element={<TaxClassification />} />
         <Route path="tax-ai" element={<TaxAi />} />
         <Route path="settings" element={<Settings />} />

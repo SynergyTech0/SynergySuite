@@ -9,6 +9,8 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +20,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
+import { BooksUser, CompaniesService } from './companies.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateOrganizationDto,
   UpdateOrganizationDto,
@@ -28,7 +32,11 @@ import {
 @ApiBearerAuth()
 @Controller('organizations')
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(
+    private readonly organizationService: OrganizationService,
+    private readonly companies: CompaniesService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new organization' })
@@ -39,8 +47,13 @@ export class OrganizationController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 409, description: 'Organization with EIN already exists' })
-  async create(@Body() dto: CreateOrganizationDto) {
-    return this.organizationService.create(dto);
+  async create(@Req() req: { user: BooksUser }, @Body() dto: CreateOrganizationDto) {
+    if (req.user.role !== 'ADMIN') throw new ForbiddenException('Only an admin can add a company.');
+    const org = await this.organizationService.create(dto);
+    await this.prisma.organizationUser.create({
+      data: { organizationId: org.id, userId: req.user.id, role: 'ADMIN', permissions: [] },
+    });
+    return org;
   }
 
   @Get()
@@ -53,11 +66,14 @@ export class OrganizationController {
     description: 'List of organizations',
   })
   async findAll(
+    @Req() req: { user: BooksUser },
     @Query('skip') skip?: string,
     @Query('take') take?: string,
     @Query('isActive') isActive?: string,
   ) {
+    const mine = (await this.companies.list(req.user)).map((c) => c.id);
     return this.organizationService.findAll({
+      ids: mine,
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
       isActive: isActive ? isActive === 'true' : undefined,
@@ -72,7 +88,8 @@ export class OrganizationController {
     type: OrganizationResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Organization not found' })
-  async findById(@Param('id') id: string) {
+  async findById(@Req() req: { user: BooksUser }, @Param('id') id: string) {
+    await this.companies.requireRole(req.user, [id]);
     return this.organizationService.findById(id);
   }
 
@@ -86,9 +103,11 @@ export class OrganizationController {
   @ApiResponse({ status: 404, description: 'Organization not found' })
   @ApiResponse({ status: 409, description: 'Organization with EIN already exists' })
   async update(
+    @Req() req: { user: BooksUser },
     @Param('id') id: string,
     @Body() dto: UpdateOrganizationDto,
   ) {
+    await this.companies.requireRole(req.user, [id]);
     return this.organizationService.update(id, dto);
   }
 
@@ -97,7 +116,8 @@ export class OrganizationController {
   @ApiOperation({ summary: 'Delete organization (soft delete)' })
   @ApiResponse({ status: 204, description: 'Organization deleted' })
   @ApiResponse({ status: 404, description: 'Organization not found' })
-  async delete(@Param('id') id: string) {
+  async delete(@Req() req: { user: BooksUser }, @Param('id') id: string) {
+    await this.companies.requireRole(req.user, [id], ['ADMIN']);
     await this.organizationService.delete(id);
   }
 }

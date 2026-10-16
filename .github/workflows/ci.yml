@@ -287,9 +287,9 @@ jobs:
         run: |
           npx prisma migrate deploy
           npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
-      - name: Service API unit tests
+      - name: Service API, budget and consolidation unit tests
         working-directory: apps/books/api
-        run: npx jest --preset ts-jest src/modules/svc
+        run: npx jest --preset ts-jest src/modules/svc src/modules/budget src/modules/consolidation
       - name: Build Books
         run: |
           npm run build -w @synergy/books-web
