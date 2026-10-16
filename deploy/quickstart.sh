@@ -127,15 +127,32 @@ attempts="${SYNERGY_BUILD_ATTEMPTS:-3}"
 registry="${SYNERGY_REGISTRY:-ghcr.io/synergytech0}"
 case "$batch_size" in ''|*[!0-9]*|0) die "SYNERGY_BUILD_PARALLEL must be a whole number above 0." ;; esac
 
-# The services whose suite image isn't on this machine. Every image is named after the service
-# that builds it (office-collab runs the office image, so it shows up as office).
+# Every image the chosen services run, the suite's and third-party ones (postgres, caddy ...).
+all_images() {
+  "${COMPOSE[@]}" config --images ${services[@]+"${services[@]}"} | sort -u
+}
+
+# The suite images that aren't on this machine yet.
 missing_images() {
-  "${COMPOSE[@]}" config --images ${services[@]+"${services[@]}"} | sort -u | while IFS= read -r img; do
+  all_images | while IFS= read -r img; do
     case "$img" in "$registry"/synergysuite-*) ;; *) continue ;; esac
-    docker image inspect "$img" >/dev/null 2>&1 && continue
-    img="${img#"$registry"/synergysuite-}"
-    printf '%s\n' "${img%%:*}"
+    docker image inspect "$img" >/dev/null 2>&1 || printf '%s\n' "$img"
   done
+}
+
+# Download images one by one, SYNERGY_PULL_PARALLEL (default 6) at a time. `compose pull`
+# cancels every other download as soon as one image is missing from the registry (an app that
+# was just added and isn't published yet), so each image gets its own `docker pull` instead.
+pull_images() {
+  printf '%s\n' "$@" | xargs -P "${SYNERGY_PULL_PARALLEL:-6}" -I{} \
+    sh -c 'docker pull -q "$1" >/dev/null 2>&1 && echo "  downloaded $1" || echo "  not downloaded: $1"' _ {}
+}
+
+# The service that builds a suite image: each one is named after it (office-collab runs the
+# office image, so it shows up as office).
+image_service() {
+  local name="${1#"$registry"/synergysuite-}"
+  printf '%s\n' "${name%%:*}"
 }
 
 to_build=()
@@ -147,17 +164,21 @@ if [ "${SYNERGY_BUILD:-pull}" = local ]; then
   fi
 else
   say "Downloading the suite's images ..."
-  "${COMPOSE[@]}" pull --ignore-pull-failures ${services[@]+"${services[@]}"} || true
+  images=()
+  while IFS= read -r img; do [ -n "$img" ] && images+=("$img"); done < <(all_images)
+  pull_images "${images[@]}"
   attempt=1
   while :; do
-    to_build=()
-    while IFS= read -r s; do [ -n "$s" ] && to_build+=("$s"); done < <(missing_images)
-    if [ ${#to_build[@]} -eq 0 ] || [ "$attempt" -ge "$attempts" ]; then break; fi
+    missing=()
+    while IFS= read -r img; do [ -n "$img" ] && missing+=("$img"); done < <(missing_images)
+    if [ ${#missing[@]} -eq 0 ] || [ "$attempt" -ge "$attempts" ]; then break; fi
     attempt=$((attempt + 1))
-    say "${#to_build[@]} images didn't download. Trying them again, attempt $attempt of $attempts ..."
+    say "${#missing[@]} images didn't download. Trying them again, attempt $attempt of $attempts ..."
     sleep 10
-    "${COMPOSE[@]}" pull --ignore-pull-failures "${to_build[@]}" || true
+    pull_images "${missing[@]}"
   done
+  to_build=()
+  for img in ${missing[@]+"${missing[@]}"}; do to_build+=("$(image_service "$img")"); done
   if [ ${#to_build[@]} -gt 0 ]; then
     say ""
     say "These images couldn't be downloaded, so they are built here: ${to_build[*]}"
