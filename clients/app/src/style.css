@@ -22,6 +22,11 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg); }
+/* Keep clear of the notch and home indicator on phones. */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
 [hidden] { display: none !important; }
 button { font: inherit; cursor: pointer; }
 
@@ -101,3 +106,9 @@ input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 }
 .name { font-weight: 600; }
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 28px; }
+
+@media (max-width: 520px) {
+  #connect { margin: 6vh 16px 0; padding: 24px 20px; }
+  #launcher { padding: 16px; }
+  .apps { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+}
