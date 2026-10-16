@@ -6,6 +6,11 @@ Intune and Defender for Endpoint. Each Windows, macOS or Linux computer runs
 Devices is its server over osquery's TLS remote API. osquery is installed from its own
 releases; this app does not bundle or modify it.
 
+iPhones, iPads and Macs can also be put under Apple device management, through
+[NanoMDM](https://github.com/micromdm/nanomdm) and [micromdm/scep](https://github.com/micromdm/scep)
+(both MIT, by the MicroMDM project), which run unmodified beside Devices as the
+`devices-mdm` and `devices-scep` services.
+
 ## What it does
 
 - **Inventory**: hardware, serial, OS and version, installed software, who signs in, last check-in.
@@ -21,6 +26,12 @@ releases; this app does not bundle or modify it.
 - **Vulnerabilities**: installed Ubuntu, Debian, Rocky and Alma packages checked against
   [OSV](https://osv.dev) every 12 hours, scored with CVSS v3.1.
 - **Live queries**: run osquery SQL on chosen devices and see the answers as they arrive.
+- **Apple device management**: remote lock (owners can lock their own lost device), erase,
+  restart and shut down; configuration profiles (passcode, FileVault, firewall, software updates,
+  Wi-Fi, restrictions, or an unsigned `.mobileconfig` of your own) kept current on every managed
+  device; App Store apps and Mac `.pkg` installers, installed by admins or by people on their own
+  devices, and optionally on every new device. iPhones and iPads report their passcode and data
+  protection for compliance; a Mac that also runs osquery is one device, matched by serial number.
 - **Suite links**: search results and eDiscovery (devices and alerts per person) through the
   Admin center, and the `endpoint_compliance` and `endpoint_threats` evidence collectors in Trust.
 
@@ -38,6 +49,25 @@ Caddyfile lets `/api/osquery/*` through without a suite sign-in; the agent authe
 its enrollment key and node key instead. If your certificates come from a private CA (the
 quickstart's `local_certs`), put the CA certificate in `DEVICES_TLS_CA` so the scripts install it.
 
+## Apple devices
+
+1. Set `DEVICES_MDM_API_KEY`, `DEVICES_MDM_WEBHOOK_KEY` and `DEVICES_SCEP_CHALLENGE`
+   (`openssl rand -hex 32` each; the quickstart fills them in). Until they are set the
+   `devices-mdm` and `devices-scep` containers stay idle.
+2. Get an Apple MDM push certificate: have a certificate signing request signed by an MDM vendor
+   ([mdmcert.download](https://mdmcert.download) does this for free), upload it at
+   [identity.apple.com](https://identity.apple.com) with a company Apple ID, and upload the
+   certificate with its unencrypted private key in Devices › Apple devices. Renew it there
+   every year with the same Apple ID; a new certificate means every device enrolls again.
+3. People download an enrollment profile from My devices and install it on their iPhone, iPad
+   or Mac. Admins can download an organization profile (devices start without an owner).
+
+Devices must reach `https://devices.<SUITE_DOMAIN>` with a certificate they trust. The Caddyfile
+sends `/mdm/apple/mdm` to NanoMDM and `/scep` to the SCEP server; NanoMDM's API and its webhook
+to Devices (`/api/svc/apple/webhook`, signed with `DEVICES_MDM_WEBHOOK_KEY`) stay on the compose
+network. Restart and shut down on iPhones and iPads need supervised devices; App Store installs
+without an Apple ID prompt need Apple Business Manager licenses, which aren't supported yet.
+
 ## Settings
 
 | Variable | |
@@ -49,13 +79,18 @@ quickstart's `local_certs`), put the CA certificate in `DEVICES_TLS_CA` so the s
 | `DEVICES_OSV_URL` | OSV API base (default `https://api.osv.dev`); `off` turns scanning off |
 | `DEVICES_SVC_TOKEN` | Bearer token for `/api/svc/posture`, read by Trust |
 | `DEVICES_AI_*` | Own AI model for alert explanations; defaults to the suite's `AI_*` |
+| `DEVICES_MDM_URL` | NanoMDM's address (compose sets `http://devices-mdm:9000`) |
+| `DEVICES_MDM_API_KEY` | NanoMDM's API key, shared with `devices-mdm` |
+| `DEVICES_MDM_WEBHOOK_KEY` | Key NanoMDM signs its webhook with, shared with `devices-mdm` |
+| `DEVICES_SCEP_CHALLENGE` | SCEP challenge put in enrollment profiles, shared with `devices-scep` |
+| `DEVICES_ORG_NAME` | Organization name on management profiles (default `Synergy`) |
 
 ## Not yet
 
-osquery only reads, so there is no remote lock or wipe, no pushing settings or apps, and no
-blocking of sign-in from non-compliant devices. Those need an MDM channel (Apple MDM,
-Windows MDM) and are planned for a later milestone. Retiring a device stops it reporting;
-it doesn't uninstall osquery.
+Android phones, Windows device management (lock, wipe, settings and apps on Windows), and
+blocking sign-in from non-compliant devices are the next milestones. Apple Business Manager
+(automated enrollment and app licenses) isn't supported yet. Retiring a computer stops it
+reporting; it doesn't uninstall osquery.
 
 ## Development
 

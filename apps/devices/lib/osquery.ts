@@ -75,6 +75,19 @@ export async function enroll(b: Record<string, unknown>, ip: string | null): Pro
     );
     // Someone else's personal enrollment can't take over a device that belongs to a person.
     if (existing && !existing.retired_at && existing.owner && s.owner && existing.owner !== s.owner) return null;
+    const serial = text(sys.hardware_serial, 200);
+    if (!existing && serial && platform === "darwin") {
+      // A Mac enrolled in Apple management before osquery was installed: osquery takes over its row.
+      const [m] = await tq<{ id: string; owner: string | null }>(
+        `SELECT id, owner FROM devices WHERE host_identifier LIKE 'mdm:%' AND hardware_serial = $1 AND platform = 'darwin' AND retired_at IS NULL
+         ORDER BY last_seen DESC LIMIT 1 FOR UPDATE`,
+        [serial],
+      );
+      if (m && !(m.owner && s.owner && m.owner !== s.owner)) {
+        await tq(`UPDATE devices SET host_identifier = $2 WHERE id = $1`, [m.id, host]);
+        await tq(`DELETE FROM software WHERE device_id = $1 AND source = 'mdm'`, [m.id]);
+      }
+    }
     const cols = [
       host, sha256(nodeKey), s.id, s.owner, text(sys.computer_name || sys.hostname, 300), platform,
       text(os.name, 200), text(os.version, 100).replace(/\s*\(.*\)\s*$/, ""), text(sys.hardware_vendor, 200), text(sys.hardware_model, 200),

@@ -6,7 +6,7 @@ import { type AppCtx, Empty, PLATFORM } from "./shared";
 
 type O = {
   devices: number; compliant: number; noncompliant: number; unknown: number; stale: number; unowned: number; encrypted: number;
-  windows: number; darwin: number; linux: number;
+  windows: number; darwin: number; linux: number; ios: number; managed: number;
   alerts: Record<string, number>;
   vulns: Record<string, { advisories: number; devices: number }>;
   failing: { check: string; n: number }[];
@@ -41,7 +41,7 @@ export function Overview({ app }: { app: AppCtx }) {
             <a className="stat" href="#/devices">
               <div className="k">Devices</div>
               <div className="v">{o.devices}</div>
-              <div className="s">{[["windows", o.windows], ["darwin", o.darwin], ["linux", o.linux]].filter(([, n]) => n).map(([p, n]) => `${n} ${PLATFORM[p as string]}`).join(" · ")}</div>
+              <div className="s">{[["windows", o.windows], ["darwin", o.darwin], ["linux", o.linux], ["ios", o.ios]].filter(([, n]) => n).map(([p, n]) => `${n} ${PLATFORM[p as string]}`).join(" · ")}</div>
             </a>
             <a className="stat" href="#/devices">
               <div className="k">Not compliant</div>

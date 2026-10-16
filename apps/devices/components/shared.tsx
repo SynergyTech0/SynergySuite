@@ -10,7 +10,7 @@ export type AppCtx = {
   say: (text: string) => void;
 };
 
-export const PLATFORM: Record<string, string> = { windows: "Windows", darwin: "macOS", linux: "Linux" };
+export const PLATFORM: Record<string, string> = { windows: "Windows", darwin: "macOS", linux: "Linux", ios: "iPhone and iPad" };
 
 export function Badge({ tone = "", children }: { tone?: string; children: React.ReactNode }) {
   return <span className={`badge ${tone}`}>{children}</span>;
