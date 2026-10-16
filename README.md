@@ -35,7 +35,6 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Trust (`apps/trust`) | Purview Compliance Manager | yes | early | SOC 2, ISO 27001, HIPAA and GDPR readiness: control library mapped across frameworks, automated evidence collectors and a collector agent, append-only evidence and audit log, opt-in public trust centre |
 | Home, Groups (`prototype/workspace`) | Microsoft 365 home, Groups | no | prototype | Zero-dependency Node prototype kept as a reference; its Admin, Purview, People and To Do parts now live in `apps/admin`, `apps/contacts` and `apps/todo` |
 | HR (`apps/hr`) | Dynamics 365 Human Resources, payroll | yes | early | Employee records with HR-only and self-service fields, org chart, time off with balances, approvals and company holidays, onboarding and leaver checklists, US payroll (salary and hourly, 2026 federal withholding, Social Security, Medicare, FUTA, a flat state rate, pre-tax and Roth deductions with employer match), pay runs with approval, printable pay stubs, quarterly tax summary, paid runs posted to Books as a journal entry |
-| People add-on (`addons/people`) | (HR records) | replaced by HR | early | Employee records and PTO requests with approval; HR now serves its database |
 | Portal add-on (`addons/portal`) | (customer portal) | yes | early | Client records with private share links |
 | Sign add-on (`addons/sign`) | (DocuSign-style) | no | standalone | E-signature with multi-party signing and templates; has its own sign-in |
 | Campaigns add-on (`addons/campaigns`) | (Mailchimp-style) | no | prototype | Audiences, email builder, campaigns; sending relies on a separate mailer that is not in this repository |
@@ -101,7 +100,6 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `addons/sign` | (DocuSign-style) | Next.js 14 + Prisma |
 | `addons/campaigns` | (Mailchimp-style) | Next.js 15 |
 | `addons/portal` | customer portal | Express + React/Vite |
-| `addons/people` | HR records and PTO (replaced by `apps/hr`) | Express + React/Vite |
 | `mobile/synergy-ui` | Android UI library | Kotlin |
 
 ## Shared packages
@@ -117,7 +115,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `@synergy/shell` | `<synergy-app-bar>`, the shared header with the app launcher and the suite search box |
 | `@synergy/ai` | Bring your own AI model: one setting for the whole suite, any OpenAI-compatible server (OpenAI, Ollama, vLLM, LM Studio, OpenRouter, Azure, Groq) or Anthropic |
 
-Calendar, chat, drive, forms, mail, meet, notes, office, photo, planner and sites use them today, as do the people and portal add-ons; sign uses `@synergy/ai`. The campaigns add-on follows. Auth is the identity provider the others sign in through, so it stays standalone.
+Calendar, chat, drive, forms, mail, meet, notes, office, photo, planner, sites and hr use them today, as does the portal add-on; sign uses `@synergy/ai`. The campaigns add-on follows. Auth is the identity provider the others sign in through, so it stays standalone.
 
 ## Running locally
 

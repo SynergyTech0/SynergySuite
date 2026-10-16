@@ -26,6 +26,5 @@
   { "id": "desk",      "name": "Desk",      "m365": "Dynamics 365 Customer Service", "port": 3105, "icon": "lifebuoy", "dir": "apps/desk", "core": true },
   { "id": "sign",      "name": "Sign",      "m365": "(add-on)",             "port": 3300, "icon": "pen",      "dir": "addons/sign",    "core": false },
   { "id": "campaigns", "name": "Campaigns", "m365": "(add-on)",             "port": 3400, "icon": "send",     "dir": "addons/campaigns", "core": false },
-  { "id": "people",    "name": "People",    "m365": "(add-on)",             "port": 3140, "icon": "users",    "dir": "addons/people",  "core": false },
   { "id": "portal",    "name": "Portal",    "m365": "(add-on)",             "port": 3155, "icon": "door",     "dir": "addons/portal",  "core": false }
 ]

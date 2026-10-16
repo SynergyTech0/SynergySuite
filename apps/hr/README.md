@@ -1,6 +1,6 @@
 # Synergy HR
 
-People records, org chart, time off, onboarding checklists and US payroll, on the suite sign-in. It is the suite's Dynamics 365 Human Resources equivalent and replaces the People add-on: it uses the same `people` database and extends its tables in place, so existing employees and time-off requests carry over.
+People records, org chart, time off, onboarding checklists and US payroll, on the suite sign-in. It is the suite's Dynamics 365 Human Resources equivalent and replaces the former People add-on: it uses the same `people` database and extends its tables in place, so existing employees and time-off requests carry over.
 
 Runs on port 3145 (`npm run dev -w apps/hr`). Needs `DATABASE_URL`; tables are created on first request.
 

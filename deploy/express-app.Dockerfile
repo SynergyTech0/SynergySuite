@@ -1,8 +1,8 @@
 # Builds any of the Express + Vite suite apps (calendar, chat, forms, notes, sites)
-# and add-ons (people, portal; pass APP_DIR=addons/<name>).
+# and add-ons (portal; pass APP_DIR=addons/<name>).
 # Run from the repository root so the shared packages are in the build context:
 #   docker build -f deploy/express-app.Dockerfile --build-arg APP=chat -t synergy/chat .
-#   docker build -f deploy/express-app.Dockerfile --build-arg APP=people --build-arg APP_DIR=addons/people -t synergy/people .
+#   docker build -f deploy/express-app.Dockerfile --build-arg APP=portal --build-arg APP_DIR=addons/portal -t synergy/portal .
 ARG APP
 ARG APP_DIR=apps/${APP}
 
@@ -39,7 +39,6 @@ COPY apps/planner/package.json apps/planner/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
 COPY apps/trust/package.json apps/trust/
-COPY addons/people/package.json addons/people/
 COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace ${APP_DIR} --workspace packages/shell --workspace packages/search --include-workspace-root \

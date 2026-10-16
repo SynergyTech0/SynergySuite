@@ -115,9 +115,9 @@
     "description": "Portal add-on (addons/portal)"
   },
   {
-    "name": "app: people",
+    "name": "app: hr",
     "color": "c5def5",
-    "description": "People add-on (addons/people)"
+    "description": "HR and payroll (apps/hr)"
   },
   {
     "name": "area: deploy",

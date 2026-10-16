@@ -30,7 +30,7 @@ jobs:
       - name: App unit tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: npm test -w apps/sites -w addons/people
+        run: npm test -w apps/sites
       - name: Compliance tests (chat, calendar, notes, forms)
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
@@ -39,7 +39,7 @@ jobs:
         env:
           DEV_USER_EMAIL: ci@example.com
         run: |
-          for dir in apps/calendar apps/chat apps/forms apps/notes apps/sites addons/people addons/portal; do
+          for dir in apps/calendar apps/chat apps/forms apps/notes apps/sites addons/portal; do
             app=$(basename $dir)
             psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE $app"
             DATABASE_URL=postgres://postgres:postgres@localhost:5432/$app PORT=4000 node $dir/server/index.js &

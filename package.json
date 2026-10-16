@@ -29,7 +29,6 @@
     "apps/sites",
     "apps/todo",
     "apps/trust",
-    "addons/people",
     "addons/portal"
   ],
   "scripts": {
