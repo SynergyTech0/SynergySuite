@@ -4,9 +4,9 @@
   "private": true,
   "description": "Synergy Contracts - contract lifecycle: templates and clause library, approvals, signatures, renewals, obligations and AI review",
   "scripts": {
-    "dev": "next dev -p 3830",
+    "dev": "next dev -p 3860",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3830",
+    "start": "next start -H 0.0.0.0 -p 3860",
     "test": "vitest run"
   },
   "dependencies": {

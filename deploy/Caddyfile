@@ -404,7 +404,7 @@ contracts.{$SUITE_DOMAIN} {
 		respond 404
 	}
 	import signed_in
-	import to_app contracts:3830
+	import to_app contracts:3860
 }
 
 projects.{$SUITE_DOMAIN} {

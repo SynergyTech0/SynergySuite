@@ -11,4 +11,4 @@ Contract lifecycle management, the suite's answer to Dynamics 365 and SharePoint
 - **Access.** A contract is visible to its owner, the people it is shared with (view or edit), its approvers, and the legal team (`CONTRACTS_ADMIN_EMAILS`, default `ADMIN_EMAILS`), who see everything and keep the library. With no legal team set, everyone can keep the library.
 - **Suite search** (`POST /api/search`, per person) and **eDiscovery** (`/api/compliance/search|export`) for contracts, obligations, files and approvals. Deletes under a legal hold are kept, hidden.
 
-Port 3830, database `contracts`. Tests run against Postgres when `TEST_DATABASE_URL` is set: `npm test --workspace apps/contracts`.
+Port 3860, database `contracts`. Tests run against Postgres when `TEST_DATABASE_URL` is set: `npm test --workspace apps/contracts`.
