@@ -22,6 +22,7 @@
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },
   { "id": "crm",       "name": "CRM",       "m365": "Dynamics 365 Sales",   "port": 3095, "icon": "target",   "dir": "apps/crm",       "core": true },
   { "id": "desk",      "name": "Desk",      "m365": "Dynamics 365 Customer Service", "port": 3105, "icon": "lifebuoy", "dir": "apps/desk", "core": true },
+  { "id": "commerce",  "name": "Commerce",  "m365": "Dynamics 365 Commerce, Supply Chain", "port": 3720, "icon": "cart", "dir": "apps/commerce", "core": true },
   { "id": "sign",      "name": "Sign",      "m365": "(add-on)",             "port": 3300, "icon": "pen",      "dir": "addons/sign",    "core": false },
   { "id": "campaigns", "name": "Campaigns", "m365": "(add-on)",             "port": 3400, "icon": "send",     "dir": "addons/campaigns", "core": false },
   { "id": "people",    "name": "People",    "m365": "(add-on)",             "port": 3140, "icon": "users",    "dir": "addons/people",  "core": false },
