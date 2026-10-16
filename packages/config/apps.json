@@ -34,6 +34,7 @@
   { "id": "crm",       "name": "CRM",       "m365": "Dynamics 365 Sales",   "port": 3095, "icon": "target",   "dir": "apps/crm",       "core": true },
   { "id": "hr",        "name": "HR",        "m365": "Dynamics 365 Human Resources, payroll", "port": 3145, "icon": "users", "dir": "apps/hr", "core": true },
   { "id": "desk",      "name": "Desk",      "m365": "Dynamics 365 Customer Service", "port": 3105, "icon": "lifebuoy", "dir": "apps/desk", "core": true },
+  { "id": "contracts", "name": "Contracts", "m365": "Dynamics 365 contract management, Syntex contract management", "port": 3830, "icon": "contract", "dir": "apps/contracts", "core": true },
   { "id": "projects",  "name": "Projects",  "m365": "Project, Dynamics 365 Project Operations", "port": 3820, "icon": "gantt", "dir": "apps/projects", "core": true },
   { "id": "ops",       "name": "Ops",       "m365": "Dynamics 365 Supply Chain Management (manufacturing, asset management)", "port": 3760, "icon": "wrench", "dir": "apps/ops", "core": true },
   { "id": "commerce",  "name": "Commerce",  "m365": "Dynamics 365 Commerce, Supply Chain", "port": 3730, "icon": "cart", "dir": "apps/commerce", "core": true },
