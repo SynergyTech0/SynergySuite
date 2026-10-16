@@ -1,4 +1,5 @@
 import { type W4, federalWithholding, futa, medicare, socialSecurity, taxYear } from "./federal";
+import { type StateW4, stateTable, stateWithholding } from "./state";
 
 /**
  * One paycheck, worked out from the employee's pay setup, the hours for the period and what they
@@ -50,8 +51,11 @@ export interface PayProfile {
   w4: W4;
   /** Two-letter work state. */
   state: string;
-  /** State income tax as a flat percent of taxable wages (an estimate until state tables arrive). */
+  /** "table": the state's own withholding formula; "flat": stateRatePercent of taxable wages. */
+  stateMethod: "table" | "flat";
   stateRatePercent: number;
+  /** The state withholding certificate; defaults to the federal filing status and no allowances. */
+  stateW4?: StateW4;
   deductions: Deduction[];
 }
 
@@ -116,6 +120,9 @@ export interface Paycheck {
   taxYear: number;
   warnings: string[];
 }
+
+/** States whose income tax applies to pre-tax retirement deferrals. */
+const RETIREMENT_TAXED_STATES = new Set(["PA"]);
 
 const pct = (cents: number, percent: number) => Math.round((cents * percent) / 100);
 
@@ -184,7 +191,21 @@ export function computePaycheck(p: PayProfile, h: Hours, rules: CompanyRules, yt
   const fit = federalWithholding(fitWages, periods, p.w4, table);
   const ss = socialSecurity(ficaWages, ytd.socialSecurityWagesCents, table);
   const med = medicare(ficaWages, ytd.medicareWagesCents, table);
-  const stateTax = pct(fitWages, p.stateRatePercent);
+  // Pennsylvania taxes 401(k) deferrals; the other states follow the federal treatment.
+  const stateWages = RETIREMENT_TAXED_STATES.has(p.state.toUpperCase()) ? ficaWages : fitWages;
+  let stateTax = 0;
+  if (p.stateMethod === "flat") {
+    stateTax = pct(stateWages, p.stateRatePercent);
+  } else if (p.state) {
+    const st = stateTable(p.state);
+    if (!st) {
+      warnings.push(`No withholding table for ${p.state.toUpperCase()}; no state tax taken. Set a flat rate on the pay profile.`);
+    } else {
+      if (st.year < year) warnings.push(`No ${year} ${p.state.toUpperCase()} withholding figures yet; used ${st.year}.`);
+      const sw4: StateW4 = p.stateW4 ?? { filingStatus: p.w4.filingStatus, allowances: 0, extraWithholding: 0 };
+      stateTax = stateWithholding(stateWages, periods, sw4, st, fit);
+    }
+  }
   const taxes: Line[] = [
     { code: "federal", label: "Federal income tax", amountCents: fit },
     { code: "social_security", label: "Social Security", amountCents: ss },
@@ -219,7 +240,7 @@ export function computePaycheck(p: PayProfile, h: Hours, rules: CompanyRules, yt
     netCents,
     employerTaxesCents: employerTaxes.reduce((s, t) => s + t.amountCents, 0),
     employerBenefitsCents: deductions.reduce((s, d) => s + d.employerCents, 0),
-    wages: { federal: fitWages, socialSecurity: ficaWages, medicare: ficaWages, futa: ficaWages, state: fitWages },
+    wages: { federal: fitWages, socialSecurity: ficaWages, medicare: ficaWages, futa: ficaWages, state: stateWages },
     taxYear: table.year,
     warnings,
   };
