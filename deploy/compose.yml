@@ -267,6 +267,9 @@ services:
       # The Booking block embeds pages from Bookings.
       SITES_BOOKING_URL: ${SITES_BOOKING_URL:-https://bookings.${SUITE_DOMAIN}}
       SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
+      # Each site's document library is a Drive library whose people Sites keeps (DRIVE_SVC_TOKEN on both).
+      SITES_DRIVE_URL: http://drive:3180
+      DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
 
   # ---- add-ons ----
   portal:
@@ -555,6 +558,8 @@ services:
       DRIVE_MAX_FILE_MB: ${DRIVE_MAX_FILE_MB:-}
       DRIVE_TRASH_DAYS: ${DRIVE_TRASH_DAYS:-}
       DRIVE_VERSIONS: ${DRIVE_VERSIONS:-}
+      # Sites makes and staffs its sites' document libraries through /api/svc/libraries.
+      DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
     volumes:
       - drive-files:/data/drive
 

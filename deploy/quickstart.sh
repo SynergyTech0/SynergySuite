@@ -58,6 +58,7 @@ else
   setvar OAUTH2_COOKIE_SECRET "$(hex 16)"
   setvar PROXY_SHARED_SECRET "$(hex 32)"
   setvar CAL_SVC_TOKEN "$(hex 32)"
+  setvar DRIVE_SVC_TOKEN "$(hex 32)"
   setvar SEED_ADMIN_EMAIL "admin@$domain"
   setvar SEED_ADMIN_PASSWORD "Suite-$(hex 8)"
   # Local mode: certificates from Caddy's own CA, and every port bound to this machine only.

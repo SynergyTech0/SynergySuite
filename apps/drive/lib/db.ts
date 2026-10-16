@@ -107,6 +107,9 @@ CREATE INDEX IF NOT EXISTS activity_item_idx ON activity (item_id, at DESC);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 ALTER TABLE versions ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS items_held_idx ON items (held_deleted_at) WHERE held_deleted_at IS NOT NULL;
+
+-- Libraries another app keeps the people of, e.g. "sites:<id>" for a site's document library.
+ALTER TABLE libraries ADD COLUMN IF NOT EXISTS managed_by TEXT;
 `;
 
 type Db = ReturnType<typeof createDb>;
