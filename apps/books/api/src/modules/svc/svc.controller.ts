@@ -1,11 +1,13 @@
-import { BadRequestException, Controller, Get, Headers, Query, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Headers, Post, Query, UnauthorizedException } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Public } from '../auth/guards/suite-auth.guard';
+import { parsePosting } from './postings';
 import { SvcService, svcAuthorized } from './svc.service';
 
 /**
  * Service-to-service feeds for other suite apps, authorized by BOOKS_SVC_TOKEN rather than a
- * signed-in user. The Portal add-on lists a client's invoices from here (its INVOICE_SVC_URL).
+ * signed-in user. The Portal add-on lists a client's invoices from here (its INVOICE_SVC_URL), and
+ * Commerce records its sales, refunds, deliveries and stock adjustments (its BOOKS_INTERNAL_URL).
  */
 @ApiExcludeController()
 @Public()
@@ -18,5 +20,20 @@ export class SvcController {
     if (!svcAuthorized(auth)) throw new UnauthorizedException();
     if (!email || !email.includes('@')) throw new BadRequestException('email is required');
     return this.svc.invoicesFor(email);
+  }
+
+  /** The chart of accounts, so an app can show which account number is which. */
+  @Get('accounts')
+  async accounts(@Headers('authorization') auth: string | undefined) {
+    if (!svcAuthorized(auth)) throw new UnauthorizedException();
+    return this.svc.accounts();
+  }
+
+  /** Records a balanced journal entry once per reference (see postings.ts). */
+  @Post('postings')
+  @HttpCode(200)
+  async postings(@Headers('authorization') auth: string | undefined, @Body() body: unknown) {
+    if (!svcAuthorized(auth)) throw new UnauthorizedException();
+    return this.svc.record(parsePosting(body));
   }
 }
