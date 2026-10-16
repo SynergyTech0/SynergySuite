@@ -1,8 +1,11 @@
-# Builds the Synergy app (clients/app) for Android and iOS. The Android job uploads a debug
-# APK that installs on any phone with "install unknown apps" allowed; the iOS job builds for
-# the simulator. Store builds need an Android upload key and an Apple Developer team, added
-# as repository secrets later. The native projects are generated fresh on each run
-# (`tauri android init`, `tauri ios init`), so only clients/app is checked in.
+# Builds the Synergy app (clients/app) for Android and iOS. On pull requests and main, the
+# Android job uploads a debug APK that installs on any phone with "install unknown apps"
+# allowed, and the iOS job builds for the simulator. Pushing an app-v* tag (matching the
+# version in tauri.conf.json) builds the store releases instead: a signed Android App Bundle
+# sent to the Google Play internal testing track, and an iOS build sent to TestFlight. Their
+# secrets are listed in clients/app/RELEASING.md; a store job whose secrets are not set yet
+# warns and stops. The native projects are generated fresh on each run (`tauri android
+# init`, `tauri ios init`), so only clients/app is checked in.
 name: mobile
 
 on:
@@ -11,6 +14,7 @@ on:
   push:
     branches: [main]
     paths: ["clients/app/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/mobile.yml"]
+    tags: ["app-v*"]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +26,7 @@ concurrency:
 
 jobs:
   android:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,6 +66,7 @@ jobs:
           path: clients/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
   ios:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: macos-latest
     defaults:
       run:
@@ -82,3 +88,157 @@ jobs:
       - run: npx tauri ios init --ci
       - run: npm run icons
       - run: npx tauri ios build --debug --target aarch64-sim
+
+  android-release:
+    if: startsWith(github.ref, 'refs/tags/app-v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/app
+    env:
+      NDK_VERSION: 27.2.12479018
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ready
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          [ "${GITHUB_REF_NAME#app-v}" = "$version" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match version $version in tauri.conf.json"; exit 1; }
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::No Android release built: set the ANDROID_* secrets (see clients/app/RELEASING.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - if: steps.ready.outputs.ok == 'true'
+        run: |
+          sdkmanager=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          (yes || true) | "$sdkmanager" --install "ndk;$NDK_VERSION" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: clients/app/package-lock.json
+      - if: steps.ready.outputs.ok == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+      - if: steps.ready.outputs.ok == 'true'
+        run: |
+          npm ci
+          npx tauri android init --ci
+          npm run icons
+          # Every upload to Play needs a higher versionCode than the last one.
+          npx tauri android build --aab --apk \
+            --config "{\"bundle\":{\"android\":{\"versionCode\":$((100000 + GITHUB_RUN_NUMBER))}}}"
+      - if: steps.ready.outputs.ok == 'true'
+        name: Sign the App Bundle and APK with the upload key
+        run: |
+          out="$RUNNER_TEMP/android"
+          mkdir -p "$out"
+          keystore="$RUNNER_TEMP/upload.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          outputs=src-tauri/gen/android/app/build/outputs
+          cp "$(find $outputs/bundle -name '*release*.aab' | head -1)" "$out/synergy-$GITHUB_REF_NAME.aab"
+          jarsigner -keystore "$keystore" -storepass "$ANDROID_KEYSTORE_PASSWORD" -keypass "$ANDROID_KEY_PASSWORD" \
+            -sigalg SHA256withRSA -digestalg SHA-256 "$out/synergy-$GITHUB_REF_NAME.aab" "$ANDROID_KEY_ALIAS"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$tools/zipalign" -p -f 4 "$(find $outputs/apk -name '*release*.apk' | head -1)" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --out "$out/synergy-$GITHUB_REF_NAME.apk" "$RUNNER_TEMP/aligned.apk"
+          rm "$keystore"
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-android-release
+          path: ${{ runner.temp }}/android/*
+      - if: steps.ready.outputs.ok == 'true'
+        id: play
+        env:
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_JSON" ]; then
+            echo "::warning::Not sent to Google Play: set GOOGLE_PLAY_SERVICE_ACCOUNT_JSON (the signed bundle is in the run's artifacts)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.play.outputs.ok == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: cloud.synergytech.suite
+          releaseFiles: ${{ runner.temp }}/android/*.aab
+          track: internal
+          status: completed
+
+  ios-release:
+    if: startsWith(github.ref, 'refs/tags/app-v')
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: clients/app
+    env:
+      APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ready
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          [ "${GITHUB_REF_NAME#app-v}" = "$version" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match version $version in tauri.conf.json"; exit 1; }
+          if [ -z "$APPLE_DEVELOPMENT_TEAM" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            echo "::warning::No iOS release built: set APPLE_TEAM_ID and the APPLE_API_KEY_* secrets (see clients/app/RELEASING.md)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Xcode signs automatically with the App Store Connect API key, and altool uploads with it.
+          mkdir -p ~/private_keys
+          key=~/private_keys/AuthKey_$APPLE_API_KEY_ID.p8
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
+          {
+            echo "APPLE_API_KEY=$APPLE_API_KEY_ID"
+            echo "APPLE_API_KEY_PATH=$key"
+          } >> "$GITHUB_ENV"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: clients/app/package-lock.json
+      - if: steps.ready.outputs.ok == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - if: steps.ready.outputs.ok == 'true'
+        run: |
+          npm ci
+          npx tauri ios init --ci
+          npm run icons
+          # Every TestFlight upload needs a higher build number than the last one.
+          npx tauri ios build --export-method app-store-connect \
+            --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$GITHUB_RUN_NUMBER\"}}}"
+      - if: steps.ready.outputs.ok == 'true'
+        name: Send to TestFlight
+        run: |
+          ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -1)
+          xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$APPLE_API_KEY_ID" --apiIssuer "$APPLE_API_ISSUER"
+      - if: steps.ready.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-ios-release
+          path: clients/app/src-tauri/gen/apple/build/**/*.ipa

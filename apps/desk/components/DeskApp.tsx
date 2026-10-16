@@ -1,10 +1,11 @@
 "use client";
 import {
   BookOpen, CheckCircle2, Circle, Clock, ExternalLink, Inbox, Layers, MailCheck, MailX, MessageSquareText, Plus, Search,
-  UserRound, UserX, Archive,
+  UserRound, UserX, Archive, ShieldCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Article, Canned, Ticket } from "@/lib/types";
+import { AgentsPane } from "./AgentsPane";
 import { CannedPane, CannedList } from "./CannedPane";
 import { api } from "./client";
 import { KbList, KbPane } from "./KbPane";
@@ -12,10 +13,11 @@ import { NewTicketDialog } from "./NewTicketDialog";
 import { TicketList } from "./TicketList";
 import { TicketPane } from "./TicketPane";
 
-export type Me = { email: string; name: string };
+/** role is null for people who aren't agents: they only see the tickets they asked for. */
+export type Me = { email: string; name: string; role?: "admin" | "agent" | null; scope?: "all" | "assigned" };
 export type MailState = { inbound: boolean; outbound: boolean };
 type View = "open" | "pending" | "solved" | "closed" | "all" | "mine" | "unassigned";
-type Section = { kind: "tickets"; view: View } | { kind: "canned" } | { kind: "kb" };
+type Section = { kind: "tickets"; view: View } | { kind: "canned" } | { kind: "kb" } | { kind: "agents" };
 type Counts = Record<View, number>;
 
 const VIEWS: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -30,7 +32,8 @@ const QUEUES: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "unassigned", label: "Unassigned", icon: <UserX size={18} /> },
 ];
 
-export function DeskApp({ me }: { me: Me }) {
+export function DeskApp({ me: initialMe }: { me: Me }) {
+  const [me, setMe] = useState<Me>(initialMe);
   const [section, setSection] = useState<Section>({ kind: "tickets", view: "open" });
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
@@ -76,8 +79,12 @@ export function DeskApp({ me }: { me: Me }) {
   }, [loadTickets, view]);
 
   useEffect(() => {
-    void api<{ mail: MailState }>("/api/me").then((r) => setMail(r.mail)).catch(() => {});
-    void loadCanned().catch(() => {});
+    void api<Me & { mail: MailState }>("/api/me").then((r) => {
+      setMail(r.mail);
+      setMe({ email: r.email, name: r.name, role: r.role, scope: r.scope });
+      if (r.role) void loadCanned().catch(() => {});
+      else setSection((s) => (s.kind === "tickets" ? { kind: "tickets", view: "all" } : s));
+    }).catch(() => {});
     // ?ticket=<id> opens one ticket, ?article=<id> one knowledge-base article (links from other apps).
     const sp = new URL(location.href).searchParams;
     const id = Number(sp.get("ticket"));
@@ -90,6 +97,7 @@ export function DeskApp({ me }: { me: Me }) {
       setPick(article);
     }
   }, [loadCanned]);
+
 
   useEffect(() => {
     if (section.kind === "kb") void loadArticles().catch((e) => say(e.message));
@@ -127,6 +135,56 @@ export function DeskApp({ me }: { me: Me }) {
 
   const reading = section.kind === "tickets" ? selected !== null : pick !== null;
 
+  // Requesters (people who aren't agents) see their own requests and the public help center.
+  if (me.role === null) {
+    return (
+      <div className={`desk${selected !== null ? " withdetail" : ""}`}>
+        <nav className="nav">
+          <button className="btn primary newbtn" onClick={() => setDialog(
+            <NewTicketDialog
+              self
+              onClose={() => setDialog(null)}
+              onCreated={async (t) => {
+                setDialog(null);
+                setSelected(t.id);
+                await loadTickets().catch(() => {});
+                say(`Request ${t.number} sent`);
+              }}
+            />,
+          )}>
+            <Plus size={18} /> New request
+          </button>
+          <div className="navsection">Help desk</div>
+          <button className="navitem active"><Layers size={18} /> <span className="grow">My requests</span></button>
+          <a className="navitem" href="/kb" target="_blank" rel="noopener">
+            <ExternalLink size={18} /> <span className="grow">Help center</span>
+          </a>
+          <div className="grow" />
+          <p className="muted small pad">You aren&apos;t a help desk agent, so you see the requests you made. A Desk admin can add you as an agent.</p>
+        </nav>
+        <section className="listpane">
+          <div className="listhead">
+            <div className="titlerow"><h1 className="grow">My requests</h1></div>
+            <label className="search">
+              <Search size={16} />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search my requests" aria-label="Search my requests" />
+            </label>
+          </div>
+          <TicketList tickets={tickets} selected={selected} onOpen={setSelected} query={query} view="all" />
+        </section>
+        <section className="detail">
+          {selected !== null ? (
+            <TicketPane key={selected} id={selected} me={me} mail={mail} canned={[]} onBack={() => setSelected(null)} onChanged={() => {}} say={say} />
+          ) : (
+            <div className="empty"><Circle size={40} strokeWidth={1.2} /><p>Select a request to read it.</p></div>
+          )}
+        </section>
+        {dialog}
+        {toast && <div className="toast" role="status">{toast}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className={`desk${reading ? " withdetail" : ""}`}>
       <nav className="nav">
@@ -147,6 +205,14 @@ export function DeskApp({ me }: { me: Me }) {
         <a className="navitem" href="/kb" target="_blank" rel="noopener">
           <ExternalLink size={18} /> <span className="grow">Public help center</span>
         </a>
+        {me.role === "admin" && (
+          <>
+            <div className="navsection">Settings</div>
+            <button className={`navitem${section.kind === "agents" ? " active" : ""}`} onClick={() => go({ kind: "agents" })}>
+              <ShieldCheck size={18} /> <span className="grow">Agents</span>
+            </button>
+          </>
+        )}
         <div className="grow" />
         <div className="mailstate small">
           <span className={mail.inbound ? "ok" : "muted"} title="Unread mail in the support mailbox becomes tickets">
@@ -237,6 +303,8 @@ export function DeskApp({ me }: { me: Me }) {
           </section>
         </>
       )}
+
+      {section.kind === "agents" && <AgentsPane me={me} say={say} />}
 
       {dialog}
       {toast && <div className="toast" role="status">{toast}</div>}

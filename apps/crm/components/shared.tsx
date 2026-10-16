@@ -8,6 +8,9 @@ export type AppCtx = {
   me: Ctx;
   members: Member[];
   ai: boolean;
+  /** What reps can see: their own and shared records, or every record (lib/access.ts). */
+  repRead: "own" | "all";
+  setRepRead: (v: "own" | "all") => void;
   go: (view: import("./client").View, id?: string | null) => void;
   say: (text: string) => void;
   /** Bumped when something changed that other screens show (counts, lists). */
