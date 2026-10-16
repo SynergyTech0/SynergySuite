@@ -330,7 +330,7 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/loop
       COLLAB_ADDRESS: 0.0.0.0
-      COLLAB_PORT: "3731"
+      COLLAB_PORT: "3771"
 
   # Books (Dynamics 365 Business Central equivalent): API and web app in one container.
   books:

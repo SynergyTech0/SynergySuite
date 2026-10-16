@@ -5,5 +5,5 @@
 export function collabUrl(): string {
   if (process.env.LOOP_COLLAB_URL) return process.env.LOOP_COLLAB_URL;
   if (process.env.SUITE_DOMAIN) return `wss://loop.${process.env.SUITE_DOMAIN}/collab`;
-  return `ws://localhost:${process.env.COLLAB_PORT || 3731}`;
+  return `ws://localhost:${process.env.COLLAB_PORT || 3771}`;
 }

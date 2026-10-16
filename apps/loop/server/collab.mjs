@@ -22,7 +22,7 @@ const pool = new pg.Pool({
 });
 const q = async (text, params) => (await pool.query(text, params)).rows;
 
-const PORT = Number(process.env.COLLAB_PORT || 3731);
+const PORT = Number(process.env.COLLAB_PORT || 3771);
 
 const server = new Hocuspocus({
   port: PORT,

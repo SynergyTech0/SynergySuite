@@ -4,9 +4,9 @@
   "private": true,
   "description": "Synergy Loop - shared workspaces, pages and live components that stay in sync wherever they are shared",
   "scripts": {
-    "dev": "next dev -p 3730",
+    "dev": "next dev -p 3770",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3730",
+    "start": "next start -H 0.0.0.0 -p 3770",
     "collab": "node server/collab.mjs",
     "test": "vitest run"
   },

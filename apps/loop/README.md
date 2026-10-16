@@ -2,8 +2,8 @@
 
 Shared workspaces for a team's plans and notes, made of pages and **live components**. A component (a task list, checklist, table, voting table, progress tracker, Q&A, list or paragraph) is its own shared document: put it on several pages, paste its link into a Chat message, open it on its own, and every copy is the same component, updated as people type.
 
-- **Web and API:** Next.js 16 + Postgres (port 3730)
-- **Live co-editing:** a [Hocuspocus](https://github.com/ueberdosis/hocuspocus) (Yjs) server, `server/collab.mjs` (port 3731). It saves each shared document to the same database, with its plain text for search and eDiscovery.
+- **Web and API:** Next.js 16 + Postgres (port 3770)
+- **Live co-editing:** a [Hocuspocus](https://github.com/ueberdosis/hocuspocus) (Yjs) server, `server/collab.mjs` (port 3771). It saves each shared document to the same database, with its plain text for search and eDiscovery.
 - **Editor:** [Tiptap](https://tiptap.dev) with Yjs collaboration and live cursors. Type `/` on an empty line for the insert menu.
 - **Auth:** the suite gateway signs people in; `@synergy/identity` reads the signed-in user from its headers, on page requests and on the collaboration WebSocket alike.
 
@@ -28,11 +28,11 @@ npm install && npm run build:packages            # from the repository root
 cd apps/loop
 export DATABASE_URL=postgres://postgres@127.0.0.1:5499/loop
 export DEV_USER_EMAIL=you@example.com
-npm run dev                                      # http://localhost:3730
+npm run dev                                      # http://localhost:3770
 npm run collab                                   # in a second terminal
 ```
 
-The tables are created on first request. Without `SUITE_DOMAIN`, browsers connect to the collaboration server at `ws://localhost:3731`.
+The tables are created on first request. Without `SUITE_DOMAIN`, browsers connect to the collaboration server at `ws://localhost:3771`.
 
 ## Settings
 
@@ -41,7 +41,7 @@ The tables are created on first request. Without `SUITE_DOMAIN`, browsers connec
 | `DATABASE_URL` | Postgres connection string. The web app and the collaboration server need the same one. |
 | `SUITE_DOMAIN` | The suite's domain. Browsers then reach the collaboration server at `wss://loop.<domain>/collab`, and other suite apps may show components in frames. |
 | `LOOP_COLLAB_URL` | Overrides where browsers reach the collaboration server. |
-| `COLLAB_PORT`, `COLLAB_ADDRESS` | Where the collaboration server listens (default `127.0.0.1:3731`; the Docker deploy uses `0.0.0.0`). |
+| `COLLAB_PORT`, `COLLAB_ADDRESS` | Where the collaboration server listens (default `127.0.0.1:3771`; the Docker deploy uses `0.0.0.0`). |
 | `DEV_USER_EMAIL` | Signs every request in as this user when there's no gateway. Ignored when `NODE_ENV=production`. |
 | `PROXY_SHARED_SECRET` | Shared secret the gateway sends, so the app can't be reached around it. |
 | `COMPLIANCE_TOKEN`, `ADMIN_INTERNAL_URL` | The Admin center's eDiscovery searches and legal holds. |
