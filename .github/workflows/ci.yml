@@ -81,6 +81,7 @@ jobs:
           npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
+          npx tsc --noEmit -p apps/commerce
           npx tsc --noEmit -p apps/mail
           npx tsc --noEmit -p apps/meet
           npx tsc --noEmit -p apps/office
@@ -150,6 +151,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE desk_test"
           npm test --workspace apps/desk
+      - name: Commerce tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/commerce_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE commerce_test"
+          npm test --workspace apps/commerce
       - name: Mail tests
         run: npm test --workspace apps/mail
       - name: Meet tests
@@ -221,6 +228,9 @@ jobs:
         run: |
           npx prisma migrate deploy
           npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Books service API tests
+        working-directory: apps/books/api
+        run: npx jest --preset ts-jest src/modules/svc
       - name: Build Books
         run: |
           npm run build -w @synergy/books-web
@@ -240,6 +250,11 @@ jobs:
           # The Portal's invoice feed refuses a missing token and answers with the right one.
           test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:3055/api/svc/invoices?email=a@example.com')" = 401 || { kill $pid; exit 1; }
           curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" 'localhost:3055/api/svc/invoices?email=a@example.com' | grep -qx '\[\]' || { kill $pid; exit 1; }
+          # Commerce's journal postings need the token and refuse an entry that doesn't balance.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3055/api/svc/postings)" = 401 || { kill $pid; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' \
+            -d '{"reference":"ci-1","kind":"sale","date":"2026-01-01","lines":[{"account":"1010","debit":"5.00"},{"account":"4010","credit":"4.00"}]}' \
+            localhost:3055/api/svc/postings)" = 400 || { kill $pid; exit 1; }
           kill $pid
 
   trust:

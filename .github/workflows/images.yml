@@ -53,6 +53,7 @@ jobs:
             {"name":"portal","file":"deploy/express-app.Dockerfile","context":".","args":"APP=portal\nAPP_DIR=addons/portal","paths":["addons/portal/"]},
             {"name":"admin","file":"deploy/next-app.Dockerfile","context":".","args":"APP=admin","paths":["apps/admin/"]},
             {"name":"base","file":"deploy/next-app.Dockerfile","context":".","args":"APP=base","paths":["apps/base/"]},
+            {"name":"commerce","file":"deploy/next-app.Dockerfile","context":".","args":"APP=commerce","paths":["apps/commerce/"]},
             {"name":"bookings","file":"deploy/next-app.Dockerfile","context":".","args":"APP=bookings","paths":["apps/bookings/"]},
             {"name":"contacts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contacts","paths":["apps/contacts/"]},
             {"name":"crm","file":"deploy/next-app.Dockerfile","context":".","args":"APP=crm","paths":["apps/crm/"]},

@@ -669,6 +669,24 @@ services:
       DESK_SMTP_PASSWORD: ${DESK_SMTP_PASSWORD:-}
       DESK_SMTP_FROM: ${DESK_SMTP_FROM:-}
 
+  # Dynamics 365 Commerce and Supply Chain equivalent: products, stock across locations,
+  # purchase orders, a point-of-sale register at /pos and an online store at /store. Sales,
+  # refunds, deliveries and stock changes post to Books as journal entries (BOOKS_SVC_TOKEN).
+  # Online card payment needs a payment provider at COMMERCE_CHECKOUT_URL; without one,
+  # shoppers order and pay at pickup or on delivery.
+  commerce:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-commerce:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: commerce } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/commerce
+      BOOKS_INTERNAL_URL: ${BOOKS_INTERNAL_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      COMMERCE_CHECKOUT_URL: ${COMMERCE_CHECKOUT_URL:-}
+      COMMERCE_CHECKOUT_TOKEN: ${COMMERCE_CHECKOUT_TOKEN:-}
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
+
   # Outlook equivalent: the web mailbox, backed by the Stalwart mail server below.
   mail:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-mail:${SYNERGY_IMAGE_TAG:-latest}

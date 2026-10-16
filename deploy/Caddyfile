@@ -271,6 +271,21 @@ desk.{$SUITE_DOMAIN} {
 	}
 }
 
+commerce.{$SUITE_DOMAIN} {
+	# The online store, its cart and checkout API, the payment provider's callback (bearer
+	# COMMERCE_CHECKOUT_TOKEN) and the stock API for other apps (bearer COMMERCE_SVC_TOKEN),
+	# both checked in the app, need no suite account.
+	@shared path /store /store/* /api/store/* /api/svc/* /_next/* /favicon.ico /icon.png
+	handle @shared {
+		import maybe_signed_in
+		import to_app commerce:3730
+	}
+	handle {
+		import signed_in
+		import to_app commerce:3730
+	}
+}
+
 todo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app todo:3195
