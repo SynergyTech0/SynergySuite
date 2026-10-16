@@ -11,6 +11,7 @@
     "apps/search",
     "apps/base",
     "apps/cad",
+    "apps/bookings",
     "apps/calendar",
     "apps/chat",
     "apps/contacts",
