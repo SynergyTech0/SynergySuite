@@ -73,7 +73,7 @@ test('forms suite search', { skip: !url && 'TEST_DATABASE_URL not set' }, async 
     const r = await search(alice, { query: 'kiwi', kinds: ['form', 'response'] });
     assert.equal(r.status, 200);
     assert.equal(r.body.app, 'forms');
-    assert.deepEqual(ids(r), [`form:${survey.id}`, `form:${bobs.id}`, `response:${responseId}`].sort());
+    assert.deepEqual(ids(r), [`form:${survey.id}`, `response:${responseId}`].sort());
     const dates = r.body.results.map(x => x.date);
     assert.deepEqual(dates, [...dates].sort().reverse());
     const f = r.body.results.find(x => x.id === `form:${survey.id}`);
@@ -81,7 +81,7 @@ test('forms suite search', { skip: !url && 'TEST_DATABASE_URL not set' }, async 
     assert.equal(f.title, 'Fruit survey');
     assert.equal(f.person, alice);
     assert.equal(f.url, `/?form=${survey.id}`);
-    assert.deepEqual(ids(await search(alice, { query: 'favourite', kinds: ['form'] })), [`form:${bobs.id}`, `form:${survey.id}`].sort());
+    assert.deepEqual(ids(await search(alice, { query: 'favourite', kinds: ['form'] })), [`form:${survey.id}`]);
     const resp = r.body.results.find(x => x.kind === 'response');
     assert.equal(resp.title, 'Response to Fruit survey');
     assert.equal(resp.person, 'dana@example.com');
@@ -94,9 +94,45 @@ test('forms suite search', { skip: !url && 'TEST_DATABASE_URL not set' }, async 
     assert.equal((await search(bob, { query: 'old form' })).body.results.length, 0);
   });
 
-  await t.test("returns forms shared with the person: every live form is open to edit in the app", async () => {
+  await t.test('a new form is private to its owner, in search and in the app', async () => {
+    assert.deepEqual(ids(await search(bob, { query: 'kiwi' })), [`form:${bobs.id}`]);
+    assert.equal((await search(carol, { query: 'kiwi' })).body.results.length, 0);
+    assert.deepEqual((await api('GET', '/api/forms', { as: carol })).body, []);
+    assert.equal((await api('GET', `/api/forms/${survey.id}`, { as: bob })).status, 404);
+    assert.equal((await api('GET', `/api/forms/${survey.id}/submissions`, { as: bob })).status, 404);
+    assert.equal((await api('GET', `/api/forms/${survey.id}/export`, { as: bob })).status, 404);
+    assert.equal((await api('PATCH', `/api/forms/${survey.id}`, { as: bob, body: { title: 'Mine now' } })).status, 404);
+    assert.equal((await api('DELETE', `/api/forms/${survey.id}`, { as: bob })).status, 404);
+  });
+
+  await t.test('sharing with a viewer opens the form and its responses to them, read-only', async () => {
+    assert.equal((await api('PUT', `/api/forms/${survey.id}/shares`, { as: bob, body: { shares: [] } })).status, 404);
+    const put = await api('PUT', `/api/forms/${survey.id}/shares`, { as: alice, body: { shares: [{ principal: 'Bob@Example.com', role: 'view' }, { principal: alice, role: 'edit' }] } });
+    assert.equal(put.status, 200);
+    assert.deepEqual(put.body, [{ principal: bob, role: 'view' }]);
     assert.deepEqual(ids(await search(bob, { query: 'season' })), [`form:${survey.id}`]);
     assert.deepEqual(ids(await search(bob, { query: 'dana' })), [`response:${responseId}`]);
+    assert.equal((await search(carol, { query: 'dana' })).body.results.length, 0);
+    const got = await api('GET', `/api/forms/${survey.id}`, { as: bob });
+    assert.equal(got.body.role, 'view');
+    assert.equal((await api('GET', `/api/forms/${survey.id}/submissions`, { as: bob })).body.length, 1);
+    assert.equal((await api('PATCH', `/api/forms/${survey.id}`, { as: bob, body: { title: 'Mine now' } })).status, 403);
+    assert.equal((await api('PUT', `/api/forms/${survey.id}/shares`, { as: bob, body: { shares: [] } })).status, 403);
+    assert.equal((await api('DELETE', `/api/forms/${survey.id}`, { as: bob })).status, 403);
+  });
+
+  await t.test('sharing with everyone as editors lets anyone signed in find and change it, but not delete it', async () => {
+    assert.equal((await api('PUT', `/api/forms/${survey.id}/shares`, { as: alice, body: { shares: [{ principal: 'nobody', role: 'edit' }] } })).status, 400);
+    assert.equal((await api('PUT', `/api/forms/${survey.id}/shares`, { as: alice, body: { shares: [{ principal: '*', role: 'owner' }] } })).status, 400);
+    await api('PUT', `/api/forms/${survey.id}/shares`, { as: alice, body: { shares: [{ principal: '*', role: 'edit' }, { principal: bob, role: 'view' }] } });
+    assert.deepEqual(ids(await search(carol, { query: 'season' })), [`form:${survey.id}`]);
+    assert.equal((await api('GET', `/api/forms/${survey.id}`, { as: bob })).body.role, 'edit');
+    assert.equal((await api('PATCH', `/api/forms/${survey.id}`, { as: carol, body: { description: 'Tell us about kiwi season, please' } })).status, 200);
+    assert.equal((await api('DELETE', `/api/forms/${survey.id}`, { as: carol })).status, 403);
+    const list = (await api('GET', '/api/forms', { as: carol })).body;
+    assert.deepEqual(list.map(f => [f.id, f.role, f.owner]), [[survey.id, 'edit', alice]]);
+    await api('PUT', `/api/forms/${survey.id}/shares`, { as: alice, body: { shares: [] } });
+    assert.equal((await search(carol, { query: 'season' })).body.results.length, 0);
   });
 
   await t.test('kinds, limit and text', async () => {
