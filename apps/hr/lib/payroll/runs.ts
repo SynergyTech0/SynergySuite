@@ -12,7 +12,7 @@ import { DEFAULT_ACCOUNTS, type PayrollAccounts, type RunTotals, payrollJournal,
 
 type Body = Record<string, unknown>;
 
-function requirePayroll(v: Viewer): void {
+export function requirePayroll(v: Viewer): void {
   if (!v.roles.payrollAdmin) throw new UserError("Only payroll admins can do that", 403);
 }
 
@@ -217,8 +217,10 @@ export async function saveProfile(v: Viewer, employeeId: string, b: Body): Promi
   await employeeExists(employeeId);
   const state = text(b.workState, 2).toUpperCase();
   if (state && !/^[A-Z]{2}$/.test(state)) throw new UserError("Work state is a two-letter code, like CA");
-  const last4 = text(b.accountLast4, 4);
-  if (last4 && !/^\d{4}$/.test(last4)) throw new UserError("Keep only the last four digits of the account");
+  // With bank details on file the account comes from there; otherwise a note of its last four.
+  const [onFile] = await q<{ bank_last4: string }>("SELECT bank_last4 FROM pay_private WHERE employee_id = $1 AND bank_account_sealed <> ''", [employeeId]);
+  const last4 = onFile ? onFile.bank_last4 : text(b.accountLast4, 4);
+  if (last4 && !/^\d{4}$/.test(last4) && !onFile) throw new UserError("Keep only the last four digits of the account");
   const vals = {
     in_payroll: b.inPayroll === undefined ? true : Boolean(b.inPayroll),
     pay_type: oneOf(b.payType, ["salary", "hourly"] as const, "salary"),

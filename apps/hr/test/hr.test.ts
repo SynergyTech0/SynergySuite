@@ -11,6 +11,7 @@ process.env.HR_ADMIN_EMAILS = ann;
 process.env.PAYROLL_ADMIN_EMAILS = "";
 process.env.BOOKS_SVC_TOKEN = "books-token";
 process.env.COMPLIANCE_TOKEN = "test-token";
+process.env.HR_DATA_KEY = "11".repeat(32);
 
 async function ownDatabase(url: string, suffix: string): Promise<string> {
   const u = new URL(url);
@@ -211,6 +212,64 @@ describe.skipIf(!base)("hr against Postgres", async () => {
     const q4 = (await runs.taxSummary(a, 2026))[3];
     expect(q4.runs).toBe(2);
     expect(q4.grossCents).toBe(400_000 + (await runs.getRun(a, firstRun)).paychecks[1].grossCents + (await runs.getRun(a, id)).paychecks[1].grossCents);
+  });
+
+  it("keeps SSNs and bank accounts sealed and builds the run's deposit file", async () => {
+    const a = await as(ann);
+    const priv = await import("../lib/payroll/private");
+    const employer = await import("../lib/payroll/employer");
+    const deposit = await import("../lib/payroll/deposit");
+    await expect(priv.getPrivate(await as(eve), ids[eve])).rejects.toThrow(/payroll admins/);
+    await expect(priv.savePrivate(a, ids[eve], { ssn: "000-12-3456" })).rejects.toThrow(/9 digits/);
+    await expect(priv.savePrivate(a, ids[eve], { bankRouting: "123456789" })).rejects.toThrow(/routing/);
+
+    const preview = await deposit.depositPreview(a, firstRun);
+    expect(preview.lines.map((l) => l.problem)).toEqual(["No bank account on file", "No bank account on file"]);
+    expect(preview.ready).toBe(false);
+    await expect(deposit.depositFile(a, firstRun)).rejects.toThrow(/Add bank details/);
+
+    const saved = await priv.savePrivate(a, ids[eve], {
+      legalFirst: "Eve", legalLast: "Adams", ssn: "123-45-6789", bankRouting: "011000015", bankAccount: "000123456789", bankAccountType: "savings",
+    });
+    expect(saved).toMatchObject({ ssnLast4: "6789", bankAccountLast4: "6789", bankAccountType: "savings" });
+    expect(JSON.stringify(saved)).not.toMatch(/123456789|000123456789/);
+    await priv.savePrivate(a, ids[zed], { bankRouting: "021000021", bankAccount: "5550001" });
+    // Blank leaves the number on file; the profile shows the account's last four.
+    expect((await priv.savePrivate(a, ids[eve], { city: "Austin" })).ssnLast4).toBe("6789");
+    expect((await runs.getProfile(a, ids[zed])).accountLast4).toBe("0001");
+    const [row] = await q<{ ssn_sealed: string; bank_account_sealed: string }>("SELECT ssn_sealed, bank_account_sealed FROM pay_private WHERE employee_id = $1", [ids[eve]]);
+    expect(row.ssn_sealed).toMatch(/^v1:/);
+    expect(row.ssn_sealed + row.bank_account_sealed).not.toMatch(/6789/);
+
+    await expect(deposit.depositFile(a, firstRun)).rejects.toThrow(/Set up direct deposit/);
+    await expect(employer.saveEmployer(a, { ein: "12-345" })).rejects.toThrow(/EIN/);
+    await employer.saveEmployer(a, {
+      legalName: "Acme Inc", ein: "12-3456789", stateIds: { ca: "123-4567-8" },
+      ach: { odfiRouting: "011000015", odfiName: "First Bank", originId: "1123456789", companyId: "1123456789", companyName: "ACME" },
+    });
+    expect((await employer.getEmployer(a)).stateIds).toEqual({ CA: "123-4567-8" });
+
+    expect((await deposit.depositPreview(a, firstRun)).ready).toBe(true);
+    const file = await deposit.depositFile(a, firstRun, new Date("2026-11-05T15:30:00Z"));
+    expect(file.filename).toBe("payroll-1-2026-11-06.ach");
+    const lines = file.text.trimEnd().split("\r\n");
+    expect(lines.every((l) => l.length === 94)).toBe(true);
+    const entries = lines.filter((l) => l.startsWith("6"));
+    expect(entries).toHaveLength(2);
+    const eveLine = entries.find((l) => l.includes("EVE ADAMS"))!;
+    expect(eveLine.slice(1, 3)).toBe("32"); // savings credit
+    expect(eveLine.slice(12, 29).trim()).toBe("000123456789");
+    const run = (await runs.getRun(a, firstRun)).run;
+    expect(Number(lines.find((l) => l.startsWith("8"))!.slice(32, 44))).toBe(run.totals.netCents);
+
+    // Balanced files need the company account, which is sealed too.
+    await employer.saveEmployer(a, { ach: { balanced: true, offsetRouting: "011000015", offsetAccount: "999888777" } });
+    expect((await employer.getEmployer(a)).ach.offsetLast4).toBe("8777");
+    const balanced = await deposit.depositFile(a, firstRun);
+    expect(balanced.text.split("\r\n").filter((l) => l.startsWith("6"))).toHaveLength(3);
+    const audit = await q<{ action: string; detail: unknown }>("SELECT action, detail FROM audit WHERE action LIKE 'payroll.%'");
+    expect(JSON.stringify(audit)).not.toMatch(/123456789|000123456789|999888777/);
+    expect(audit.map((r) => r.action)).toEqual(expect.arrayContaining(["payroll.private", "payroll.employer", "payroll.deposit_file"]));
   });
 
   it("finds people and time off in suite search, each person seeing only theirs", async () => {
