@@ -128,6 +128,6 @@ export function meetUrl(room: string): string {
 
 /** Where customers open their booking pages and manage links. */
 export function publicBase(): string {
-  const base = process.env.BOOKINGS_PUBLIC_URL || (process.env.SUITE_DOMAIN ? `https://bookings.${process.env.SUITE_DOMAIN}` : "http://localhost:3145");
+  const base = process.env.BOOKINGS_PUBLIC_URL || (process.env.SUITE_DOMAIN ? `https://bookings.${process.env.SUITE_DOMAIN}` : "http://localhost:3150");
   return base.replace(/\/$/, "");
 }

@@ -2,7 +2,7 @@
 
 Booking pages customers use to book time with a business or a person. Staff set up services, opening hours and who offers what; customers pick a service, a person (or anyone), and a free time, and get a confirmation with a calendar invitation and, for online services, a Meet link. Customers can reschedule or cancel from the link in their email; staff see and manage every appointment on their pages.
 
-- **App:** Next.js 16 + React 19 + Postgres (port 3145).
+- **App:** Next.js 16 + React 19 + Postgres (port 3150).
 - **Who sees what:** customers never sign in. They see a published page's services and the names of its staff, and each appointment has a secret link of its own. Staff are signed in by the suite gateway (`@synergy/identity`). Everyone on a page sees its appointments and customers; only its admins change the page, its services and its staff.
 - **Built on the suite, not on another scheduler.** Free times come from each person's suite Calendar, appointments go onto it, online appointments get a Meet room, customers land in the staff member's Contacts, and emails go out from the page's suite mailbox. We looked at Cal.com: its core is AGPL, but the code in its `ee` folders is under a commercial license, and it brings its own users, calendars, video and email. Building on the suite's own Calendar keeps one sign-in and one calendar.
 
@@ -34,7 +34,7 @@ npm install && npm run build:packages            # from the repository root
 cd apps/bookings
 export DATABASE_URL=postgres://postgres:dev@127.0.0.1:5432/bookings
 export DEV_USER_EMAIL=you@example.com
-npm run dev                                      # http://localhost:3145
+npm run dev                                      # http://localhost:3150
 ```
 
 Tables are created on first use. To try free/busy and calendar events, run Calendar on port 3130 with the same `CAL_SVC_TOKEN` in both. Without mail settings, appointments are booked and the emails are written to the log instead.
