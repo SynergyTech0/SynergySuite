@@ -57,11 +57,13 @@ jobs:
             {"name":"crm","file":"deploy/next-app.Dockerfile","context":".","args":"APP=crm","paths":["apps/crm/"]},
             {"name":"desk","file":"deploy/next-app.Dockerfile","context":".","args":"APP=desk","paths":["apps/desk/"]},
             {"name":"drive","file":"deploy/next-app.Dockerfile","context":".","args":"APP=drive","paths":["apps/drive/"]},
+            {"name":"insights","file":"deploy/next-app.Dockerfile","context":".","args":"APP=insights","paths":["apps/insights/"]},
             {"name":"mail","file":"deploy/next-app.Dockerfile","context":".","args":"APP=mail","paths":["apps/mail/"]},
             {"name":"meet","file":"deploy/next-app.Dockerfile","context":".","args":"APP=meet","paths":["apps/meet/"]},
             {"name":"office","file":"deploy/next-app.Dockerfile","context":".","args":"APP=office","paths":["apps/office/"]},
             {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
             {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
+            {"name":"engage","file":"deploy/next-app.Dockerfile","context":".","args":"APP=engage","paths":["apps/engage/"]},
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
             {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]}
           ]'

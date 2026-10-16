@@ -76,6 +76,8 @@ jobs:
           npx tsc --noEmit -p apps/drive
           npx tsc --noEmit -p apps/contacts
           npx tsc --noEmit -p apps/todo
+          npx tsc --noEmit -p apps/insights
+          npx tsc --noEmit -p apps/engage
           npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
@@ -94,6 +96,10 @@ jobs:
           npm test --workspace apps/admin
       - name: Search tests
         run: npm test --workspace apps/search
+      - name: Insights tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: npm test --workspace apps/insights
       - name: Drive tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/drive_test
@@ -112,6 +118,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE todo_test"
           npm test --workspace apps/todo
+      - name: Engage tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/engage_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE engage_test"
+          npm test --workspace apps/engage
       - name: Bookings tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bookings_test
