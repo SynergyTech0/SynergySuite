@@ -82,3 +82,13 @@ export function previewKind(mime: string): PreviewKind {
 
 export const contentUrl = (id: string, opts: { inline?: boolean; v?: number } = {}) =>
   `/api/items/${id}/content${opts.inline || opts.v ? "?" : ""}${[opts.inline ? "inline=1" : "", opts.v ? `v=${opts.v}` : ""].filter(Boolean).join("&")}`;
+
+/**
+ * The suite app that opens a file, when there is one: Whiteboard for .excalidraw boards. Apps live
+ * at <app>.<domain>, or on their own localhost port in development.
+ */
+export function openWith(item: { id: string; name: string }, loc: Pick<Location, "protocol" | "host" | "hostname"> = location): { label: string; href: string } | undefined {
+  if (!/\.excalidraw$/i.test(item.name)) return undefined;
+  const base = loc.hostname.startsWith("drive.") ? `${loc.protocol}//whiteboard.${loc.host.slice("drive.".length)}` : `${loc.protocol}//${loc.hostname}:3750`;
+  return { label: "Open in Whiteboard", href: `${base}/open?drive=${encodeURIComponent(item.id)}` };
+}

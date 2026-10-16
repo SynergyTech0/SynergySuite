@@ -88,6 +88,7 @@ jobs:
           npx tsc --noEmit -p apps/cad
           npx tsc --noEmit -p apps/planner
           npx tsc --noEmit -p apps/base
+          npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/admin_test
@@ -124,6 +125,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE engage_test"
           npm test --workspace apps/engage
+      - name: Whiteboard tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/whiteboard_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE whiteboard_test"
+          npm test --workspace apps/whiteboard
       - name: Bookings tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bookings_test

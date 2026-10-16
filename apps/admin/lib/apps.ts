@@ -19,6 +19,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   bookings: ["appointment"],
   crm: ["lead", "account", "contact", "opportunity", "activity"],
   desk: ["ticket"],
+  whiteboard: ["board"],
 };
 
 /** Every app in the registry except this one. */

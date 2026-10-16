@@ -24,3 +24,4 @@ CREATE DATABASE desk;
 CREATE DATABASE admin;
 -- Metabase's own settings, questions and dashboards (Insights).
 CREATE DATABASE metabase;
+CREATE DATABASE whiteboard;

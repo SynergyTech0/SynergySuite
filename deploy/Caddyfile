@@ -265,6 +265,21 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+whiteboard.{$SUITE_DOMAIN} {
+	# Meet and Chat ask for their boards on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle /collab* {
+		import signed_in
+		import to_app whiteboard-collab:3751
+	}
+	handle {
+		import signed_in
+		import to_app whiteboard:3750
+	}
+}
+
 bookings.{$SUITE_DOMAIN} {
 	# Customers book, and open their own appointment's link, without a suite account: the
 	# booking pages, their API and the build assets they load. Everything else is for staff.
