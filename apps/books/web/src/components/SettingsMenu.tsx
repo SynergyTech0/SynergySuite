@@ -28,7 +28,6 @@ const COLUMNS: Column[] = [
     heading: 'Tools',
     items: [
       { name: 'Reconcile', href: '/banking' },
-      { name: 'Tax filing', href: '/payroll/tax-filing' },
       { name: 'Import data', href: '/settings' },
     ],
   },

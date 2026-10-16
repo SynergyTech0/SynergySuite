@@ -21,6 +21,7 @@
     "apps/drive",
     "apps/engage",
     "apps/forms",
+    "apps/hr",
     "apps/insights",
     "apps/mail",
     "apps/meet",
@@ -33,7 +34,6 @@
     "apps/todo",
     "apps/trust",
     "apps/whiteboard",
-    "addons/people",
     "addons/portal"
   ],
   "scripts": {

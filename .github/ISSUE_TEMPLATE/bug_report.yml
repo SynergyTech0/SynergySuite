@@ -30,10 +30,10 @@ body:
         - cad
         - sites
         - notes
+        - hr (HR and payroll)
         - sign (add-on)
         - campaigns (add-on)
         - portal (add-on)
-        - people (add-on)
         - Suite home / app launcher
         - Shared packages (identity, db, server, config, shell, ai)
         - Deploy (Docker Compose, Caddy, oauth2-proxy, quickstart)

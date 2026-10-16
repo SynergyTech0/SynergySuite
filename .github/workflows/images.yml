@@ -49,7 +49,6 @@ jobs:
             {"name":"forms","file":"deploy/express-app.Dockerfile","context":".","args":"APP=forms","paths":["apps/forms/"]},
             {"name":"notes","file":"deploy/express-app.Dockerfile","context":".","args":"APP=notes","paths":["apps/notes/"]},
             {"name":"sites","file":"deploy/express-app.Dockerfile","context":".","args":"APP=sites","paths":["apps/sites/"]},
-            {"name":"people","file":"deploy/express-app.Dockerfile","context":".","args":"APP=people\nAPP_DIR=addons/people","paths":["addons/people/"]},
             {"name":"portal","file":"deploy/express-app.Dockerfile","context":".","args":"APP=portal\nAPP_DIR=addons/portal","paths":["addons/portal/"]},
             {"name":"admin","file":"deploy/next-app.Dockerfile","context":".","args":"APP=admin","paths":["apps/admin/"]},
             {"name":"base","file":"deploy/next-app.Dockerfile","context":".","args":"APP=base","paths":["apps/base/"]},
@@ -66,6 +65,7 @@ jobs:
             {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
             {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
             {"name":"engage","file":"deploy/next-app.Dockerfile","context":".","args":"APP=engage","paths":["apps/engage/"]},
+            {"name":"hr","file":"deploy/next-app.Dockerfile","context":".","args":"APP=hr","paths":["apps/hr/"]},
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
             {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]},
             {"name":"whiteboard","file":"deploy/next-app.Dockerfile","context":".","args":"APP=whiteboard","paths":["apps/whiteboard/"]}
