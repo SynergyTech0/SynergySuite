@@ -18,6 +18,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
 | Desk (`apps/desk`) | Dynamics 365 Customer Service | yes | early | Ticket queues, email intake and threaded replies over IMAP/SMTP, internal notes, canned replies, public knowledge base, intake API, ticket feed for Portal |
 | To Do (`apps/todo`) | Microsoft To Do | yes | early | My Day with suggestions, Important, Planned, lists, steps, notes, due dates, reminders with browser notifications, repeating tasks, shared lists with assignments |
+| Engage (`apps/engage`) | Viva Engage, Viva Connections | yes | early | Company home page with news, quick links, company sites and apps; feed with discussions, questions with best answers, praise badges, polls and articles; public and private communities with admins, pinned posts and announcements; storylines, follows, mentions, #topics, reactions and threaded replies; share to Chat; AI summaries and catch-up on your own model |
 | Calendar (`apps/calendar`) | Outlook Calendar | yes | early | Week view, personal and company calendars, attendees, free/busy API; no recurring events or month view yet |
 | Chat (`apps/chat`) | Teams chat | yes | usable | Channels, direct messages, threads, reactions, mentions, unread counts, search, real-time updates |
 | Meet (`apps/meet`) | Teams meetings | yes | early | Video rooms on LiveKit, scheduling, guest links; the media server is deployed separately and is not part of the local quickstart |
@@ -80,6 +81,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/drive` | OneDrive | Next.js 16 + Postgres, file contents on disk |
 | `apps/contacts` | Outlook People | Next.js 16 + Postgres |
 | `apps/todo` | Microsoft To Do | Next.js 16 + Postgres |
+| `apps/engage` | Viva Engage, Viva Connections | Next.js 16 + Postgres |
 | `apps/crm` | Dynamics 365 Sales | Next.js 16 + Postgres |
 | `apps/desk` | Dynamics 365 Customer Service | Next.js 16 + Postgres |
 | `apps/forms` | Forms | Express + React/Vite |
