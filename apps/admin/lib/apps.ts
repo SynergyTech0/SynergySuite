@@ -28,6 +28,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   stream: ["video", "comment", "project"],
   whiteboard: ["board"],
   loop: ["page", "component"],
+  campaigns: ["campaign", "template"],
 };
 
 /** Every app in the registry except this one. */

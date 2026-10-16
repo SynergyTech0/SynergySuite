@@ -283,6 +283,61 @@ services:
       DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
       DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
+  # Email marketing (Dynamics Marketing / Mailchimp equivalent): audiences from CRM, Contacts,
+  # spreadsheets and a signup form; campaigns, automations, open and click tracking, one-click
+  # unsubscribe and bounce handling. Sends as its From mailbox through Stalwart, the way
+  # Bookings does; CAMPAIGNS_SMTP_* sends through an outside relay instead.
+  campaigns:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-campaigns:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: campaigns, APP_DIR: addons/campaigns } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      campaigns-db: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/campaigns
+      # Imports and keeps lists in sync from CRM contacts and leads and Contacts groups, as the person.
+      CRM_INTERNAL_URL: http://crm:3095
+      CONTACTS_INTERNAL_URL: http://contacts:3190
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-}
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      # Bounce and spam reports come back to the From mailbox; Campaigns reads them over IMAP.
+      MAIL_IMAP_HOST: stalwart
+      MAIL_IMAP_PORT: "993"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+      CAMPAIGNS_FROM_EMAIL: ${CAMPAIGNS_FROM_EMAIL:-}
+      CAMPAIGNS_FROM_NAME: ${CAMPAIGNS_FROM_NAME:-}
+      CAMPAIGNS_ORG_NAME: ${CAMPAIGNS_ORG_NAME:-}
+      CAMPAIGNS_POSTAL_ADDRESS: ${CAMPAIGNS_POSTAL_ADDRESS:-}
+      CAMPAIGNS_PER_MINUTE: ${CAMPAIGNS_PER_MINUTE:-}
+      CAMPAIGNS_SMTP_HOST: ${CAMPAIGNS_SMTP_HOST:-}
+      CAMPAIGNS_SMTP_PORT: ${CAMPAIGNS_SMTP_PORT:-}
+      CAMPAIGNS_SMTP_USER: ${CAMPAIGNS_SMTP_USER:-}
+      CAMPAIGNS_SMTP_PASSWORD: ${CAMPAIGNS_SMTP_PASSWORD:-}
+      CAMPAIGNS_BOUNCE_IMAP_HOST: ${CAMPAIGNS_BOUNCE_IMAP_HOST:-}
+      CAMPAIGNS_BOUNCE_IMAP_PORT: ${CAMPAIGNS_BOUNCE_IMAP_PORT:-}
+      CAMPAIGNS_BOUNCE_IMAP_USER: ${CAMPAIGNS_BOUNCE_IMAP_USER:-}
+      CAMPAIGNS_BOUNCE_IMAP_PASSWORD: ${CAMPAIGNS_BOUNCE_IMAP_PASSWORD:-}
+
+  # Makes the campaigns database on installs that started before Campaigns joined. Runs once per `up`.
+  campaigns-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'campaigns'\" | grep -q 1 || psql -c 'CREATE DATABASE campaigns'"]
+
   # Word, Excel and PowerPoint equivalents, plus their real-time co-editing server.
   meet:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-meet:${SYNERGY_IMAGE_TAG:-latest}

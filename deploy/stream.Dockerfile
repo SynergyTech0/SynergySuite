@@ -81,6 +81,7 @@ COPY apps/phone/package.json apps/phone/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
 COPY addons/portal/package.json addons/portal/
+COPY addons/campaigns/package.json addons/campaigns/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/stream --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
 COPY apps/stream apps/stream

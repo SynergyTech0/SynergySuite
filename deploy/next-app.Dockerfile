@@ -1,6 +1,8 @@
-# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, loop, mail, meet, office, ops, phone, planner, projects, search, todo, trust, whiteboard). Run from the repository root:
+# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, loop, mail, meet, office, ops, phone, planner, projects, search, todo, trust, whiteboard)
+# or add-on (campaigns; pass APP_DIR=addons/<name>). Run from the repository root:
 #   docker build -f deploy/next-app.Dockerfile --build-arg APP=office -t synergy/office .
 ARG APP
+ARG APP_DIR=apps/${APP}
 
 FROM node:22-slim
 # Extra Debian packages an app needs at run time (Phone: espeak-ng for spoken voicemail greetings).
@@ -8,6 +10,7 @@ ARG APT_PACKAGES=""
 RUN if [ -n "$APT_PACKAGES" ]; then apt-get update && apt-get install -y --no-install-recommends $APT_PACKAGES && rm -rf /var/lib/apt/lists/*; fi
 ENV npm_config_fetch_retries=6 npm_config_fetch_retry_mintimeout=20000 npm_config_fetch_retry_maxtimeout=180000 npm_config_fetch_timeout=900000
 ARG APP
+ARG APP_DIR
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /repo
 # npm needs every workspace manifest to validate the lockfile, even the ones it won't install.
@@ -51,13 +54,14 @@ COPY apps/phone/package.json apps/phone/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
 COPY addons/portal/package.json addons/portal/
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/${APP} --workspace packages/shell --workspace packages/search --include-workspace-root \
+COPY addons/campaigns/package.json addons/campaigns/
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace ${APP_DIR} --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
-COPY apps/${APP} apps/${APP}
+COPY ${APP_DIR} ${APP_DIR}
 # Public URLs the browser code needs are baked in at build time.
 ARG NEXT_PUBLIC_COLLAB_URL
 ARG NEXT_PUBLIC_LIVEKIT_URL
-RUN npm run build --workspace apps/${APP}
+RUN npm run build --workspace ${APP_DIR}
 ENV NODE_ENV=production
-WORKDIR /repo/apps/${APP}
+WORKDIR /repo/${APP_DIR}
 CMD ["npm", "run", "start"]
