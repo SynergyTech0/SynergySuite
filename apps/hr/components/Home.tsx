@@ -34,21 +34,25 @@ export function Home({ ctx }: { ctx: Ctx }) {
   const [mine, setMine] = useState<TimeOff[]>([]);
   const [out, setOut] = useState<TimeOff[]>([]);
   const [stubs, setStubs] = useState<Stub[]>([]);
+  const [w2s, setW2s] = useState<{ employeeId: string; years: number[] }>({ employeeId: "", years: [] });
   const [approvals, setApprovals] = useState(0);
 
   const load = async () => {
-    const [t, m, o, s, a] = await Promise.all([
+    const [t, m, o, s, a, w] = await Promise.all([
       api<Task[]>("/api/tasks"),
       api<TimeOff[]>("/api/timeoff"),
       api<TimeOff[]>(`/api/timeoff?scope=calendar&from=${today()}&to=${addDays(today(), 13)}`),
       api<Stub[]>("/api/stubs"),
       me.roles.hrAdmin || me.roles.manager ? api<TimeOff[]>("/api/timeoff?scope=approvals") : Promise.resolve([]),
+      api<{ employeeId: string; years: number[] }>("/api/w2"),
     ]);
     setTasks(t);
     setMine(m.filter((r) => r.end_date >= today() && ["pending", "approved"].includes(r.status)));
     setOut(o.filter((r) => r.status === "approved"));
     setStubs(s);
     setApprovals(a.length);
+    // A year's W-2 is ready once the year is over.
+    setW2s({ ...w, years: w.years.filter((y) => y < new Date().getFullYear()) });
   };
   useEffect(() => {
     load().catch((e) => ctx.toast((e as Error).message));
@@ -144,6 +148,13 @@ export function Home({ ctx }: { ctx: Ctx }) {
                 ))}
               </tbody>
             </table>
+            {w2s.years.length > 0 && (
+              <p className="small" style={{ marginTop: 8 }}>
+                W-2: {w2s.years.map((y, i) => (
+                  <span key={y}>{i > 0 && ", "}<a href={`/w2/${w2s.employeeId}?year=${y}`} target="_blank" rel="noreferrer">{y}</a></span>
+                ))}
+              </p>
+            )}
           </section>
         )}
       </div>
