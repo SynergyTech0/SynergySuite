@@ -28,7 +28,7 @@ function showLauncher() {
   $("connect").hidden = true;
   $("launcher").hidden = false;
   $("server-name").textContent = describe(state.server!);
-  $("version").textContent = `Synergy desktop ${state.version}`;
+  $("version").textContent = `Synergy ${state.version}`;
   renderApps("");
   $<HTMLInputElement>("filter").focus();
 }
