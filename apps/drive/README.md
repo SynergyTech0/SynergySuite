@@ -10,6 +10,9 @@ OneDrive for the Synergy suite: everyone's files, plus shared libraries for team
 - Recent, Starred, Shared with me / by me, search by name and by words inside text files
 - Recycle bin, emptied after `DRIVE_TRASH_DAYS`
 - Storage quota per person, AI summaries of text files through `@synergy/ai`
+- Sensitivity labels from the Admin center on files and folders: shown on the file, set by anyone who can edit, kept across versions. New uploads get the default label, and Word, Excel and PowerPoint files labeled elsewhere (Microsoft Purview `MSIP_Label_*` properties) keep theirs
+- A label that keeps content inside the organization refuses view links and sharing with outside people, for the file itself and for any folder holding such a file
+- Data loss prevention: view links and sharing with people are checked against the Admin center's DLP rules, reading text files and the text of Word, Excel and PowerPoint files (the first 2 MB; Office files up to 25 MB). A block is refused, a warning needs a reason to go ahead, and every match is reported to the Admin center
 
 ## How it stores things
 

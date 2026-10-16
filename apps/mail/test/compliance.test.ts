@@ -3,7 +3,7 @@ import { matchesQuery, parseQuery } from "@synergy/compliance";
 import type { ImapFlow } from "imapflow";
 import { searchCompiler } from "imapflow/lib/search-compiler.js";
 import {
-  dateBounds, decodeCursor, decodeId, encodeCursor, encodeId, imapSearch, inRange, parseSearchRequest,
+  compareAccounts, dateBounds, decodeCursor, decodeId, encodeCursor, encodeId, imapSearch, inRange, parseSearchRequest,
 } from "../lib/compliance";
 import { evaluate, message } from "./fake-imap";
 
@@ -48,27 +48,48 @@ describe("query translation", () => {
 
 describe("ids and cursors", () => {
   const hash = "a".repeat(64);
+  const old = (prefix: string, v: unknown) => `${prefix}.${Buffer.from(JSON.stringify(v)).toString("base64url")}`;
 
-  it("round-trips live and preserved ids", () => {
-    const live = { kind: "live" as const, mailbox: "ann@example.com", folder: "Archive/2026 é", uidValidity: "1712345678", uid: 42, hash };
-    const kept = { kind: "kept" as const, mailbox: "ann@example.com", hash };
-    expect(decodeId(encodeId(live))).toEqual(live);
-    expect(decodeId(encodeId(kept))).toEqual(kept);
+  it("round-trips live and preserved ids, in the suite mailbox and outside accounts", () => {
+    const live = { kind: "live" as const, mailbox: "ann@example.com", account: "suite", folder: "Archive/2026 é", uidValidity: "1712345678", uid: 42, hash };
+    const kept = { kind: "kept" as const, mailbox: "ann@example.com", account: "suite", hash };
+    for (const r of [live, kept, { ...live, account: "17" }, { ...kept, account: "17" }]) expect(decodeId(encodeId(r))).toEqual(r);
     expect(encodeId(live)).toMatch(/^l\.[\w-]+$/);
+    expect(encodeId({ ...live, account: "17" })).not.toBe(encodeId(live));
+  });
+
+  it("keeps suite ids as they were, so ids handed out before outside accounts still export", () => {
+    const before = old("l", ["ann@example.com", "INBOX", "1", 3, hash]);
+    expect(decodeId(before)).toEqual({ kind: "live", mailbox: "ann@example.com", account: "suite", folder: "INBOX", uidValidity: "1", uid: 3, hash });
+    expect(encodeId(decodeId(before)!)).toBe(before);
+    expect(decodeId(old("p", ["ann@example.com", hash]))).toEqual({ kind: "kept", mailbox: "ann@example.com", account: "suite", hash });
   });
 
   it("rejects ids that aren't ours", () => {
-    for (const bad of ["", "x.abc", "l.!!!", `p.${Buffer.from('["a","short"]').toString("base64url")}`,
-      `l.${Buffer.from(JSON.stringify(["a", "INBOX", "1", 0, hash])).toString("base64url")}`, 7, null]) {
+    for (const bad of ["", "x.abc", "l.!!!", old("p", ["a", "short"]), old("l", ["a", "INBOX", "1", 0, hash]),
+      old("p", ["a", hash, "../x"]), old("p", ["a", hash, 17]), old("l", ["a", "INBOX", "1", 3, hash, "imap"]), old("p", ["a", hash, "1", "2"]), 7, null]) {
       expect(decodeId(bad), String(bad)).toBeNull();
     }
   });
 
-  it("round-trips cursors", () => {
-    for (const c of [{ m: "a@example.com", phase: "live" as const, f: "INBOX", u: 0 }, { m: "b@example.com", phase: "kept" as const, k: 17 }]) {
+  it("round-trips cursors, and reads cursors without an account as the suite mailbox", () => {
+    for (const c of [
+      { m: "a@example.com", a: "suite", phase: "live" as const, f: "INBOX", u: 0 },
+      { m: "b@example.com", a: "suite", phase: "kept" as const, k: 17 },
+      { m: "b@example.com", a: "12", phase: "live" as const, f: "Sent", u: 9 },
+      { m: "b@example.com", a: "12", phase: "kept" as const, k: 3 },
+    ]) {
       expect(decodeCursor(encodeCursor(c))).toEqual(c);
     }
+    const before = Buffer.from(JSON.stringify({ m: "a@example.com", phase: "kept", k: 5 })).toString("base64url");
+    expect(decodeCursor(before)).toEqual({ m: "a@example.com", a: "suite", phase: "kept", k: 5 });
+    expect(encodeCursor(decodeCursor(before)!)).toBe(before);
     expect(decodeCursor("nonsense")).toBeNull();
+    expect(decodeCursor(Buffer.from(JSON.stringify({ m: "a", a: "x y", phase: "kept", k: 5 })).toString("base64url"))).toBeNull();
+  });
+
+  it("orders accounts: the suite mailbox, then outside accounts by id", () => {
+    expect(["12", "suite", "9", "100"].sort(compareAccounts)).toEqual(["suite", "9", "12", "100"]);
   });
 });
 

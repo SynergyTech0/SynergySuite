@@ -170,6 +170,20 @@ CREATE TABLE IF NOT EXISTS page_ydoc (
 -- hidden from the app, for compliance search and export.
 ALTER TABLE comments ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 ALTER TABLE attachments ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
+
+-- Comment edits: who last changed the text and when (NULL until the first edit), and every
+-- earlier text with who wrote it. Versions go with their comment: kept with it under a hold
+-- (held_deleted_at), removed by a real delete.
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS edited_by TEXT;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS comment_versions (
+    id         BIGSERIAL PRIMARY KEY,
+    comment_id BIGINT NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+    body       TEXT NOT NULL,
+    edited_by  TEXT NOT NULL DEFAULT '',
+    edited_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS comment_versions_comment_idx ON comment_versions (comment_id, id);
 `;
 
 
@@ -733,12 +747,23 @@ router.patch('/comments/:id', wrap(async (req, res) => {
   if (await guardPage(req, res, c.page_id, 'edit') == null) return;
   if (resolved != null && c.parent_id != null)
     return res.status(400).json({ error: 'only a top-level comment can be resolved' });
+  // One statement: when the text changes, the text it replaces (and who wrote it) goes to
+  // comment_versions before the overwrite, so no wording is ever lost.
   const { rows } = await q(
-    `UPDATE comments SET body = COALESCE($2, body),
-        resolved = COALESCE($3, resolved),
-        resolved_by = CASE WHEN $3 IS NULL THEN resolved_by WHEN $3 THEN $4 ELSE NULL END,
+    `WITH cur AS (
+       SELECT id, body, COALESCE(edited_by, author) AS wrote_by, COALESCE(edited_at, created_at) AS wrote_at
+         FROM comments WHERE id = $1 FOR UPDATE),
+     changed AS (SELECT * FROM cur WHERE $2::text IS NOT NULL AND body IS DISTINCT FROM $2::text),
+     saved AS (
+       INSERT INTO comment_versions (comment_id, body, edited_by, edited_at)
+       SELECT id, body, wrote_by, wrote_at FROM changed)
+     UPDATE comments c SET body = COALESCE($2::text, c.body),
+        edited_by = CASE WHEN EXISTS (SELECT 1 FROM changed) THEN $4 ELSE c.edited_by END,
+        edited_at = CASE WHEN EXISTS (SELECT 1 FROM changed) THEN now() ELSE c.edited_at END,
+        resolved = COALESCE($3, c.resolved),
+        resolved_by = CASE WHEN $3 IS NULL THEN c.resolved_by WHEN $3 THEN $4 ELSE NULL END,
         updated_at = now()
-      WHERE id = $1 RETURNING *`,
+       FROM cur WHERE c.id = cur.id RETURNING c.*`,
     [c.id, body != null ? String(body) : null,
      resolved != null ? Boolean(resolved) : null, req.userEmail]);
   res.json(rows[0]);

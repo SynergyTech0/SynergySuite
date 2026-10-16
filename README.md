@@ -11,7 +11,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Devices, Ops, HR, Whiteboard and Loop, audit log |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery, sensitivity labels and DLP | yes | early | People and sign-in blocking over SCIM, app health, suite-wide sensitivity labels (Mail, Drive, Docs, Sheets, Slides), data loss prevention rules with alerts for Mail, Drive and Chat, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Phone, Diagrams, Projects, Devices, Ops, HR, Whiteboard and Loop, audit log |
 | Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Ops, Office, Planner, Sites, Base, Builder, Insights, Phone, Diagrams, Projects, Devices, HR, Whiteboard, Loop and Flow, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
@@ -135,7 +135,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | Package | What it gives every app |
 |---|---|
 | `@synergy/identity` | Who is signed in (SynergyAuth via the gateway's headers), dev-user overrides, signed guest links |
-| `@synergy/compliance` | The eDiscovery protocol between the Admin center and each app: search and export routes, the shared keyword language, legal-hold and retention checks that fail closed |
+| `@synergy/compliance` | The compliance protocol between the Admin center and each app: eDiscovery search and export routes, the shared keyword language, legal-hold and retention checks that fail closed, sensitivity labels, and the data loss prevention engine (sensitive information types, rules, incident reports) |
 | `@synergy/search` | Suite-wide search for the signed-in person: the `POST /api/search` protocol each content app answers for the Search app, with query, snippet and text helpers |
 | `@synergy/db` | Postgres pool, query helper, boot-time migrations under an advisory lock |
 | `@synergy/server` | Express basics: sign-in and bearer-token middleware, JSON errors, health check, SPA serving |

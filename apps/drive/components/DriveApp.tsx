@@ -1,17 +1,18 @@
 "use client";
 import {
   ArrowDown, ArrowUp, ChevronRight, Clock, Copy, Download, FolderInput, FolderPlus, FolderUp, HardDrive, Info,
-  Library as LibIcon, Pencil, Plus, RotateCcw, Search, Share2, Star, Trash2, Upload, Users, X,
+  Library as LibIcon, Pencil, Plus, RotateCcw, Search, Share2, Shield, Star, Trash2, Upload, Users, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Details } from "./Details";
 import { FileIcon } from "./FileIcon";
 import { FolderPicker } from "./FolderPicker";
+import { LabelChip, LabelDialog } from "./Labels";
 import { LibraryDialog } from "./LibraryDialog";
 import { Confirm, Prompt } from "./Modal";
 import { Preview } from "./Preview";
 import { ShareDialog } from "./ShareDialog";
-import { type Crumb, type Item, type Library, type Me, type Role, api, contentUrl, formatSize, formatWhen, openWith, person } from "./client";
+import { type Crumb, type Item, type Label, type Library, type Me, type Role, api, contentUrl, formatSize, formatWhen, openWith, person } from "./client";
 
 type View = "files" | "recent" | "starred" | "shared" | "sharedbyme" | "trash" | "search";
 type Loc = { view: View; parent?: string; library?: string; q?: string };
@@ -21,6 +22,7 @@ type Dialog =
   | { kind: "newfolder" }
   | { kind: "rename"; item: Item }
   | { kind: "share"; item: Item }
+  | { kind: "label"; item: Item }
   | { kind: "move" | "copy"; items: Item[] }
   | { kind: "newlibrary" }
   | { kind: "library"; library: Library }
@@ -73,6 +75,7 @@ async function droppedFiles(dt: DataTransfer): Promise<{ file: File; path: strin
 export function DriveApp() {
   const [me, setMe] = useState<Me | null>(null);
   const [libs, setLibs] = useState<Library[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [loc, setLoc] = useState<Loc | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
@@ -102,6 +105,7 @@ export function DriveApp() {
   const loadMe = useCallback(() => {
     api<Me>("/api/me").then(setMe, (e) => setError(e.message));
     api<{ libraries: Library[] }>("/api/libraries").then((r) => setLibs(r.libraries), () => {});
+    api<{ labels: Label[] }>("/api/labels").then((r) => setLabels(r.labels), () => {});
   }, []);
 
   useEffect(() => {
@@ -580,6 +584,7 @@ export function DriveApp() {
                       <button className="namebtn" onClick={(e) => (e.stopPropagation(), open(it))} disabled={inTrash}>
                         {it.name}
                       </button>
+                      <LabelChip id={it.labelId} labels={labels} />
                       {it.starred && <Star size={13} className="starred" fill="currentColor" aria-label="Starred" />}
                     </span>
                   </td>
@@ -627,6 +632,7 @@ export function DriveApp() {
           id={(one ?? data?.folder)!.id}
           me={me?.email ?? ""}
           ai={!!me?.ai}
+          labels={labels}
           onClose={() => setDetails(false)}
           onChanged={refresh}
           onShare={() => {
@@ -656,6 +662,7 @@ export function DriveApp() {
               <button role="menuitem" onClick={() => setDialog({ kind: "move", items: chosen })}><FolderInput size={16} /> Move to</button>
               <button role="menuitem" onClick={() => setDialog({ kind: "copy", items: chosen })}><Copy size={16} /> Copy to</button>
               <button role="menuitem" onClick={() => void toggleStar(chosen)}><Star size={16} /> {chosen.every((i) => i.starred) ? "Unstar" : "Star"}</button>
+              {one && labels.length > 0 && <button role="menuitem" onClick={() => setDialog({ kind: "label", item: one })}><Shield size={16} /> Sensitivity</button>}
               <button role="menuitem" onClick={() => setDetails(true)}><Info size={16} /> Details</button>
               <hr />
               <button role="menuitem" onClick={() => void act("trash", chosen, undefined, `Moved ${chosen.length} to the recycle bin`).catch(() => {})}><Trash2 size={16} /> Delete</button>
@@ -744,6 +751,7 @@ export function DriveApp() {
           }}
         />
       )}
+      {dialog?.kind === "label" && <LabelDialog item={dialog.item} labels={labels} onClose={() => setDialog(null)} onChanged={refresh} />}
       {dialog?.kind === "share" && <ShareDialog item={dialog.item} me={me?.email ?? ""} onClose={() => setDialog(null)} onChanged={refresh} />}
       {(dialog?.kind === "move" || dialog?.kind === "copy") && (
         <FolderPicker

@@ -1,13 +1,15 @@
 import { q } from "@/lib/db";
 import { identity } from "@/lib/identity";
 import DocList, { type Doc } from "@/components/DocList";
+import { labelList } from "@/lib/policy";
+import type { LabelList } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
 async function loadDocs(org: string, email: string): Promise<Doc[]> {
   try {
     return await q<Doc>(
-      `SELECT d.id, d.kind, d.title, d.snippet, d.owner_email, d.scope, d.updated_at,
+      `SELECT d.id, d.kind, d.title, d.snippet, d.owner_email, d.scope, d.updated_at, d.label_id,
               (g.email IS NOT NULL) AS shared
        FROM documents d
        LEFT JOIN doc_grants g ON g.doc_id = d.id AND g.email = $2
@@ -24,6 +26,7 @@ async function loadDocs(org: string, email: string): Promise<Doc[]> {
 export default async function Home() {
   const me = await identity();
   const docs = me.email ? await loadDocs(me.org, me.email) : [];
+  const labels: LabelList | null = me.email ? await labelList().catch(() => null) : null;
 
   return (
     <div className="min-h-screen">
@@ -36,7 +39,7 @@ export default async function Home() {
         </div>
       </header>
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <DocList docs={docs} me={me.email || "guest"} />
+        <DocList docs={docs} me={me.email || "guest"} labels={labels} />
       </main>
     </div>
   );

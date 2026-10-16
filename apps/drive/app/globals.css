@@ -198,3 +198,17 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .files .wide { display: none; }
   .viewerbody { padding: 12px; }
 }
+
+/* sensitivity labels and policy tips */
+.labelchip { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; border: 1px solid currentColor; border-radius: 10px; padding: 0 7px; font-size: 11px; font-weight: 600; line-height: 18px; white-space: nowrap; color: var(--muted); background: var(--panel); }
+.labelselect { border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; background: var(--panel); font-size: 13px; max-width: 100%; }
+.labelpick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.form .labelpick label { flex-direction: row; align-items: flex-start; gap: 8px; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
+.form .labelpick label:hover { background: var(--hover); }
+.form .labelpick label span { color: inherit; font-size: 14px; }
+.form .labelpick label span.muted { color: var(--muted); font-size: 12px; }
+.dlp { border: 1px solid var(--danger); border-left-width: 4px; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.dlp.warn { border-color: #c19c00; }
+.dlp ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.dlp textarea { font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; background: var(--panel); resize: vertical; min-height: 56px; }
+.dlp .actions { margin-top: 0; }

@@ -14,8 +14,11 @@ async function req(method, url, body) {
   });
   if (!res.ok) {
     let msg = res.statusText;
-    try { msg = (await res.json()).error || msg; } catch {}
-    throw new Error(msg);
+    let data = null;
+    try { data = await res.json(); msg = data.error || msg; } catch {}
+    // A data loss prevention refusal carries the decision, so the UI can explain it and,
+    // for a warning, offer to send anyway with a reason.
+    throw Object.assign(new Error(msg), { status: res.status, dlp: data?.dlp ?? null });
   }
   return res.json();
 }
@@ -34,8 +37,8 @@ export const api = {
     if (opts.parent) p.set('parent', opts.parent);
     return req('GET', `/api/channels/${id}/messages?${p}`);
   },
-  send: (id, body, parentId) => req('POST', `/api/channels/${id}/messages`, { body, parentId }),
-  edit: (id, body) => req('PATCH', `/api/messages/${id}`, { body }),
+  send: (id, body, parentId, dlpOverride) => req('POST', `/api/channels/${id}/messages`, { body, parentId, dlpOverride }),
+  edit: (id, body, dlpOverride) => req('PATCH', `/api/messages/${id}`, { body, dlpOverride }),
   remove: id => req('DELETE', `/api/messages/${id}`),
   react: (id, emoji) => req('POST', `/api/messages/${id}/reactions`, { emoji }),
   whiteboard: id => req('POST', `/api/channels/${id}/whiteboard`),

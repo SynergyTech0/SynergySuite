@@ -73,10 +73,22 @@ export function imapSearch(p: ParsedQuery, bounds: { from: Date | null; to: Date
 
 // ---------- ids ----------
 
-/** Where a live message is: mailbox, folder, UIDVALIDITY, UID and the hash of its source. */
-export type LiveRef = { kind: "live"; mailbox: string; folder: string; uidValidity: string; uid: number; hash: string };
-/** A message kept in the preserved store, by mailbox and hash. */
-export type KeptRef = { kind: "kept"; mailbox: string; hash: string };
+/** The suite mailbox's account id; outside accounts are numbered by the accounts table. */
+export const SUITE = "suite";
+const ACCOUNT = /^(suite|\d{1,18})$/;
+const isAccount = (v: unknown): v is string => typeof v === "string" && ACCOUNT.test(v);
+
+/** The order a person's accounts are searched in: the suite mailbox, then outside accounts by id. */
+export function compareAccounts(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === SUITE || b === SUITE) return a === SUITE ? -1 : 1;
+  return a.length - b.length || (a < b ? -1 : 1);
+}
+
+/** Where a live message is: mailbox, account, folder, UIDVALIDITY, UID and the hash of its source. */
+export type LiveRef = { kind: "live"; mailbox: string; account: string; folder: string; uidValidity: string; uid: number; hash: string };
+/** A message kept in the preserved store, by mailbox, account and hash. */
+export type KeptRef = { kind: "kept"; mailbox: string; account: string; hash: string };
 export type Ref = LiveRef | KeptRef;
 
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -89,26 +101,31 @@ const unb64 = (s: string): unknown => {
 };
 const HASH = /^[0-9a-f]{64}$/;
 
+/**
+ * Ids in the suite mailbox look as they did before outside accounts were searched, so ids the
+ * Admin center already holds keep working; an outside account's id is appended.
+ */
 export function encodeId(r: Ref): string {
+  const account = r.account === SUITE ? [] : [r.account];
   return r.kind === "live"
-    ? `l.${b64([r.mailbox, r.folder, r.uidValidity, r.uid, r.hash])}`
-    : `p.${b64([r.mailbox, r.hash])}`;
+    ? `l.${b64([r.mailbox, r.folder, r.uidValidity, r.uid, r.hash, ...account])}`
+    : `p.${b64([r.mailbox, r.hash, ...account])}`;
 }
 
 export function decodeId(id: unknown): Ref | null {
   if (typeof id !== "string" || id.length > 2000) return null;
   const v = unb64(id.slice(2));
   if (!Array.isArray(v)) return null;
-  if (id.startsWith("l.") && v.length === 5) {
-    const [mailbox, folder, uidValidity, uid, hash] = v;
+  if (id.startsWith("l.") && (v.length === 5 || v.length === 6)) {
+    const [mailbox, folder, uidValidity, uid, hash, account = SUITE] = v;
     if (typeof mailbox === "string" && typeof folder === "string" && typeof uidValidity === "string"
-      && Number.isInteger(uid) && uid > 0 && typeof hash === "string" && HASH.test(hash)) {
-      return { kind: "live", mailbox, folder, uidValidity, uid, hash };
+      && Number.isInteger(uid) && uid > 0 && typeof hash === "string" && HASH.test(hash) && isAccount(account)) {
+      return { kind: "live", mailbox, account, folder, uidValidity, uid, hash };
     }
   }
-  if (id.startsWith("p.") && v.length === 2) {
-    const [mailbox, hash] = v;
-    if (typeof mailbox === "string" && typeof hash === "string" && HASH.test(hash)) return { kind: "kept", mailbox, hash };
+  if (id.startsWith("p.") && (v.length === 2 || v.length === 3)) {
+    const [mailbox, hash, account = SUITE] = v;
+    if (typeof mailbox === "string" && typeof hash === "string" && HASH.test(hash) && isAccount(account)) return { kind: "kept", mailbox, account, hash };
   }
   return null;
 }
@@ -116,18 +133,22 @@ export function decodeId(id: unknown): Ref | null {
 // ---------- cursors ----------
 
 /**
- * Where the next page starts. Mailboxes are walked in address order; in each, the live folders in
- * path order (newest UID first), then the preserved store by row id.
- *   m: the mailbox; f: the folder; u: the last UID handed out there; k: the last store row id.
+ * Where the next page starts. Mailboxes are walked in address order; in each, the accounts in
+ * compareAccounts order; in each account, the live folders in path order (newest UID first), then
+ * the preserved store by row id.
+ *   m: the mailbox; a: the account; f: the folder; u: the last UID handed out there; k: the last store row id.
+ * Cursors leave out a for the suite mailbox, as they did before outside accounts were searched.
  */
-export type Cursor = { m: string; phase: "live"; f: string; u: number } | { m: string; phase: "kept"; k: number };
+export type Cursor = { m: string; a: string; phase: "live"; f: string; u: number } | { m: string; a: string; phase: "kept"; k: number };
 
-export const encodeCursor = (c: Cursor) => b64(c);
+export const encodeCursor = ({ a, ...rest }: Cursor) => b64(a === SUITE ? rest : { a, ...rest });
 
 export function decodeCursor(s: string): Cursor | null {
   const v = unb64(s) as Record<string, unknown> | null;
   if (!v || typeof v !== "object" || typeof v.m !== "string") return null;
-  if (v.phase === "live" && typeof v.f === "string" && Number.isInteger(v.u)) return { m: v.m, phase: "live", f: v.f, u: v.u as number };
-  if (v.phase === "kept" && Number.isInteger(v.k)) return { m: v.m, phase: "kept", k: v.k as number };
+  const a = v.a ?? SUITE;
+  if (!isAccount(a)) return null;
+  if (v.phase === "live" && typeof v.f === "string" && Number.isInteger(v.u)) return { m: v.m, a, phase: "live", f: v.f, u: v.u as number };
+  if (v.phase === "kept" && Number.isInteger(v.k)) return { m: v.m, a, phase: "kept", k: v.k as number };
   return null;
 }

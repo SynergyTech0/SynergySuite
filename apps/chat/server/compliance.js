@@ -199,6 +199,60 @@ async function deleteMessages(user, ids) {
     [ids, user.id, held])).rows;
 }
 
+// ---- data loss prevention ----
+// Before a message is saved (posts, replies, DMs, edits) its text is checked against the Admin
+// center's DLP rules. The other members of the conversation are the recipients, so rules that
+// only cover content leaving the organization apply when someone outside it is in the room.
+// block refuses (422); warn refuses (409) unless the sender gives a reason (dlpOverride); audit
+// and an overridden warn are saved. Every match is reported to the Admin center.
+const MAX_JUSTIFICATION = 500;
+
+function justificationOf(override) {
+  const j = override && typeof override === 'object' ? override.justification : null;
+  return typeof j === 'string' ? j.trim().slice(0, MAX_JUSTIFICATION) : '';
+}
+
+async function conversation(channelId, userId) {
+  return (await db.q(
+    `SELECT c.kind, c.name,
+       COALESCE((SELECT array_agg(lower(u.email) ORDER BY lower(u.email))
+                   FROM channel_members cm JOIN users u ON u.id = cm.user_id
+                  WHERE cm.channel_id = c.id AND u.id <> $2), '{}') AS recipients
+       FROM channels c WHERE c.id = $1`, [channelId, userId])).rows[0];
+}
+
+// Returns { refuse: { status, body } } when the message can't be saved as it is, otherwise
+// { report(messageId) } to call once it is saved.
+async function checkMessageDlp(user, { channelId, text, reply = false, edit = false, override }) {
+  const none = { report() {} };
+  const settings = await policy.dlpSettings();
+  if (!settings.rules.some(r => r.enabled)) return none;
+  const conv = await conversation(channelId, user.id);
+  if (!conv) return none;
+  const recipients = conv.recipients || [];
+  const decision = await policy.checkDlp({ text, recipients });
+  if (decision.action === 'allow') return none;
+  const place = conv.kind === 'dm' ? `direct message to ${recipients.join(', ') || 'yourself'}` : `#${conv.name}`;
+  const what = edit ? 'Edited message' : reply ? 'Reply' : 'Message';
+  const justification = justificationOf(override);
+  const overridden = decision.action === 'warn' && !!justification;
+  const report = target => policy.reportDlp({
+    actor: String(user.email).toLowerCase(),
+    title: conv.kind === 'dm' ? `${what} in a ${place}` : `${what} in ${place}`,
+    ...(target != null ? { target: `message:${target}` } : {}),
+    action: decision.action,
+    ...(overridden ? { overridden: true, justification } : {}),
+    rules: decision.rules,
+    matches: decision.matches.map(({ type, name, count }) => ({ type, name, count })),
+    recipients,
+  });
+  if (decision.action === 'block' || (decision.action === 'warn' && !overridden)) {
+    void report(null);
+    return { refuse: { status: decision.action === 'block' ? 422 : 409, body: { error: decision.tip, dlp: decision } } };
+  }
+  return { report: id => { void report(id); } };
+}
+
 // Retention: blank messages older than the policy allows, sender by sender, skipping anyone on hold.
 async function sweepRetention() {
   const days = await policy.retentionDays('message');
@@ -232,4 +286,4 @@ router.use((req, res, next) => {
 router.post('/search', (req, res, next) => search(req.body).then(r => res.json(r), next));
 router.post('/export', (req, res, next) => exportItems(req.body).then(r => res.json(r), next));
 
-module.exports = { router, policy, editMessage, deleteMessages, sweepRetention, startRetentionSweep };
+module.exports = { router, policy, checkMessageDlp, editMessage, deleteMessages, sweepRetention, startRetentionSweep };

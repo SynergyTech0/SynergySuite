@@ -23,6 +23,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       scope: a.doc.scope,
       company_role: a.doc.company_role,
       snapshot: a.doc.snapshot,
+      label_id: a.doc.label_id,
       role: a.role,
       is_owner: a.role === "owner",
     },
