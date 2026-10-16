@@ -10,6 +10,7 @@ export function About() {
         <ul>
           <li><a className="link" href="https://osquery.io" target="_blank" rel="noreferrer">osquery</a>, the endpoint agent on each computer, by the osquery project at the Linux Foundation (Apache-2.0 / GPL-2.0). Devices is its server: it serves the schedule, receives results and sends live queries over osquery&apos;s TLS remote API. osquery is installed from its own releases and is not bundled or modified.</li>
           <li><a className="link" href="https://osv.dev" target="_blank" rel="noreferrer">OSV</a>, the open source vulnerability database, for advisories affecting installed Linux packages. Advisory data comes from each distribution&apos;s security team under its own terms.</li>
+          <li><a className="link" href="https://github.com/micromdm/nanomdm" target="_blank" rel="noreferrer">NanoMDM</a> by the MicroMDM project (MIT) speaks the Apple MDM protocol to iPhones, iPads and Macs, and <a className="link" href="https://github.com/micromdm/scep" target="_blank" rel="noreferrer">micromdm/scep</a> (MIT) issues their identity certificates. Both run unmodified beside Devices.</li>
           <li>Severity scores use the <a className="link" href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noreferrer">CVSS v3.1</a> base formula published by FIRST.</li>
         </ul>
       </section>
@@ -17,6 +18,7 @@ export function About() {
         <h3>What it does</h3>
         <ul>
           <li>Inventory of Windows, macOS and Linux computers: hardware, operating system, installed software and who signs in.</li>
+          <li>Apple device management for iPhones, iPads and Macs: remote lock, erase, restart and shut down, configuration profiles (passcode, FileVault, firewall, updates, Wi-Fi, restrictions or your own), and App Store apps and Mac packages installed by admins or by people on their own devices.</li>
           <li>Compliance policies for disk encryption, firewall, antivirus, screen lock, system protection, automatic updates, OS version, check-ins, administrators, vulnerabilities and open threats.</li>
           <li>Threat detections for new network listeners, persistence, programs running from temporary folders, deleted binaries, new SSH keys, new administrators, security settings turned off, and known-bad file hashes.</li>
           <li>Live queries across the fleet, alert triage with notes and an optional AI explanation through the suite&apos;s own model.</li>
@@ -25,7 +27,7 @@ export function About() {
       </section>
       <section className="panel">
         <h3>Not yet</h3>
-        <p style={{ marginTop: 0 }}>osquery only reads. Remote lock and wipe, pushing settings and apps, and blocking sign-in from non-compliant devices need an MDM channel (Apple MDM, Windows MDM) and are planned for a later milestone. Retiring a device stops it reporting; it doesn&apos;t uninstall osquery.</p>
+        <p style={{ marginTop: 0 }}>Android phones, Windows device management (lock, wipe, settings and apps on Windows) and blocking sign-in from non-compliant devices are coming next. Automated Device Enrollment through Apple Business Manager and app licenses from it aren&apos;t supported yet; devices enroll with a profile. Retiring a computer stops it reporting; it doesn&apos;t uninstall osquery.</p>
       </section>
     </div>
   );

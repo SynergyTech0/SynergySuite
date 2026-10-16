@@ -1,4 +1,7 @@
 import type { Platform } from "./queries";
+
+/** osquery platforms plus iPhone and iPad (ios), which report through Apple MDM. */
+export type DevicePlatform = Platform | "ios";
 import { UserError } from "./util";
 
 /**
@@ -27,15 +30,15 @@ export type Rule =
 
 export type RuleCheck = Rule["check"];
 
-export const RULES: { check: RuleCheck; label: string; describe: string; platforms: Platform[] }[] = [
-  { check: "disk_encryption", label: "Disk encryption", describe: "BitLocker on C:, FileVault, or an encrypted root volume on Linux.", platforms: ["windows", "darwin", "linux"] },
+export const RULES: { check: RuleCheck; label: string; describe: string; platforms: DevicePlatform[] }[] = [
+  { check: "disk_encryption", label: "Disk encryption", describe: "BitLocker on C:, FileVault, an encrypted root volume on Linux, or data protection on with a passcode on iPhone and iPad.", platforms: ["windows", "darwin", "linux", "ios"] },
   { check: "firewall", label: "Firewall on", describe: "Windows Firewall, the macOS application firewall, or ufw, firewalld or nftables running.", platforms: ["windows", "darwin", "linux"] },
   { check: "antivirus", label: "Antivirus running", describe: "Windows Security reports antivirus as good; on Linux a known scanner is running (ClamAV, Defender, Falcon).", platforms: ["windows", "linux"] },
-  { check: "screen_lock", label: "Screen lock", describe: "A password is needed after the screen saver or a period of inactivity.", platforms: ["windows", "darwin"] },
+  { check: "screen_lock", label: "Screen lock", describe: "A password is needed after the screen saver or a period of inactivity; on iPhone and iPad, a passcode is set.", platforms: ["windows", "darwin", "ios"] },
   { check: "system_protection", label: "System protection", describe: "System Integrity Protection and Gatekeeper on (macOS), User Account Control on (Windows).", platforms: ["windows", "darwin"] },
   { check: "auto_update", label: "Automatic updates", describe: "Windows Security reports automatic updates as good.", platforms: ["windows"] },
-  { check: "os_min_version", label: "Minimum OS version", describe: "The operating system is at least this version.", platforms: ["windows", "darwin", "linux"] },
-  { check: "checked_in", label: "Checked in recently", describe: "The device reported to Devices within this many days.", platforms: ["windows", "darwin", "linux"] },
+  { check: "os_min_version", label: "Minimum OS version", describe: "The operating system is at least this version.", platforms: ["windows", "darwin", "linux", "ios"] },
+  { check: "checked_in", label: "Checked in recently", describe: "The device reported to Devices within this many days.", platforms: ["windows", "darwin", "linux", "ios"] },
   { check: "max_admins", label: "Limit administrators", describe: "No more than this many local administrator accounts.", platforms: ["windows", "darwin", "linux"] },
   { check: "max_vulnerabilities", label: "Limit vulnerabilities", describe: "No more than this many known vulnerabilities at this severity or worse in installed packages.", platforms: ["linux"] },
   { check: "no_open_alerts", label: "No open threats", describe: "No unresolved security alert at this severity or worse.", platforms: ["windows", "darwin", "linux"] },
@@ -145,7 +148,7 @@ export function evaluate(policies: PolicyLike[], d: DeviceState, now = new Date(
     if (!applies(p, d.platform)) continue;
     for (const r of p.rules) {
       // A check the platform can't report (screen lock on Linux) doesn't apply there.
-      if (!RULES.find((x) => x.check === r.check)?.platforms.includes(d.platform as Platform)) continue;
+      if (!RULES.find((x) => x.check === r.check)?.platforms.includes(d.platform as DevicePlatform)) continue;
       const [outcome, detail] = evaluateRule(r, d, now);
       results.push({ policy: p.name, check: r.check, outcome, detail });
     }
@@ -201,7 +204,7 @@ export function parseRules(v: unknown): Rule[] {
 }
 
 /** A sensible starting policy, offered on an empty Compliance page. */
-export const BASELINE: { name: string; description: string; platforms: Platform[]; rules: Rule[] } = {
+export const BASELINE: { name: string; description: string; platforms: DevicePlatform[]; rules: Rule[] } = {
   name: "Security baseline",
   description: "Encrypted, firewalled, locked when idle, reporting in, and free of open high-severity threats.",
   platforms: [],
