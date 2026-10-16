@@ -22,7 +22,6 @@ COPY apps/crm/package.json apps/crm/
 COPY apps/desk/package.json apps/desk/
 COPY apps/drive/package.json apps/drive/
 COPY apps/flow/package.json apps/flow/
-COPY apps/flow/package.json apps/flow/
 COPY apps/forms/package.json apps/forms/
 COPY apps/insights/package.json apps/insights/
 COPY apps/mail/package.json apps/mail/
