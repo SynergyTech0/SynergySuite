@@ -1,14 +1,14 @@
-# Checks the desktop app (clients/desktop) and builds its installers for Windows, macOS and
+# Checks the Synergy app (clients/app) and builds its installers for Windows, macOS and
 # Linux. Every run uploads the installers as workflow artifacts; pushing a desktop-v* tag also
 # drafts a GitHub release with them. Builds are unsigned until signing secrets are added.
 name: desktop
 
 on:
   pull_request:
-    paths: ["clients/desktop/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/desktop.yml"]
+    paths: ["clients/app/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/desktop.yml"]
   push:
     branches: [main]
-    paths: ["clients/desktop/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/desktop.yml"]
+    paths: ["clients/app/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/desktop.yml"]
     tags: ["desktop-v*"]
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: clients/desktop
+        working-directory: clients/app
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
@@ -35,21 +35,21 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: clients/desktop/package-lock.json
+          cache-dependency-path: clients/app/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/desktop/src-tauri
+          workspaces: clients/app/src-tauri
       - run: npm ci
       - run: npm run build:web
       - run: cargo fmt --check
-        working-directory: clients/desktop/src-tauri
+        working-directory: clients/app/src-tauri
       - run: cargo clippy --all-targets -- -D warnings
-        working-directory: clients/desktop/src-tauri
+        working-directory: clients/app/src-tauri
       - run: cargo test
-        working-directory: clients/desktop/src-tauri
+        working-directory: clients/app/src-tauri
 
   build:
     needs: check
@@ -69,7 +69,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: clients/desktop
+        working-directory: clients/app
     steps:
       - uses: actions/checkout@v4
       - if: matrix.name == 'linux'
@@ -78,13 +78,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: clients/desktop/package-lock.json
+          cache-dependency-path: clients/app/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.name == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/desktop/src-tauri
+          workspaces: clients/app/src-tauri
       - run: npm ci
       - run: npx tauri build ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
@@ -92,12 +92,12 @@ jobs:
           name: synergy-desktop-${{ matrix.name }}
           if-no-files-found: error
           path: |
-            clients/desktop/src-tauri/target/**/release/bundle/nsis/*.exe
-            clients/desktop/src-tauri/target/**/release/bundle/msi/*.msi
-            clients/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
-            clients/desktop/src-tauri/target/**/release/bundle/deb/*.deb
-            clients/desktop/src-tauri/target/**/release/bundle/rpm/*.rpm
-            clients/desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+            clients/app/src-tauri/target/**/release/bundle/nsis/*.exe
+            clients/app/src-tauri/target/**/release/bundle/msi/*.msi
+            clients/app/src-tauri/target/**/release/bundle/dmg/*.dmg
+            clients/app/src-tauri/target/**/release/bundle/deb/*.deb
+            clients/app/src-tauri/target/**/release/bundle/rpm/*.rpm
+            clients/app/src-tauri/target/**/release/bundle/appimage/*.AppImage
 
   release:
     if: startsWith(github.ref, 'refs/tags/desktop-v')

@@ -1,5 +1,5 @@
 [package]
-name = "synergy-desktop"
+name = "synergy-app"
 version = "0.1.0"
 description = "Synergy for Windows, macOS and Linux"
 license = "AGPL-3.0-only"
@@ -7,7 +7,7 @@ edition = "2021"
 rust-version = "1.80"
 
 [lib]
-name = "synergy_desktop_lib"
+name = "synergy_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

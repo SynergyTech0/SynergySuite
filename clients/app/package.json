@@ -1,9 +1,9 @@
 {
-  "name": "@synergy/desktop",
+  "name": "@synergy/app",
   "private": true,
   "version": "0.1.0",
   "license": "AGPL-3.0-only",
-  "description": "Synergy for Windows, macOS and Linux: the suite in its own window.",
+  "description": "Synergy for Windows, macOS, Linux, iOS and Android: the suite in its own app.",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",

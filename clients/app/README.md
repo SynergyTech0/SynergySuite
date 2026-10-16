@@ -56,7 +56,7 @@ You need Node 22, Rust (stable) and the
 `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev`).
 
 ```sh
-cd clients/desktop
+cd clients/app
 npm install
 npm run dev      # runs it with the launcher page hot reloading
 npm run build    # installers in src-tauri/target/release/bundle

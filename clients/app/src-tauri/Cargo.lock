@@ -3282,7 +3282,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "synergy-desktop"
+name = "synergy-app"
 version = "0.1.0"
 dependencies = [
  "serde",
