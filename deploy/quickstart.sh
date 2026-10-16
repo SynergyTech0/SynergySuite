@@ -88,6 +88,7 @@ fill FLOW_JWT_SECRET "$(hex 32)"
 fill DEVICES_MDM_API_KEY "$(hex 32)"
 fill DEVICES_MDM_WEBHOOK_KEY "$(hex 32)"
 fill DEVICES_SCEP_CHALLENGE "$(hex 32)"
+fill HR_DATA_KEY "$(hex 32)"
 
 domain=$(getvar SUITE_DOMAIN)
 [ -n "$domain" ] || die "SUITE_DOMAIN is empty in $ENV_FILE."
