@@ -63,7 +63,7 @@ const ded = (d: Partial<Deduction>): Deduction => ({
   id: d.name ?? "d", name: "d", kind: "posttax", amountCents: null, percent: null, matchPercent: 0, matchCapPercent: 0, annualLimitCents: 0, ...d,
 });
 const salary = (p: Partial<PayProfile> = {}): PayProfile => ({
-  payType: "salary", annualSalaryCents: 5_200_000, hourlyRateCents: 0, w4: DEFAULT_W4, state: "TX", stateRatePercent: 0, deductions: [], ...p,
+  payType: "salary", annualSalaryCents: 5_200_000, hourlyRateCents: 0, w4: DEFAULT_W4, state: "TX", stateMethod: "table", stateRatePercent: 0, deductions: [], ...p,
 });
 
 describe("paychecks", () => {
@@ -114,7 +114,7 @@ describe("paychecks", () => {
   });
 
   it("state tax at the flat rate set for the person", () => {
-    const pc = computePaycheck(salary({ state: "CA", stateRatePercent: 5 }), hours(), rules, EMPTY_YTD, "2026-10-16");
+    const pc = computePaycheck(salary({ state: "CA", stateMethod: "flat", stateRatePercent: 5 }), hours(), rules, EMPTY_YTD, "2026-10-16");
     expect(pc.taxes.find((t) => t.code === "state")).toEqual({ code: "state", label: "CA income tax", amountCents: 10_000 });
   });
 

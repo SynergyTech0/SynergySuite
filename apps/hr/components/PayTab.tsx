@@ -12,7 +12,8 @@ type Deduction = {
 type Profile = {
   inPayroll: boolean; payType: "salary" | "hourly"; annualSalaryCents: number; hourlyRateCents: number; filingStatus: string;
   multipleJobs: boolean; dependentsCents: number; otherIncomeCents: number; deductionsCents: number; extraWithholdingCents: number;
-  w4Exempt: boolean; workState: string; stateRatePercent: number; paymentMethod: string; accountLast4: string; updatedAt: string | null;
+  w4Exempt: boolean; workState: string; stateMethod: "table" | "flat"; stateRatePercent: number; stateFilingStatus: string;
+  stateAllowances: number; stateExtraWithholdingCents: number; stateExempt: boolean; paymentMethod: string; accountLast4: string; updatedAt: string | null;
   updatedBy: string; deductions: Deduction[]; saved: boolean;
 };
 
@@ -28,12 +29,14 @@ const NO_TAX_STATES = ["AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"];
 export function PayTab({ ctx, person }: { ctx: Ctx; person: Employee }) {
   const [p, setP] = useState<Profile | null>(null);
   const [payType, setPayType] = useState<"salary" | "hourly">("salary");
+  const [stateMethod, setStateMethod] = useState<"table" | "flat">("table");
   const [err, setErr] = useState("");
   const [ded, setDed] = useState<Deduction | "new" | null>(null);
   useEffect(() => {
     api<Profile>(`/api/employees/${person.id}/pay`).then((x) => {
       setP(x);
       setPayType(x.payType);
+      setStateMethod(x.stateMethod);
     }, (e) => setErr((e as Error).message));
   }, [person.id]);
   if (!p) return <div className="pad">{err ? <p className="error">{err}</p> : <span className="muted">Loading…</span>}</div>;
@@ -99,9 +102,33 @@ export function PayTab({ ctx, person }: { ctx: Ctx; person: Employee }) {
           <legend>State</legend>
           <div className="grid2">
             <label><span>Work state</span><input name="workState" maxLength={2} defaultValue={p.workState} placeholder="CA" style={{ textTransform: "uppercase" }} /></label>
-            <label><span>State income tax (% of taxable pay)</span><input name="stateRatePercent" inputMode="decimal" defaultValue={p.stateRatePercent || ""} /></label>
+            <label>
+              <span>Withholding</span>
+              <select name="stateMethod" value={stateMethod} onChange={(e) => setStateMethod(e.target.value as "table" | "flat")}>
+                <option value="table">The state's withholding tables</option>
+                <option value="flat">A flat percent of taxable pay</option>
+              </select>
+            </label>
           </div>
-          <p className="small muted">State withholding is a flat estimate for now. {NO_TAX_STATES.join(", ")} have no state tax on wages.</p>
+          {/* Both sets stay in the form so switching method doesn't lose what was entered. */}
+          <label hidden={stateMethod !== "flat"}><span>State income tax (% of taxable pay)</span><input name="stateRatePercent" inputMode="decimal" defaultValue={p.stateRatePercent || ""} /></label>
+          <div className="stack" hidden={stateMethod !== "table"}>
+              <div className="grid3">
+                <label>
+                  <span>State filing status</span>
+                  <select name="stateFilingStatus" defaultValue={p.stateFilingStatus}>
+                    <option value="">Same as the W-4</option>
+                    <option value="single">Single</option>
+                    <option value="married">Married</option>
+                    <option value="head">Head of household</option>
+                  </select>
+                </label>
+                <label><span>Allowances or exemptions</span><input name="stateAllowances" inputMode="numeric" defaultValue={p.stateAllowances || ""} placeholder="0" /></label>
+                <label><span>Extra each paycheck ($)</span><input name="stateExtraWithholding" inputMode="decimal" defaultValue={dollars(p.stateExtraWithholdingCents)} /></label>
+              </div>
+              <label className="check"><input type="checkbox" name="stateExempt" defaultChecked={p.stateExempt} /> Claims exemption from state withholding</label>
+          </div>
+          <p className="small muted">Enter what the employee put on the state's own withholding form. {NO_TAX_STATES.join(", ")} have no state tax on wages. City and county taxes are not withheld.</p>
         </fieldset>
         <p className="error" role="alert">{err}</p>
         <div className="actions">
