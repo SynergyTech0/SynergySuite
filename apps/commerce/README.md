@@ -55,9 +55,11 @@ Operations (production and maintenance) keeps no stock of its own. It calls Comm
 
 - `GET /api/svc/items?q=` or `?sku=A,B,C`: `[{ id, sku, name, unit, cost, onHand, byLocation: [{ locationId, onHand }] }]`.
 - `GET /api/svc/locations`: `[{ id, name, kind }]`.
-- `POST /api/svc/stock-moves` with `{ reference, sku, locationId?, qty, unitCost?, kind, account?, note? }`.
+- `POST /api/svc/stock-moves` with `{ reference, sku, name?, unit?, locationId?, qty, unitCost?, kind, account?, note? }`.
   - `kind` is `mfg_issue` or `maint_issue` (parts used, negative `qty`, valued at average cost) or
     `mfg_receipt` (product made, positive `qty`, at `unitCost`, which moves the average).
+    A receipt of a SKU Commerce hasn't seen creates the product from `name` and `unit`, unpriced
+    and off the online store.
   - The value posts to Books against `account`, such as work in progress. By default that is the
     stock adjustment account.
   - `locationId` defaults to the first location.

@@ -31,8 +31,8 @@ export async function svcItems(f: { q?: string; skus?: string[] } = {}): Promise
   const where = ["p.active"];
   const args: unknown[] = [];
   if (f.skus?.length) {
-    args.push(f.skus.slice(0, 500));
-    where.push(`p.sku = ANY($${args.length})`);
+    args.push(f.skus.slice(0, 500).map((s) => s.toLowerCase()));
+    where.push(`lower(p.sku) = ANY($${args.length})`);
   } else if (f.q?.trim()) {
     args.push(`%${f.q.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     where.push(`(p.sku ILIKE $${args.length} OR p.name ILIKE $${args.length} OR p.barcode = $${args.length})`);
@@ -62,7 +62,7 @@ type SvcKind = (typeof SVC_KINDS)[number];
 const KIND_TEXT: Record<SvcKind, string> = { mfg_issue: "Used in production", mfg_receipt: "Made", maint_issue: "Used in maintenance" };
 
 export type StockMoveInput = {
-  reference?: unknown; sku?: unknown; locationId?: unknown; qty?: unknown; unitCost?: unknown; kind?: unknown; account?: unknown; note?: unknown;
+  reference?: unknown; sku?: unknown; name?: unknown; unit?: unknown; locationId?: unknown; qty?: unknown; unitCost?: unknown; kind?: unknown; account?: unknown; note?: unknown;
 };
 export type StockMoveResult = { duplicate?: true; onHand: number; unitCost: string };
 
@@ -70,7 +70,9 @@ export type StockMoveResult = { duplicate?: true; onHand: number; unitCost: stri
  * One part used (negative qty, `mfg_issue` or `maint_issue`) or one product made (positive qty,
  * `mfg_receipt`). Issues are valued at average cost; receipts at the `unitCost` sent, which moves
  * the average. The value is posted to Books against `account` (by default the stock adjustment
- * account). `onHand` is what is left at that location afterwards.
+ * account). `onHand` is what is left at that location afterwards. A receipt of a SKU Commerce
+ * hasn't seen yet (a new product Operations makes) creates it from `name` and `unit`, stock-tracked,
+ * unpriced and off the online store until someone prices it.
  */
 export async function stockMove(input: StockMoveInput): Promise<StockMoveResult> {
   const reference = text(input.reference, 180);
@@ -97,10 +99,20 @@ export async function stockMove(input: StockMoveInput): Promise<StockMoveResult>
     const [done] = await tq<{ on_hand: string; unit_cost: string }>("SELECT on_hand, unit_cost FROM svc_moves WHERE reference = $1", [reference]);
     if (done) return { duplicate: true, onHand: Number(done.on_hand), unitCost: Number(done.unit_cost).toFixed(4) };
 
-    const [p] = await tq<{ id: string; sku: string; track_stock: boolean; active: boolean }>(
-      "SELECT id, sku, track_stock, active FROM products WHERE sku = $1", [sku],
+    if (!sku) throw new UserError("sku is required");
+    let [p] = await tq<{ id: string; sku: string; track_stock: boolean; active: boolean }>(
+      "SELECT id, sku, track_stock, active FROM products WHERE lower(sku) = lower($1)", [sku],
     );
-    if (!p) throw new UserError(`No product with SKU ${sku || "(blank)"}`, 404);
+    if (!p && kind === "mfg_receipt") {
+      const name = text(input.name, 200);
+      if (!name) throw new UserError(`No product with SKU ${sku}; send its name to create it`, 404);
+      [p] = await tq<{ id: string; sku: string; track_stock: boolean; active: boolean }>(
+        `INSERT INTO products (sku, name, unit, price, track_stock, online, created_by) VALUES ($1, $2, $3, 0, true, false, 'operations')
+         RETURNING id, sku, track_stock, active`,
+        [sku, name, text(input.unit, 20) || "each"],
+      );
+    }
+    if (!p) throw new UserError(`No product with SKU ${sku}`, 404);
     if (!p.track_stock) throw new UserError(`${p.sku} isn't stock-tracked`);
 
     let locationId: string;

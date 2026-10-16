@@ -264,7 +264,13 @@ describe.skipIf(!url)("commerce", async () => {
     await expect(svc.stockMove({ reference: "ops:x:3", sku: "NOPE", qty: -1, kind: "mfg_issue" })).rejects.toMatchObject({ status: 404 });
     await expect(svc.stockMove({ reference: "ops:x:4", sku: "GIFTWRAP", qty: -1, kind: "mfg_issue" })).rejects.toThrow(/stock-tracked/);
     await expect(svc.stockMove({ reference: "ops:x:5", sku: "G-1", qty: -1, kind: "sale" })).rejects.toThrow(/kind must be/);
-    expect((await svc.svcItems({ skus: ["G-1"] }))[0].onHand).toBe(g.onHand);
+    expect((await svc.svcItems({ skus: ["g-1"] }))[0].onHand).toBe(g.onHand);
+    // The first build of a product Commerce hasn't seen creates it, unpriced and off the store.
+    await expect(svc.stockMove({ reference: "ops:x:6", sku: "KIT-1", qty: 1, kind: "mfg_receipt" })).rejects.toThrow(/send its name/);
+    expect(await svc.stockMove({ reference: "ops:x:7", sku: "KIT-1", name: "Starter kit", unit: "box", qty: 3, unitCost: "7.5", kind: "mfg_receipt" }))
+      .toEqual({ onHand: 3, unitCost: "7.5000" });
+    expect((await svc.svcItems({ skus: ["KIT-1"] }))[0]).toMatchObject({ name: "Starter kit", unit: "box", cost: "7.5000", onHand: 3 });
+    await expect(svc.stockMove({ reference: "ops:x:8", sku: "KIT-2", name: "Nope", qty: -1, kind: "mfg_issue" })).rejects.toMatchObject({ status: 404 });
   });
 
   it("keeps every queued posting balanced", async () => {
