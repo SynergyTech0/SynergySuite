@@ -85,6 +85,7 @@ fill FLOW_SECRET "$(hex 32)"
 fill FLOW_DB_PASSWORD "$(hex 24)"
 fill FLOW_ENCRYPTION_KEY "$(hex 16)"
 fill FLOW_JWT_SECRET "$(hex 32)"
+fill HR_DATA_KEY "$(hex 32)"
 # Meet and Phone's media server (the livekit service).
 fill LIVEKIT_API_KEY "API$(hex 6)"
 fill LIVEKIT_API_SECRET "$(hex 32)"
