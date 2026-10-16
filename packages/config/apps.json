@@ -29,6 +29,7 @@
   { "id": "diagrams",  "name": "Diagrams",  "m365": "Visio",                "port": 3790, "icon": "flow",     "dir": "apps/diagrams",  "core": true },
   { "id": "whiteboard", "name": "Whiteboard", "m365": "Microsoft Whiteboard", "port": 3750, "icon": "easel", "dir": "apps/whiteboard", "core": true },
   { "id": "notes",     "name": "Notes",     "m365": "OneNote",              "port": 3135, "icon": "note",     "dir": "apps/notes",     "core": true },
+  { "id": "loop",      "name": "Loop",      "m365": "Loop",                 "port": 3770, "icon": "loop",     "dir": "apps/loop",      "core": true },
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },
   { "id": "crm",       "name": "CRM",       "m365": "Dynamics 365 Sales",   "port": 3095, "icon": "target",   "dir": "apps/crm",       "core": true },
   { "id": "hr",        "name": "HR",        "m365": "Dynamics 365 Human Resources, payroll", "port": 3145, "icon": "users", "dir": "apps/hr", "core": true },

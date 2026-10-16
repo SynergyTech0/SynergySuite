@@ -30,6 +30,7 @@ CREATE DATABASE ops;
 CREATE DATABASE commerce;
 CREATE DATABASE admin;
 CREATE DATABASE devices;
+CREATE DATABASE loop;
 -- Metabase's own settings, questions and dashboards (Insights).
 CREATE DATABASE metabase;
 CREATE DATABASE whiteboard;
