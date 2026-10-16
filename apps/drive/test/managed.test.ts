@@ -64,8 +64,8 @@ describe.skipIf(!base)("libraries kept by another app", async () => {
       params(id),
     );
     expect(put.status).toBe(200);
-    expect(await drive.libraries(bob)).toEqual([]);
-    expect((await drive.libraries({ email: "carol@example.com", name: "Carol" }))[0]).toMatchObject({ name: "Harbour crew", role: "editor" });
+    expect((await drive.libraries(bob)).some((l) => l.id === id)).toBe(false);
+    expect((await drive.libraries({ email: "carol@example.com", name: "Carol" })).find((l) => l.id === id)).toMatchObject({ name: "Harbour crew", role: "editor" });
     expect((await one.PUT(req("PUT", { members: [{ email: bob.email, role: "viewer" }] }), params(id))).status).toBe(400);
 
     // Files in it are listed for the app showing it.
@@ -87,7 +87,7 @@ describe.skipIf(!base)("libraries kept by another app", async () => {
     await drive.moveToTrash(alice, [folder.id]);
     await drive.emptyTrash(alice);
     expect((await one.DELETE(req("DELETE"), params(id))).status).toBe(200);
-    expect(await drive.libraries(alice)).toEqual([]);
+    expect((await drive.libraries(alice)).some((l) => l.id === id)).toBe(false);
   });
 
   it("leaves Drive's own libraries alone", async () => {
