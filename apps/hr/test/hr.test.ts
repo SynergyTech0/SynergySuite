@@ -137,7 +137,7 @@ describe.skipIf(!base)("hr against Postgres", async () => {
     await runs.saveSettings(a, { companyName: "Example Co", frequency: "biweekly", sutaRatePercent: 2.7, sutaWageBase: "7000" });
     await runs.saveProfile(a, ids[eve], { payType: "salary", annualSalary: "52,000", filingStatus: "single", workState: "TX" });
     await runs.addDeduction(a, ids[eve], { name: "401(k)", kind: "pretax_retirement", percent: 5, matchPercent: 100, matchCapPercent: 4 });
-    await runs.saveProfile(a, ids[zed], { payType: "hourly", hourlyRate: "25", workState: "CA", stateRatePercent: 4 });
+    await runs.saveProfile(a, ids[zed], { payType: "hourly", hourlyRate: "25", workState: "CA", stateMethod: "flat", stateRatePercent: 4 });
     await expect(runs.saveProfile(a, ids[mo], { payType: "hourly" })).rejects.toThrow(/hourly rate/);
 
     firstRun = (await runs.createRun(a, { periodStart: "2026-10-19", periodEnd: "2026-11-01", payDate: "2026-11-06" })).id;

@@ -7,7 +7,7 @@ import {
   type CompanyRules, type Deduction, type DeductionKind, type Hours, type PayFrequency, type PayProfile, type Paycheck, type YearToDate,
   EMPTY_YTD, PERIODS_PER_YEAR, addToYtd, computePaycheck, standardHours,
 } from "./calc";
-import { type FilingStatus, NO_WAGE_TAX_STATES } from "./federal";
+import type { FilingStatus } from "./federal";
 import { DEFAULT_ACCOUNTS, type PayrollAccounts, type RunTotals, payrollJournal, runTotals } from "./journal";
 
 type Body = Record<string, unknown>;
@@ -94,7 +94,13 @@ export interface ProfileView {
   extraWithholdingCents: number;
   w4Exempt: boolean;
   workState: string;
+  stateMethod: "table" | "flat";
   stateRatePercent: number;
+  /** '' = same as the federal W-4. */
+  stateFilingStatus: FilingStatus | "";
+  stateAllowances: number;
+  stateExtraWithholdingCents: number;
+  stateExempt: boolean;
   paymentMethod: "direct_deposit" | "check";
   accountLast4: string;
   updatedAt: string | null;
@@ -107,7 +113,9 @@ export interface ProfileView {
 type ProfileRow = {
   employee_id: string; in_payroll: boolean; pay_type: "salary" | "hourly"; annual_salary_cents: string; hourly_rate_cents: string;
   filing_status: FilingStatus; multiple_jobs: boolean; dependents_cents: string; other_income_cents: string; deductions_cents: string;
-  extra_withholding_cents: string; w4_exempt: boolean; work_state: string; state_rate: string; payment_method: "direct_deposit" | "check";
+  extra_withholding_cents: string; w4_exempt: boolean; work_state: string; state_rate: string;
+  state_method: "table" | "flat"; state_filing_status: FilingStatus | ""; state_allowances: number; state_extra_withholding_cents: string; state_exempt: boolean;
+  payment_method: "direct_deposit" | "check";
   account_last4: string; updated_at: Date; updated_by: string;
 };
 
@@ -140,7 +148,12 @@ function toView(employeeId: string, r: ProfileRow | undefined, deductions: Deduc
     extraWithholdingCents: Number(r?.extra_withholding_cents ?? 0),
     w4Exempt: r?.w4_exempt ?? false,
     workState: r?.work_state ?? "",
+    stateMethod: r?.state_method ?? "table",
     stateRatePercent: Number(r?.state_rate ?? 0),
+    stateFilingStatus: r?.state_filing_status ?? "",
+    stateAllowances: Number(r?.state_allowances ?? 0),
+    stateExtraWithholdingCents: Number(r?.state_extra_withholding_cents ?? 0),
+    stateExempt: r?.state_exempt ?? false,
     paymentMethod: r?.payment_method ?? "direct_deposit",
     accountLast4: r?.account_last4 ?? "",
     updatedAt: r?.updated_at?.toISOString() ?? null,
@@ -165,7 +178,14 @@ function toCalc(p: ProfileView): PayProfile {
       exempt: p.w4Exempt,
     },
     state: p.workState,
+    stateMethod: p.stateMethod,
     stateRatePercent: p.stateRatePercent,
+    stateW4: {
+      filingStatus: p.stateFilingStatus || p.filingStatus,
+      allowances: p.stateAllowances,
+      extraWithholding: p.stateExtraWithholdingCents / 100,
+      exempt: p.stateExempt,
+    },
     deductions: p.deductions,
   };
 }
@@ -212,7 +232,12 @@ export async function saveProfile(v: Viewer, employeeId: string, b: Body): Promi
     extra_withholding_cents: cents(b.extraWithholding, "Extra withholding (Step 4c)"),
     w4_exempt: Boolean(b.w4Exempt),
     work_state: state,
+    state_method: oneOf(b.stateMethod, ["table", "flat"] as const, "table"),
     state_rate: num(b.stateRatePercent, "State tax rate", 0, { min: 0, max: 20 }),
+    state_filing_status: oneOf(b.stateFilingStatus, ["", "single", "married", "head"] as const, ""),
+    state_allowances: Math.round(num(b.stateAllowances, "State allowances", 0, { min: 0, max: 99 })),
+    state_extra_withholding_cents: cents(b.stateExtraWithholding, "Extra state withholding"),
+    state_exempt: Boolean(b.stateExempt),
     payment_method: oneOf(b.paymentMethod, ["direct_deposit", "check"] as const, "direct_deposit"),
     account_last4: last4,
   };
@@ -227,10 +252,6 @@ export async function saveProfile(v: Viewer, employeeId: string, b: Body): Promi
   // Pay amounts are not written to the audit log, only that they changed.
   await audit(v.email, "payroll.profile", employeeId, { fields: Object.keys(b) });
   return getProfile(v, employeeId);
-}
-
-export function suggestedStateRate(state: string): number | null {
-  return NO_WAGE_TAX_STATES.has(state.toUpperCase()) ? 0 : null;
 }
 
 function cleanDeduction(b: Body) {
