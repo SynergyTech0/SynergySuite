@@ -25,6 +25,7 @@
     "apps/planner",
     "apps/photo",
     "apps/sites",
+    "apps/stream",
     "apps/todo",
     "apps/trust",
     "addons/people",

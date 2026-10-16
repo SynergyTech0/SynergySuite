@@ -82,6 +82,7 @@ jobs:
           npx tsc --noEmit -p apps/meet
           npx tsc --noEmit -p apps/office
           npx tsc --noEmit -p apps/photo
+          npx tsc --noEmit -p apps/stream
           npx tsc --noEmit -p apps/cad
           npx tsc --noEmit -p apps/planner
           npx tsc --noEmit -p apps/base
@@ -129,6 +130,15 @@ jobs:
         run: npm test --workspace apps/meet
       - name: Photo tests
         run: npm test --workspace apps/photo
+      - name: Stream tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/stream_test
+        # ffmpeg lets the upload test process a real video.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE stream_test"
+          npm test --workspace apps/stream
       - name: CAD tests
         run: npm test --workspace apps/cad
       - name: Office tests

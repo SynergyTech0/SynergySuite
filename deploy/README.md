@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, contacts, crm, desk, drive, forms, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, contacts, crm, desk, drive, forms, mail, meet, notes, office, photo, planner, search, sites, stream, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -43,7 +43,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `forms`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `forms`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `stream`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.
@@ -58,7 +58,7 @@ For a public demo instance, set `DEMO_MODE=1` in `deploy/.env` and run `docker c
 - **Shared login.** The sign-in page shows the demo account and its password (`DEMO_EMAIL`, default `demo@<MAIL_DOMAIN>`; `DEMO_PASSWORD`, default `SynergyDemo1`) and fills them in. That account can't change its password, set up two-step verification or passkeys, reset its password by email, see or end other visitors' sessions, or be locked out by wrong passwords. The admin account works as usual.
 - **Hourly reset.** At the top of every hour (every `DEMO_RESET_MINUTES`, default 60) the `demo` service puts calendar, chat, notes and planner back to the sample content, empties and refills the demo and colleague mailboxes, and restores the demo account (password, no MFA or passkeys, not locked). It wipes everything in those apps, including what the admin added, so use demo mode only on an instance that exists to be a demo. Watch it with `docker compose -f deploy/compose.yml --env-file deploy/.env logs -f demo`; `restart demo` resets right away.
 - **No outbound email.** Stalwart refuses to relay to outside domains and routes every queued message to local delivery (`deploy/stalwart/plan.demo.ndjson`, applied by `stalwart-plan`). Mail only sends from the suite mailbox to `@<MAIL_DOMAIN>` addresses and won't connect outside IMAP accounts; the auth app sends no password-reset email and Meet sends no invitations.
-- **Not reset.** Drive, Contacts, To Do, CRM, Desk, forms, sites, office, photo, CAD, meet and the add-ons keep what visitors make, and published forms and sites are public pages. For a public demo, start only the apps you want to show, e.g. `docker compose -f deploy/compose.yml --env-file deploy/.env up -d demo calendar chat notes planner mail`.
+- **Not reset.** Drive, Contacts, To Do, CRM, Desk, forms, sites, office, photo, Stream, CAD, meet and the add-ons keep what visitors make, and published forms and sites are public pages. For a public demo, start only the apps you want to show, e.g. `docker compose -f deploy/compose.yml --env-file deploy/.env up -d demo calendar chat notes planner mail`.
 
 To turn demo mode off, clear `DEMO_MODE` and `up` again: the `demo` service exits, the sample content and demo account stay until you remove them (disable the account in `https://auth.<domain>/admin`), and Stalwart keeps refusing to relay until you restore its two settings in the admin UI: RCPT stage "Allow relaying" back to `!is_empty(authenticated_as)`, and the outbound routing expression back to `'local'` if `is_local_domain(rcpt_domain)`, else `'mx'`.
 

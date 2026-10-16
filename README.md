@@ -26,6 +26,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Forms (`apps/forms`) | Forms | yes | early | Form builder, public form links, responses, CSV export |
 | Planner (`apps/planner`) | Planner | yes | usable | Boards, lists, cards, checklists, comments, labels; board, table, calendar and timeline views; Trello and Jira import |
 | Photo (`apps/photo`) | Designer / Photos | yes | early | The PhotoCraft image editor (layers, masks, PSD files) with a per-user image library |
+| Stream (`apps/stream`) | Stream, Clipchamp | yes | early | Video library (upload, screen and camera recording, captions and transcripts, chapters, timed comments, sharing with people, the organization or a link, embeds) and a video editor on the FilmCraft engine; AI captions, summaries and chapters through your own model |
 | Base (`apps/base`) | Access, Lists | yes | early | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
 | Sites (`apps/sites`) | SharePoint | yes | early | Page builder for team sites, published as public pages |
 | Notes (`apps/notes`) | OneNote | yes | usable | Wiki spaces, page tree, live co-editing, version history, comments, attachments, PDF and Word export |
@@ -85,6 +86,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/forms` | Forms | Express + React/Vite |
 | `apps/planner` | Planner | Next.js 16 + Drizzle |
 | `apps/photo` | Photo (image editing) | Next.js 16 + PhotoCraft (Rust, WebAssembly) |
+| `apps/stream` | Stream (video library and editor) | Next.js 16 + ffmpeg + FilmCraft (Rust, WebAssembly) |
 | `apps/cad` | CAD (2D drafting with DWG/DXF, 3D modeling, drawings from models, review links, version history, folders) | Next.js 16 + CADCraft (Rust, WebAssembly) + Chili3D (Open CASCADE, WebAssembly) |
 | `apps/base` | Access, Lists | Next.js 16 + Postgres (one schema per database) |
 | `apps/sites` | SharePoint | Express + React/Vite |
