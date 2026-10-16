@@ -11,7 +11,7 @@ import { Empty, Field, Filters, ListPane, Pill, useAction, useFields, useLoad } 
 type Filter = "open" | "received" | "cancelled" | "all";
 
 /** What planning (or a person) says to buy. Purchasing places the order; receiving puts it in stock. */
-export function PurchasePane({ say }: PaneProps) {
+export function PurchasePane({ say, stock }: PaneProps) {
   const [rows, setRows] = useState<PurchaseRequest[] | null>(null);
   const [filter, setFilter] = useState<Filter>("open");
   const [dialog, setDialog] = useState<React.ReactNode>(null);
@@ -60,7 +60,9 @@ export function PurchasePane({ say }: PaneProps) {
                     )}
                     {(p.status === "open" || p.status === "ordered") && (
                       <>
-                        <button className="btn small" disabled={a.busy} onClick={() => setDialog(<ReceiveDialog p={p} onClose={() => setDialog(null)} onDone={async (json) => { setDialog(null); await act(p, { action: "receive", ...json }, `${p.number} received into stock`); }} />)}>Receive</button>
+                        {stock.linked ? (
+                          <button className="btn small" disabled={a.busy} title="Receive the goods in Commerce; this only closes the request" onClick={() => void act(p, { action: "receive" }, `${p.number} closed; receive the goods in Commerce`)}>Mark received</button>
+                        ) : <button className="btn small" disabled={a.busy} onClick={() => setDialog(<ReceiveDialog p={p} onClose={() => setDialog(null)} onDone={async (json) => { setDialog(null); await act(p, { action: "receive", ...json }, `${p.number} received into stock`); }} />)}>Receive</button>}
                         <button className="btn small ghost" disabled={a.busy} onClick={() => confirm(`Cancel ${p.number}?`) && void act(p, { action: "cancel" }, `${p.number} cancelled`)}>Cancel</button>
                       </>
                     )}

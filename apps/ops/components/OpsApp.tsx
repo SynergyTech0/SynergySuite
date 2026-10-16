@@ -13,8 +13,8 @@ import { WorkCentersPane } from "./WorkCentersPane";
 import { WorkOrdersPane } from "./WorkOrdersPane";
 
 export type Me = { email: string; name: string };
-export type BooksState = { linked: boolean; pending: number; failed: number; lastError: string };
-type Counts = { assets: number; orders: number; mine: number; late: number };
+export type StockState = { linked: boolean; pending: number; failed: number; lastError: string };
+type Counts = { assets: number; orders: number; mine: number; late: number; booksLinked: boolean };
 
 export type Section = "planning" | "workorders" | "boms" | "items" | "purchase" | "workcenters" | "assets" | "maintenance" | "plans";
 
@@ -49,7 +49,7 @@ function fromLink(): { section: Section; open: number | null } {
 export function OpsApp({ me }: { me: Me }) {
   const [section, setSection] = useState<Section>("planning");
   const [open, setOpen] = useState<number | null>(null);
-  const [books, setBooks] = useState<BooksState>({ linked: false, pending: 0, failed: 0, lastError: "" });
+  const [stock, setStock] = useState<StockState>({ linked: false, pending: 0, failed: 0, lastError: "" });
   const [counts, setCounts] = useState<Counts | null>(null);
   const [toast, setToast] = useState("");
 
@@ -59,8 +59,8 @@ export function OpsApp({ me }: { me: Me }) {
   }, []);
 
   const refreshMe = useCallback(async () => {
-    const r = await api<{ books: BooksState; counts: Counts }>("/api/me");
-    setBooks(r.books);
+    const r = await api<{ stock: StockState; counts: Counts }>("/api/me");
+    setStock(r.stock);
     setCounts(r.counts);
   }, []);
 
@@ -90,7 +90,7 @@ export function OpsApp({ me }: { me: Me }) {
     </button>
   );
 
-  const props = { me, say, open, setOpen, go, books, refreshMe };
+  const props = { me, say, open, setOpen, go, stock, booksLinked: !!counts?.booksLinked, refreshMe };
 
   return (
     <div className="ops">
@@ -102,10 +102,10 @@ export function OpsApp({ me }: { me: Me }) {
         <div className="grow" />
         <div className="linkstate small muted">
           <span>
-            <Link2 size={14} /> {books.linked ? "Linked to Books" : "Not linked to Books"}
+            <Link2 size={14} /> {stock.linked ? "Stock kept in Commerce" : "Stock kept here"}
           </span>
-          {books.linked && books.failed > 0 && <span className="neg" title={books.lastError}>Books sync is failing: {books.lastError}</span>}
-          {books.linked && books.pending > 0 && !books.failed && <span>{books.pending} stock moves waiting for Books</span>}
+          {stock.linked && stock.failed > 0 && <span className="neg" title={stock.lastError}>Commerce isn't taking stock moves: {stock.lastError}</span>}
+          {stock.linked && stock.pending > 0 && !stock.failed && <span>{stock.pending} stock moves waiting for Commerce</span>}
           {counts?.late ? <span><ClipboardList size={14} /> {counts.late} maintenance orders overdue</span> : null}
         </div>
       </nav>
@@ -129,6 +129,9 @@ export type PaneProps = {
   open: number | null;
   setOpen: (id: number | null) => void;
   go: (s: Section, id?: number | null) => void;
-  books: BooksState;
+  /** Commerce owns stock: receiving and counting happen there. */
+  stock: StockState;
+  /** Assets can be sent to Books' fixed-asset register. */
+  booksLinked: boolean;
   refreshMe: () => Promise<void>;
 };

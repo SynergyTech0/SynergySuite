@@ -9,6 +9,7 @@ import { ClassLocationModule } from './modules/class-location/class-location.mod
 import { CreditMemoModule } from './modules/credit-memo/credit-memo.module';
 import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { SvcModule } from './modules/svc/svc.module';
+import { OpsLinkModule } from './modules/ops-link/ops-link.module';
 import { EmailModule } from './modules/email/email.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
@@ -97,6 +98,7 @@ import { MobileDepositModule } from './modules/mobile-deposit/mobile-deposit.mod
     CreditMemoModule,
     CustomerPortalModule,
     SvcModule,
+    OpsLinkModule,
     EmailModule,
     PaymentsModule,
     PayrollModule,

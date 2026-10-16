@@ -1,4 +1,4 @@
-import { booksLinked } from "./books";
+import { SYNCED_KINDS, assertLocalStock, commerceLinked } from "./commerce";
 import { type Tq, num, q, tx } from "./db";
 import { UserError, need, number, oneOf, round, text } from "./util";
 
@@ -16,7 +16,7 @@ export type Item = {
   lotSize: number;
   leadDays: number;
   active: boolean;
-  booksItemId: string | null;
+  commerceId: string | null;
   hasBom: boolean;
   updatedAt: string;
 };
@@ -31,8 +31,8 @@ export type Move = {
   ref: string;
   note: string;
   by: string;
-  booksStatus: string;
-  booksError: string;
+  syncStatus: string;
+  syncError: string;
   createdAt: string;
 };
 
@@ -58,7 +58,7 @@ export function toItem(r: ItemRow): Item {
     lotSize: num(r.lot_size),
     leadDays: Number(r.lead_days ?? 0),
     active: Boolean(r.active),
-    booksItemId: (r.books_item_id as string | null) ?? null,
+    commerceId: (r.commerce_id as string | null) ?? null,
     hasBom: Boolean(r.has_bom),
     updatedAt: new Date(r.updated_at as string).toISOString(),
   };
@@ -75,8 +75,8 @@ function toMove(r: ItemRow): Move {
     ref: String(r.ref ?? ""),
     note: String(r.note ?? ""),
     by: String(r.by_email ?? ""),
-    booksStatus: String(r.books_status),
-    booksError: String(r.books_error ?? ""),
+    syncStatus: String(r.sync_status),
+    syncError: String(r.sync_error ?? ""),
     createdAt: new Date(r.created_at as string).toISOString(),
   };
 }
@@ -133,6 +133,7 @@ function itemFields(b: Record<string, unknown>, partial: boolean) {
 export async function createItem(b: Record<string, unknown>, by = ""): Promise<Item> {
   const f = itemFields(b, false);
   const onHand = number(b.onHand, "quantity on hand", { min: 0, fallback: 0 });
+  if (onHand > 0) assertLocalStock();
   const id = await tx(async (tq) => {
     const cols = Object.keys(f);
     const [r] = await tq<{ id: string }>(
@@ -189,7 +190,7 @@ export type MoveInput = {
 /**
  * Changes stock on hand inside a transaction and records why. Stock can't go below zero.
  * Receipts with a cost move the item's cost to the weighted average of old and new stock.
- * When Books is linked the move is queued for it (see books.ts).
+ * When Commerce is linked, issues, finished goods and parts used are queued for it (see commerce.ts).
  */
 export async function moveStock(tq: Tq, m: MoveInput): Promise<{ moveId: number; unitCost: number }> {
   if (!Number.isFinite(m.qty) || Math.abs(m.qty) < 1e-9) throw new UserError("Enter a quantity");
@@ -210,15 +211,16 @@ export async function moveStock(tq: Tq, m: MoveInput): Promise<{ moveId: number;
   }
   await tq("UPDATE items SET on_hand = $2, unit_cost = $3, updated_at = now() WHERE id = $1", [m.itemId, after, newCost]);
   const [r] = await tq<{ id: string }>(
-    `INSERT INTO stock_moves (item_id, qty, unit_cost, kind, ref, note, by_email, books_status)
+    `INSERT INTO stock_moves (item_id, qty, unit_cost, kind, ref, note, by_email, sync_status)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [m.itemId, m.qty, unitCost, m.kind, text(m.ref, 120), text(m.note, 500), m.by ?? "", booksLinked() ? "pending" : "off"],
+    [m.itemId, m.qty, unitCost, m.kind, text(m.ref, 120), text(m.note, 500), m.by ?? "", commerceLinked() && SYNCED_KINDS.includes(m.kind) ? "pending" : "off"],
   );
   return { moveId: Number(r.id), unitCost };
 }
 
 /** A receipt or count correction typed in by someone. */
 export async function adjust(itemId: number, b: Record<string, unknown>, by: string): Promise<Item> {
+  assertLocalStock();
   const kind = oneOf(b.kind, ["receipt", "adjust"] as const, "kind of change", "adjust");
   const qty = number(b.qty, "quantity");
   const unitCost = b.unitCost === undefined || b.unitCost === "" ? undefined : number(b.unitCost, "unit cost", { min: 0 });

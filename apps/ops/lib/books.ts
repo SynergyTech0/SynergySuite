@@ -1,11 +1,10 @@
-import { q, num } from "./db";
+import { num, q } from "./db";
 import { UserError } from "./util";
 
 /**
- * The link to Synergy Books. With OPS_BOOKS_URL and BOOKS_SVC_TOKEN set, every stock move is
- * queued for Books (its inventory ledger and stock value), assets can be sent to its fixed-asset
- * register (Books depreciates them), and items can be brought over from it. Without them Ops
- * works on its own and nothing is queued.
+ * The link to Synergy Books, for fixed assets only: with OPS_BOOKS_URL and BOOKS_SVC_TOKEN set,
+ * an asset can be sent to Books' fixed-asset register, where Books depreciates it. Stock value
+ * reaches Books through Commerce (see commerce.ts).
  */
 export function booksUrl(env: NodeJS.ProcessEnv = process.env): string {
   return (env.OPS_BOOKS_URL || "").replace(/\/$/, "");
@@ -38,34 +37,6 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
   return data as T;
 }
 
-/**
- * Sends queued stock moves to Books, oldest first, stopping at the first failure so Books sees
- * them in order. Books ignores a move it already has, so a retry after a timeout is safe.
- */
-export async function syncStockMoves(limit = 200): Promise<{ synced: number; failed: number }> {
-  if (!booksLinked()) return { synced: 0, failed: 0 };
-  const rows = await q<{ id: string; sku: string; name: string; qty: string; unit_cost: string; kind: string; note: string; ref: string }>(
-    `SELECT m.id, i.sku, i.name, m.qty, m.unit_cost, m.kind, m.note, m.ref FROM stock_moves m JOIN items i ON i.id = m.item_id
-     WHERE m.books_status IN ('pending','failed') ORDER BY m.id LIMIT $1`,
-    [limit],
-  );
-  let synced = 0;
-  for (const r of rows) {
-    try {
-      await call("POST", "stock-moves", {
-        ref: `ops-move-${r.id}`, sku: r.sku, name: r.name, qty: num(r.qty), unitCost: num(r.unit_cost), kind: r.kind,
-        note: [r.ref, r.note].filter(Boolean).join(" "),
-      });
-      await q("UPDATE stock_moves SET books_status = 'synced', books_error = '' WHERE id = $1", [r.id]);
-      synced++;
-    } catch (e) {
-      await q("UPDATE stock_moves SET books_status = 'failed', books_error = $2 WHERE id = $1", [r.id, (e as Error).message.slice(0, 300)]);
-      return { synced, failed: 1 };
-    }
-  }
-  return { synced, failed: 0 };
-}
-
 /** Sends one asset to Books' fixed-asset register, or updates it there. */
 export async function sendAsset(id: number): Promise<{ booksAssetId: string }> {
   if (!booksLinked()) throw new UserError("Books isn't linked: set OPS_BOOKS_URL and BOOKS_SVC_TOKEN", 400);
@@ -86,43 +57,4 @@ export async function sendAsset(id: number): Promise<{ booksAssetId: string }> {
     await q("UPDATE assets SET books_error = $2 WHERE id = $1", [id, (e as Error).message.slice(0, 300)]);
     throw new UserError(`Books didn't take it: ${(e as Error).message}`, 502);
   }
-}
-
-export type BooksItem = { id: string; sku: string; name: string; description: string; unitCost: number; quantity: number; reorderPoint: number };
-
-/**
- * Brings Books' inventory items into Ops. New SKUs arrive as bought items with Books' quantity as
- * opening stock; SKUs Ops already has only get linked, since Ops counts its own stock from then on.
- */
-export async function importFromBooks(): Promise<{ added: number; linked: number }> {
-  if (!booksLinked()) throw new UserError("Books isn't linked: set OPS_BOOKS_URL and BOOKS_SVC_TOKEN", 400);
-  const items = await call<BooksItem[]>("GET", "items");
-  let added = 0;
-  let linked = 0;
-  for (const it of items) {
-    const [mine] = await q<{ id: string }>("SELECT id FROM items WHERE lower(sku) = lower($1)", [it.sku]);
-    if (mine) {
-      await q("UPDATE items SET books_item_id = $2 WHERE id = $1", [mine.id, it.id]);
-      linked++;
-      continue;
-    }
-    // Opening stock is Books' own count, so it is not sent back as a move.
-    await q(
-      `INSERT INTO items (sku, name, description, unit_cost, on_hand, reorder_point, books_item_id) VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT DO NOTHING`,
-      [it.sku, it.name || it.sku, it.description || "", it.unitCost || 0, Math.max(0, it.quantity || 0), it.reorderPoint || 0, it.id],
-    );
-    added++;
-  }
-  return { added, linked };
-}
-
-export async function booksStatus(): Promise<{ linked: boolean; pending: number; failed: number; lastError: string }> {
-  if (!booksLinked()) return { linked: false, pending: 0, failed: 0, lastError: "" };
-  const [r] = await q<{ pending: number; failed: number; err: string | null }>(
-    `SELECT count(*) FILTER (WHERE books_status = 'pending')::int AS pending, count(*) FILTER (WHERE books_status = 'failed')::int AS failed,
-       (SELECT books_error FROM stock_moves WHERE books_status = 'failed' ORDER BY id LIMIT 1) AS err
-     FROM stock_moves WHERE books_status IN ('pending','failed')`,
-  );
-  return { linked: true, pending: r.pending, failed: r.failed, lastError: r.err ?? "" };
 }

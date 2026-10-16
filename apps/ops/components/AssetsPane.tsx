@@ -11,7 +11,7 @@ import { Card, DetailPane, Empty, Field, Filters, ListPane, Pill, useAction, use
 
 type Filter = "in_service" | "mine" | "retired" | "all";
 
-export function AssetsPane({ say, open, setOpen, go, books, refreshMe }: PaneProps) {
+export function AssetsPane({ say, open, setOpen, go, booksLinked, refreshMe }: PaneProps) {
   const [rows, setRows] = useState<Asset[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("in_service");
@@ -56,7 +56,7 @@ export function AssetsPane({ say, open, setOpen, go, books, refreshMe }: PanePro
           </table>
         )}
       </ListPane>
-      {open && <AssetDetail key={open} id={open} say={say} books={books.linked} onClose={() => setOpen(null)} onChanged={async () => { await load(); await refreshMe(); }} go={go} />}
+      {open && <AssetDetail key={open} id={open} say={say} books={booksLinked} onClose={() => setOpen(null)} onChanged={async () => { await load(); await refreshMe(); }} go={go} />}
       {dialog}
     </div>
   );

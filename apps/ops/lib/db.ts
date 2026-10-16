@@ -34,13 +34,15 @@ CREATE TABLE IF NOT EXISTS items (
   lot_size      NUMERIC(16,4) NOT NULL DEFAULT 0,
   lead_days     INT NOT NULL DEFAULT 0 CHECK (lead_days >= 0),
   active        BOOLEAN NOT NULL DEFAULT true,
-  books_item_id TEXT,
+  -- The Commerce product with this SKU, once linked; Commerce then owns on_hand and unit_cost.
+  commerce_id   TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS items_sku_idx ON items (lower(sku));
 
--- Every change to on_hand, signed. Books gets each one when it is linked (books_status).
+-- Every change to on_hand Ops makes, signed. When Commerce is linked, issues, finished goods and
+-- parts used are sent to it in order (sync_status), and Commerce posts the journals to Books.
 CREATE TABLE IF NOT EXISTS stock_moves (
   id           BIGSERIAL PRIMARY KEY,
   item_id      BIGINT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -50,12 +52,12 @@ CREATE TABLE IF NOT EXISTS stock_moves (
   ref          TEXT NOT NULL DEFAULT '',
   note         TEXT NOT NULL DEFAULT '',
   by_email     TEXT NOT NULL DEFAULT '',
-  books_status TEXT NOT NULL DEFAULT 'off' CHECK (books_status IN ('off','pending','synced','failed')),
-  books_error  TEXT NOT NULL DEFAULT '',
+  sync_status  TEXT NOT NULL DEFAULT 'off' CHECK (sync_status IN ('off','pending','synced','failed')),
+  sync_error   TEXT NOT NULL DEFAULT '',
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS stock_moves_item_idx ON stock_moves (item_id, id DESC);
-CREATE INDEX IF NOT EXISTS stock_moves_books_idx ON stock_moves (id) WHERE books_status IN ('pending','failed');
+CREATE INDEX IF NOT EXISTS stock_moves_sync_idx ON stock_moves (id) WHERE sync_status IN ('pending','failed');
 
 CREATE TABLE IF NOT EXISTS work_centers (
   id             BIGSERIAL PRIMARY KEY,

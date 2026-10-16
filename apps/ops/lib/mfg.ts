@@ -2,6 +2,7 @@ import { type Tq, nextNumber, num, numOrNull, q, tx } from "./db";
 import {
   type PlanBom, type PlanItem, type Receipt, type Requirement, PlanError, componentQty, explode, lowLevelCodes, operationMinutes, rollUpCost, runMrp,
 } from "./plan";
+import { commerceLinked, refreshStock } from "./commerce";
 import { getItem, moveStock } from "./stock";
 import { UserError, need, number, oneOf, optDate, optEmail, round, text, today } from "./util";
 
@@ -652,6 +653,8 @@ export async function mrpState(): Promise<MrpState> {
  * replace the last run's; what was already firmed stays as the order it became.
  */
 export async function runPlanning(by: string): Promise<MrpState> {
+  // Plan on Commerce's latest counts; if it can't be reached, plan on the last ones copied.
+  await refreshStock().catch((e) => console.error("[ops] stock refresh:", (e as Error).message));
   const { items, boms } = await planData();
   const t = today();
   const requirements: Requirement[] = [];
@@ -766,7 +769,11 @@ export async function createPurchaseRequest(b: Record<string, unknown>, by: stri
   });
 }
 
-/** Marks a request ordered, cancels it, or receives it into stock at the price paid. */
+/**
+ * Marks a request ordered, cancels it, or receives it into stock at the price paid. With Commerce
+ * linked the goods are received in Commerce, so receiving here only closes the request and the
+ * stock arrives with the next refresh.
+ */
 export async function actOnPurchaseRequest(id: number, b: Record<string, unknown>, by: string): Promise<void> {
   const action = oneOf(b.action, ["ordered", "receive", "cancel"] as const, "action");
   await tx(async (tq) => {
@@ -780,7 +787,9 @@ export async function actOnPurchaseRequest(id: number, b: Record<string, unknown
     } else {
       const qty = number(b.qty, "the quantity received", { above: 0, fallback: num(p.qty) });
       const unitCost = b.unitCost === undefined || b.unitCost === "" ? undefined : number(b.unitCost, "unit cost", { min: 0 });
-      await moveStock(tq, { itemId: Number(p.item_id), qty, unitCost, kind: "receipt", ref: p.number, note: "Received against purchase request", by });
+      if (!commerceLinked()) {
+        await moveStock(tq, { itemId: Number(p.item_id), qty, unitCost, kind: "receipt", ref: p.number, note: "Received against purchase request", by });
+      }
       await tq("UPDATE purchase_requests SET status = 'received', updated_at = now() WHERE id = $1", [id]);
     }
   });

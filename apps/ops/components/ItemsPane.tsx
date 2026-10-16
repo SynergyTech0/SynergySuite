@@ -10,7 +10,7 @@ import { Card, DetailPane, Empty, Field, Filters, ListPane, Pill, useAction, use
 
 type Filter = "all" | "make" | "buy" | "low";
 
-export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProps) {
+export function ItemsPane({ say, open, setOpen, go, stock, refreshMe }: PaneProps) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -25,10 +25,10 @@ export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProp
   }, [query, filter, say]);
   useLoad(load, [query, filter], !!query);
 
-  const importBooks = async () => {
+  const importCommerce = async () => {
     try {
       const r = await api<{ added: number; linked: number }>("/api/items/import", { method: "POST" });
-      say(`Brought over ${r.added} items from Books, linked ${r.linked}`);
+      say(`Brought over ${r.added} products from Commerce, linked ${r.linked}`);
       await load();
     } catch (e) {
       say((e as Error).message);
@@ -45,8 +45,8 @@ export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProp
         filters={<Filters value={filter} onChange={setFilter} options={[["all", "All"], ["make", "Made"], ["buy", "Bought"], ["low", "Below reorder point"]]} />}
         actions={
           <>
-            {books.linked && <button className="btn" onClick={importBooks}><Download size={16} /> From Books</button>}
-            <button className="btn primary" onClick={() => setDialog(<ItemDialog onClose={() => setDialog(null)} onSaved={async (i) => { setDialog(null); await load(); setOpen(i.id); say(`${i.sku} added`); }} />)}>
+            {stock.linked && <button className="btn" onClick={importCommerce}><Download size={16} /> From Commerce</button>}
+            <button className="btn primary" onClick={() => setDialog(<ItemDialog localStock={!stock.linked} onClose={() => setDialog(null)} onSaved={async (i) => { setDialog(null); await load(); setOpen(i.id); say(`${i.sku} added`); }} />)}>
               <Plus size={16} /> New item
             </button>
           </>
@@ -54,7 +54,7 @@ export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProp
       >
         {items && !items.length ? (
           <Empty icon={<Boxes size={32} />}>
-            <p>Items are the parts you buy and the products you make. Add them here, or bring them over from Books.</p>
+            <p>Items are the parts you buy and the products you make. Add them here, or bring them over from Commerce.</p>
           </Empty>
         ) : (
           <table className="grid">
@@ -76,7 +76,7 @@ export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProp
           </table>
         )}
       </ListPane>
-      {open && <ItemDetail key={open} id={open} onClose={() => setOpen(null)} onChanged={async () => { await load(); await refreshMe(); }} say={say} go={go} />}
+      {open && <ItemDetail key={open} id={open} onClose={() => setOpen(null)} onChanged={async () => { await load(); await refreshMe(); }} say={say} go={go} localStock={!stock.linked} />}
       {dialog}
     </div>
   );
@@ -84,7 +84,7 @@ export function ItemsPane({ say, open, setOpen, go, books, refreshMe }: PaneProp
 
 type ItemData = { item: Item; moves: Move[]; boms: BomSummary[]; cost: Costing };
 
-function ItemDetail({ id, onClose, onChanged, say, go }: { id: number; onClose: () => void; onChanged: () => Promise<void>; say: (t: string) => void; go: PaneProps["go"] }) {
+function ItemDetail({ id, onClose, onChanged, say, go, localStock }: { id: number; onClose: () => void; onChanged: () => Promise<void>; say: (t: string) => void; go: PaneProps["go"]; localStock: boolean }) {
   const [d, setD] = useState<ItemData | null>(null);
   const [dialog, setDialog] = useState<React.ReactNode>(null);
   const load = useCallback(async () => setD(await api<ItemData>(`/api/items/${id}`).catch((e) => (say(e.message), null))), [id, say]);
@@ -104,11 +104,11 @@ function ItemDetail({ id, onClose, onChanged, say, go }: { id: number; onClose: 
   return (
     <DetailPane
       title={<><span className="mono">{item.sku}</span> {item.name}</>}
-      sub={<>{item.source === "make" ? "Made here" : "Bought in"}{!item.active && " · inactive"}{item.booksItemId && " · linked to Books"}</>}
+      sub={<>{item.source === "make" ? "Made here" : "Bought in"}{!item.active && " · inactive"}{item.commerceId && " · stock in Commerce"}</>}
       onClose={onClose}
       tools={
         <>
-          <button className="btn small primary" onClick={() => setDialog(<StockDialog item={item} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); await onChanged(); }} />)}>Change stock</button>
+          {localStock && <button className="btn small primary" onClick={() => setDialog(<StockDialog item={item} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); await onChanged(); }} />)}>Change stock</button>}
           <button className="btn small" onClick={() => setDialog(<ItemDialog item={item} onClose={() => setDialog(null)} onSaved={async () => { setDialog(null); await load(); await onChanged(); }} />)}>Edit</button>
           {item.source === "make" && <button className="btn small" onClick={() => go("boms", boms[0]?.id ?? null)}>{boms.length ? "Bills of materials" : "Add a bill"}</button>}
           <button className="btn small ghost" onClick={remove}>Remove</button>
@@ -147,9 +147,9 @@ function ItemDetail({ id, onClose, onChanged, say, go }: { id: number; onClose: 
             <thead><tr><th>When</th><th>What</th><th className="num">Qty</th><th className="num">Cost</th></tr></thead>
             <tbody>
               {moves.map((m) => (
-                <tr key={m.id} title={m.booksError || undefined}>
+                <tr key={m.id} title={m.syncError || undefined}>
                   <td className="small">{stamp(m.createdAt)}</td>
-                  <td className="small">{label(m.kind)} {m.ref && <span className="mono">{m.ref}</span>} {m.note && <span className="muted">{m.note}</span>} {m.booksStatus === "failed" && <Pill s="late" text="Books failed" />}</td>
+                  <td className="small">{label(m.kind)} {m.ref && <span className="mono">{m.ref}</span>} {m.note && <span className="muted">{m.note}</span>} {m.syncStatus === "failed" && <Pill s="late" text="Commerce refused" />}</td>
                   <td className={`num${m.qty < 0 ? " neg" : ""}`}>{m.qty > 0 ? "+" : ""}{qty(m.qty)}</td>
                   <td className="num">{money(m.unitCost)}</td>
                 </tr>
@@ -164,7 +164,7 @@ function ItemDetail({ id, onClose, onChanged, say, go }: { id: number; onClose: 
   );
 }
 
-export function ItemDialog({ item, onClose, onSaved, defaults }: { item?: Item; onClose: () => void; onSaved: (i: Item) => Promise<void>; defaults?: Partial<Record<string, string>> }) {
+export function ItemDialog({ item, onClose, onSaved, defaults, localStock = true }: { item?: Item; onClose: () => void; onSaved: (i: Item) => Promise<void>; defaults?: Partial<Record<string, string>>; localStock?: boolean }) {
   const s = (n: number | undefined) => (n === undefined ? "" : String(n));
   const { v, bind } = useFields({
     sku: item?.sku ?? defaults?.sku ?? "", name: item?.name ?? "", description: item?.description ?? "", uom: item?.uom ?? "ea",
@@ -191,7 +191,7 @@ export function ItemDialog({ item, onClose, onSaved, defaults }: { item?: Item; 
           </Field>
           <Field label="Unit of measure"><input {...bind("uom")} placeholder="ea, kg, m" /></Field>
           <Field label="Unit cost"><input {...bind("unitCost")} inputMode="decimal" /></Field>
-          {!item && <Field label="Opening stock"><input {...bind("onHand")} inputMode="decimal" /></Field>}
+          {!item && localStock && <Field label="Opening stock"><input {...bind("onHand")} inputMode="decimal" /></Field>}
           <Field label="Safety stock"><input {...bind("safetyStock")} inputMode="decimal" /></Field>
           <Field label="Reorder point"><input {...bind("reorderPoint")} inputMode="decimal" /></Field>
           <Field label="Lot size (smallest order)"><input {...bind("lotSize")} inputMode="decimal" /></Field>

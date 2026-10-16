@@ -3,23 +3,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * What Synergy Ops (manufacturing and assets, apps/ops) sends Books. Ops owns production and
- * maintenance; Books keeps the stock value it reports on and the fixed-asset register it
- * depreciates. Both calls are idempotent on Ops' own reference, so Ops can retry freely.
+ * Fixed assets from Synergy Ops (apps/ops): Ops keeps the asset register and its maintenance,
+ * Books depreciates what Ops sends it. Stock is not sent here: Commerce owns stock and posts
+ * its journals. Idempotent on the asset tag, so Ops can resend an asset freely.
  */
-
-export interface OpsStockMove {
-  /** Ops' id for the move, e.g. "ops-move-42". */
-  ref: string;
-  sku: string;
-  name?: string;
-  /** Signed: positive adds stock, negative takes it. */
-  qty: number;
-  unitCost: number;
-  /** receipt, adjust, issue, produce or maintenance. */
-  kind: string;
-  note?: string;
-}
 
 export interface OpsFixedAsset {
   ref: string;
@@ -36,15 +23,6 @@ export interface OpsFixedAsset {
   manufacturer?: string;
   assignedTo?: string;
 }
-
-/** Books' ledger names for Ops moves. */
-const LEDGER_TYPE: Record<string, string> = {
-  receipt: 'PURCHASE',
-  adjust: 'ADJUSTMENT',
-  issue: 'MFG_ISSUE',
-  produce: 'MFG_RECEIPT',
-  maintenance: 'MAINTENANCE_ISSUE',
-};
 
 const ASSET_TYPES: [RegExp, string][] = [
   [/vehicle|truck|van|car|forklift|trailer/i, 'VEHICLE'],
@@ -67,7 +45,7 @@ function money(v: unknown, label: string): number {
 }
 
 @Injectable()
-export class OpsSvcService {
+export class OpsLinkService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** The suite runs one Books company; Ops posts into the first one made. */
@@ -81,66 +59,6 @@ export class OpsSvcService {
     const a = await this.prisma.account.findFirst({ where: { organizationId, accountNumber: number }, select: { id: true } });
     if (!a) throw new BadRequestException(`Books has no account ${number}; add it to the chart of accounts`);
     return a.id;
-  }
-
-  async items() {
-    const organizationId = await this.organizationId();
-    const rows = await this.prisma.inventoryItem.findMany({ where: { organizationId }, orderBy: { sku: 'asc' }, take: 5000 });
-    return rows.map((i) => ({
-      id: i.id,
-      sku: i.sku,
-      name: i.name,
-      description: i.description ?? '',
-      unitCost: Number(i.unitCost),
-      quantity: Number(i.quantity),
-      reorderPoint: Number(i.reorderPoint),
-    }));
-  }
-
-  /** Records one Ops stock move against the Books item with the same SKU, adding the item if Books doesn't have it. */
-  async stockMove(m: OpsStockMove) {
-    if (!m?.ref || !m.sku) throw new BadRequestException('ref and sku are required');
-    const qty = money(m.qty, 'qty');
-    const unitCost = money(m.unitCost, 'unitCost');
-    const organizationId = await this.organizationId();
-    const done = await this.prisma.inventoryLedger.findFirst({ where: { referenceId: m.ref, inventoryItem: { organizationId } }, select: { id: true } });
-    if (done) return { ok: true, duplicate: true };
-    return this.prisma.$transaction(async (tx) => {
-      let item = await tx.inventoryItem.findFirst({ where: { organizationId, sku: { equals: m.sku, mode: 'insensitive' } } });
-      if (!item) {
-        item = await tx.inventoryItem.create({
-          data: {
-            organizationId,
-            sku: m.sku,
-            name: m.name || m.sku,
-            unitCost: new Prisma.Decimal(unitCost),
-            sellingPrice: new Prisma.Decimal(0),
-            reorderPoint: new Prisma.Decimal(0),
-            accountId: await this.account(organizationId, '1200'),
-          },
-        });
-      }
-      // Ops is where production stock is counted, so Books follows it even below zero rather than refusing.
-      const balance = new Prisma.Decimal(item.quantity).plus(qty);
-      const cost = new Prisma.Decimal(unitCost);
-      await tx.inventoryLedger.create({
-        data: {
-          itemId: item.id,
-          transactionType: LEDGER_TYPE[m.kind] ?? 'ADJUSTMENT',
-          referenceId: m.ref,
-          quantity: new Prisma.Decimal(qty),
-          unitCost: cost,
-          totalCost: cost.times(qty),
-          balanceQty: balance,
-          balanceCost: balance.times(cost),
-          notes: m.note ? `Ops: ${m.note}`.slice(0, 500) : 'From Synergy Ops',
-        },
-      });
-      const data: Prisma.InventoryItemUpdateInput = { quantity: balance };
-      if (qty > 0) data.unitCost = cost;
-      await tx.inventoryItem.update({ where: { id: item.id }, data });
-      return { ok: true, itemId: item.id };
-    });
   }
 
   /**

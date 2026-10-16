@@ -7,6 +7,7 @@ if (url) {
   process.env.OPS_DATABASE_URL = url;
 }
 delete process.env.OPS_BOOKS_URL;
+delete process.env.OPS_COMMERCE_URL;
 delete process.env.ADMIN_INTERNAL_URL;
 
 const me = "planner@example.com";
@@ -17,10 +18,11 @@ describe.skipIf(!url)("ops", async () => {
   const mfg = await import("../lib/mfg");
   const assets = await import("../lib/assets");
   const books = await import("../lib/books");
+  const commerce = await import("../lib/commerce");
   const { searchFor } = await import("../lib/search");
   const ed = await import("../lib/ediscovery");
   const { parseSearch } = await import("../lib/compliance");
-  const { q, db } = await import("../lib/db");
+  const { q, tx, db } = await import("../lib/db");
 
   beforeAll(async () => {
     await q("SELECT 1");
@@ -45,7 +47,7 @@ describe.skipIf(!url)("ops", async () => {
     const after = await stock.adjust(leg, { kind: "receipt", qty: 10, unitCost: 7 }, me);
     expect(after.onHand).toBe(20);
     expect(after.unitCost).toBe(6);
-    expect((await stock.listMoves({ itemId: leg })).map((m) => [m.kind, m.qty, m.booksStatus])).toEqual([["receipt", 10, "off"], ["adjust", 10, "off"]]);
+    expect((await stock.listMoves({ itemId: leg })).map((m) => [m.kind, m.qty, m.syncStatus])).toEqual([["receipt", 10, "off"], ["adjust", 10, "off"]]);
   });
 
   it("versions bills of materials and keeps one active", async () => {
@@ -198,35 +200,76 @@ describe.skipIf(!url)("ops", async () => {
     expect(out.items[0].metadata).toMatchObject({ parts: [{ sku: "OIL-46" }] });
   });
 
-  it("queues stock for Books when linked and sends it in order", async () => {
+  it("sends assets to Books' fixed-asset register", async () => {
     process.env.OPS_BOOKS_URL = "http://books.test";
     process.env.BOOKS_SVC_TOKEN = "t0ken";
     const sent: { path: string; body: Record<string, unknown> }[] = [];
-    let fail = false;
     books.setBooksFetch((async (u: string, init: RequestInit) => {
-      if (fail) return new Response(JSON.stringify({ message: "Books has no company yet" }), { status: 400 });
       sent.push({ path: new URL(u).pathname, body: JSON.parse(String(init.body)) });
-      return new Response(JSON.stringify({ ok: true, id: "fa_1" }), { status: 200 });
+      return new Response(JSON.stringify({ id: "fa_1" }), { status: 200 });
     }) as typeof fetch);
     try {
-      await stock.adjust(leg, { kind: "receipt", qty: 4, unitCost: 6 }, me);
-      await stock.adjust(leg, { kind: "adjust", qty: -1 }, me);
-      fail = true;
-      expect(await books.syncStockMoves()).toEqual({ synced: 0, failed: 1 });
-      expect((await books.booksStatus()).lastError).toMatch(/no company/);
-      fail = false;
-      expect(await books.syncStockMoves()).toEqual({ synced: 2, failed: 0 });
-      expect(sent.map((s) => [s.body.sku, s.body.qty, s.body.kind])).toEqual([["LEG-01", 4, "receipt"], ["LEG-01", -1, "adjust"]]);
-      expect(sent[0].path).toBe("/api/svc/stock-moves");
-
       await expect(books.sendAsset((await assets.createAsset({ name: "Laptop" }, me)).id)).rejects.toThrow(/purchase date, cost and useful life/);
       const r = await books.sendAsset(pressId);
       expect(r.booksAssetId).toBe("fa_1");
-      expect(sent.at(-1)).toMatchObject({ path: "/api/svc/fixed-assets", body: { tag: `AST-${year}-0001`, cost: 60000, lifeMonths: 120, acquisitionDate: "2024-01-01" } });
+      expect(sent).toMatchObject([{ path: "/api/svc/fixed-assets", body: { tag: `AST-${year}-0001`, cost: 60000, lifeMonths: 120, acquisitionDate: "2024-01-01" } }]);
     } finally {
       books.setBooksFetch(undefined);
       delete process.env.OPS_BOOKS_URL;
       delete process.env.BOOKS_SVC_TOKEN;
+    }
+  });
+
+  it("keeps stock in Commerce when linked: mirrors its counts and sends issues in order", async () => {
+    process.env.OPS_COMMERCE_URL = "http://commerce.test/";
+    process.env.COMMERCE_SVC_TOKEN = "t0ken";
+    const products = new Map([["LEG-01", { id: "p_leg", sku: "LEG-01", name: "Oak leg", unit: "ea", cost: 6.5, onHand: 50 }]]);
+    const sent: Record<string, unknown>[] = [];
+    let fail = false;
+    commerce.setCommerceFetch((async (u: string, init?: RequestInit) => {
+      const url = new URL(u);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer t0ken");
+      if (url.pathname === "/api/svc/items") {
+        const skus = url.searchParams.get("sku")?.split(",");
+        const all = [...products.values(), { id: "p_new", sku: "NEW-01", name: "Brass hinge", unit: "ea", cost: 2, onHand: 30 }];
+        return new Response(JSON.stringify(skus ? all.filter((p) => skus.includes(p.sku)) : all));
+      }
+      if (fail) return new Response(JSON.stringify({ error: "Not enough LEG-01 at Main store" }), { status: 409 });
+      const body = JSON.parse(String(init?.body));
+      sent.push(body);
+      const p = products.get(body.sku)!;
+      p.onHand += body.qty;
+      return new Response(JSON.stringify({ onHand: p.onHand, unitCost: p.cost }));
+    }) as typeof fetch);
+    try {
+      // Receiving and counting happen in Commerce now.
+      await expect(stock.adjust(leg, { kind: "receipt", qty: 1 }, me)).rejects.toThrow(/kept in Commerce/);
+      await expect(stock.createItem({ sku: "X-1", name: "x", onHand: 3 }, me)).rejects.toThrow(/kept in Commerce/);
+
+      const r = await commerce.refreshStock();
+      expect(r.missing).toContain("TBL-01");
+      expect(await stock.getItem(leg)).toMatchObject({ onHand: 50, unitCost: 6.5, commerceId: "p_leg" });
+
+      const { moveId } = await tx((tq) => stock.moveStock(tq, { itemId: leg, qty: -3, kind: "issue", ref: "WO-X", by: me }));
+      // Ops plans on what it has queued too: Commerce still says 50, the issue is on its way.
+      await commerce.refreshStock();
+      expect((await stock.getItem(leg)).onHand).toBe(47);
+
+      fail = true;
+      expect(await commerce.syncStockMoves()).toEqual({ synced: 0, failed: 1 });
+      expect(await commerce.stockLink()).toMatchObject({ linked: true, failed: 1, lastError: "Not enough LEG-01 at Main store" });
+      fail = false;
+      expect(await commerce.syncStockMoves()).toEqual({ synced: 1, failed: 0 });
+      expect(sent).toEqual([{ reference: `ops-move-${moveId}`, sku: "LEG-01", name: "Oak leg", unit: "ea", qty: -3, kind: "mfg_issue", account: "5000", note: "WO-X" }]);
+      await commerce.refreshStock();
+      expect((await stock.getItem(leg)).onHand).toBe(47);
+
+      expect(await commerce.importFromCommerce()).toEqual({ added: 1, linked: 1 });
+      expect(await stock.itemBySku("NEW-01")).toMatchObject({ source: "buy", onHand: 30, commerceId: "p_new" });
+    } finally {
+      commerce.setCommerceFetch(undefined);
+      delete process.env.OPS_COMMERCE_URL;
+      delete process.env.COMMERCE_SVC_TOKEN;
     }
   });
 });

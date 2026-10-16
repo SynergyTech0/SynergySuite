@@ -1,5 +1,5 @@
 import { route } from "@/lib/api";
-import { importFromBooks } from "@/lib/books";
+import { importFromCommerce } from "@/lib/commerce";
 
-/** Brings Books' inventory items over. */
-export const POST = route(async () => importFromBooks());
+/** Brings Commerce's products over. */
+export const POST = route(async () => importFromCommerce());
