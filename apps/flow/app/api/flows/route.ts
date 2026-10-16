@@ -1,12 +1,20 @@
 import { body, route, studioLink } from "@/lib/api";
-import { createFlow, importFlow, listFlows, listRuns, personSession, pieceMeta } from "@/lib/engine";
+import { createFlow, existingSession, importFlow, listFlows, listRuns, personSession, pieceMeta } from "@/lib/engine";
+import { listManualFlows } from "@/lib/run";
 import { recipeById, RECIPE_SCHEMA_VERSION } from "@/lib/recipes";
 import { text, UserError } from "@/lib/util";
 
 export const dynamic = "force-dynamic";
 
-/** The person's flows and recent runs. */
-export const GET = route(async (me) => {
+/**
+ * The person's flows and recent runs. With ?trigger=manual, only the flows another app can start
+ * (see run.ts) and their inputs, for apps like Builder; that never creates an engine account.
+ */
+export const GET = route(async (me, req) => {
+  if (new URL(req.url).searchParams.get("trigger") === "manual") {
+    const s = await existingSession(me);
+    return { flows: s ? await listManualFlows(s) : [] };
+  }
   const s = await personSession(me);
   const [flows, runs] = await Promise.all([listFlows(s), listRuns(s, { limit: 20 })]);
   const names = new Map(flows.map((f) => [f.id, f.name]));
