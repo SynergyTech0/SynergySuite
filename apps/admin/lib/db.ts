@@ -103,6 +103,100 @@ CREATE TABLE IF NOT EXISTS audit (
 CREATE INDEX IF NOT EXISTS audit_at_idx ON audit (at DESC);
 CREATE INDEX IF NOT EXISTS audit_action_idx ON audit (action, at DESC);
 
+-- Moving in from Microsoft 365 or another IMAP server (lib/migrate). A source holds the
+-- connection (its secret sealed with MIGRATION_ENCRYPTION_KEY); users and sites are what
+-- discovery found there, each mapped to a suite account or library; jobs copy one user or site;
+-- cursors keep each delta link so a re-run copies only what changed; items remember every
+-- copied item and where it went, so nothing is copied twice.
+CREATE TABLE IF NOT EXISTS migration_sources (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind            TEXT NOT NULL CHECK (kind IN ('m365', 'imap')),
+  name            TEXT NOT NULL,
+  config          JSONB NOT NULL DEFAULT '{}',
+  secret          TEXT NOT NULL DEFAULT '',
+  created_by      TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  discovered_at   TIMESTAMPTZ,
+  discovery_error TEXT,
+  notes           JSONB NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS migration_users (
+  source_id   UUID NOT NULL REFERENCES migration_sources(id) ON DELETE CASCADE,
+  ext_id      TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  name        TEXT NOT NULL DEFAULT '',
+  enabled     BOOLEAN NOT NULL DEFAULT true,
+  mail_bytes  BIGINT,
+  mail_items  INTEGER,
+  drive_bytes BIGINT,
+  has_mailbox BOOLEAN,
+  has_drive   BOOLEAN,
+  target      TEXT,
+  secret      TEXT NOT NULL DEFAULT '',
+  seen_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, ext_id)
+);
+
+CREATE TABLE IF NOT EXISTS migration_sites (
+  source_id   UUID NOT NULL REFERENCES migration_sources(id) ON DELETE CASCADE,
+  site_id     TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL DEFAULT '',
+  drive_bytes BIGINT,
+  libraries   INTEGER,
+  members     JSONB NOT NULL DEFAULT '[]',
+  include     BOOLEAN NOT NULL DEFAULT false,
+  library     TEXT NOT NULL DEFAULT '',
+  seen_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, site_id)
+);
+
+CREATE TABLE IF NOT EXISTS migration_jobs (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id    UUID NOT NULL REFERENCES migration_sources(id) ON DELETE CASCADE,
+  subject_kind TEXT NOT NULL CHECK (subject_kind IN ('user', 'site')),
+  subject_id   TEXT NOT NULL,
+  label        TEXT NOT NULL DEFAULT '',
+  target       TEXT NOT NULL,
+  workloads    TEXT[] NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed', 'cancelled')),
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  progress     JSONB NOT NULL DEFAULT '{}',
+  report       JSONB NOT NULL DEFAULT '{}',
+  error        TEXT,
+  created_by   TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at   TIMESTAMPTZ,
+  finished_at  TIMESTAMPTZ,
+  heartbeat_at TIMESTAMPTZ,
+  not_before   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS migration_jobs_queue_idx ON migration_jobs (status, created_at);
+CREATE INDEX IF NOT EXISTS migration_jobs_subject_idx ON migration_jobs (source_id, subject_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS migration_cursors (
+  source_id  UUID NOT NULL REFERENCES migration_sources(id) ON DELETE CASCADE,
+  subject_id TEXT NOT NULL,
+  workload   TEXT NOT NULL,
+  scope      TEXT NOT NULL,
+  state      JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, subject_id, workload, scope)
+);
+
+CREATE TABLE IF NOT EXISTS migration_items (
+  source_id  UUID NOT NULL REFERENCES migration_sources(id) ON DELETE CASCADE,
+  subject_id TEXT NOT NULL,
+  workload   TEXT NOT NULL,
+  item_id    TEXT NOT NULL,
+  target_id  TEXT NOT NULL DEFAULT '',
+  version    TEXT NOT NULL DEFAULT '',
+  info       JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (source_id, subject_id, workload, item_id)
+);
+
 CREATE OR REPLACE FUNCTION audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'the audit log is append-only';

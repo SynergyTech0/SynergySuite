@@ -694,6 +694,9 @@ services:
       AUTH_INTERNAL_URL: http://auth:3500
       ADMIN_SCIM_TOKEN: ${ADMIN_SCIM_TOKEN:-${DIRECTORY_SCIM_TOKEN:-}}
       ADMIN_EXPORT_DIR: /data/admin
+      # Move from Microsoft 365: seals the tenant's client secret and IMAP passwords (see deploy/README.md).
+      MIGRATION_ENCRYPTION_KEY: ${MIGRATION_ENCRYPTION_KEY:-}
+      MIGRATION_ALLOW_PRIVATE_HOSTS: ${MIGRATION_ALLOW_PRIVATE_HOSTS:-}
     volumes:
       - admin-exports:/data/admin
 
