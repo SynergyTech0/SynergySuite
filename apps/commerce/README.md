@@ -56,6 +56,6 @@ between two databases, and so everything posts to Books the same way.
 ## Development
 
 ```sh
-npm run dev --workspace apps/commerce     # http://localhost:3720
+npm run dev --workspace apps/commerce     # http://localhost:3730
 TEST_DATABASE_URL=postgres://... npm test --workspace apps/commerce
 ```

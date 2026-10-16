@@ -4,9 +4,9 @@
   "private": true,
   "description": "Synergy Commerce - inventory, purchasing, point of sale and an online store, posting to Books",
   "scripts": {
-    "dev": "next dev -p 3720",
+    "dev": "next dev -p 3730",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3720",
+    "start": "next start -H 0.0.0.0 -p 3730",
     "test": "vitest run"
   },
   "dependencies": {

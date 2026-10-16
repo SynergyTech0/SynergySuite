@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, commerce, contacts, crm, desk, drive, forms, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, commerce, contacts, crm, desk, drive, forms, insights, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -43,7 +43,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `crm`, `desk`, `drive`, `forms`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `crm`, `desk`, `drive`, `forms`, `insights`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.
@@ -76,3 +76,14 @@ These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), publi
 - Stalwart publishes 25 (incoming mail), 465 (sending from desktop and phone clients) and 993 (reading from them). Many cloud hosts block port 25; ask yours to open it or relay through a smarthost.
 - To receive mail from the internet you need: an MX record for your domain pointing at `mx.<domain>`, SPF and DKIM records (Stalwart's admin UI shows the DKIM record to publish), and reverse DNS for the host's IP set to `mx.<domain>`.
 - Stalwart starts with a self-signed certificate. Give it a real one in its admin UI (ACME/Let's Encrypt is built in) before pointing desktop clients at it, then set `MAIL_SUITE_TLS_INSECURE=false`.
+
+## Insights
+
+`insights.<domain>` is the Power BI equivalent. Its report designer and charts are [Metabase](https://github.com/metabase/metabase), the open source edition (AGPL) from the official `metabase/metabase` image, unmodified, served at `insights.<domain>/studio` behind the suite sign-in.
+
+- Set `INSIGHTS_SECRET` (`openssl rand -hex 32`; the quickstart writes one) and keep it: Insights derives every Metabase password and key from it. On first start Insights runs Metabase's setup with its own service account, so don't finish Metabase's setup wizard by hand.
+- Nobody signs in to Metabase separately. When someone opens the designer, Insights makes their Metabase account and opens a session for them; the gateway checks on every designer request that the Metabase session belongs to whoever is signed in to the suite.
+- The sources are the suite's own databases (`INSIGHTS_SOURCES`, default Books, CRM, Desk, Base, Planner, Forms and Trust). Insights reads them as a read-only Postgres role, `insights_reader`, that can't write and can't see columns named like passwords, tokens, keys, hashes, PINs or encrypted values. It re-checks every table at start and every `INSIGHTS_SYNC_MINUTES`; admins can also sync from Data sources.
+- Roles: `INSIGHTS_ADMIN_EMAILS` (default `ADMIN_EMAILS`, else `SEED_ADMIN_EMAIL`) are Metabase admins; `INSIGHTS_ANALYST_EMAILS` (or `*`) can write their own queries; everyone else views the dashboards they can open. Fine-grained permissions are in the designer's admin settings.
+- Dashboards appear inside Insights through Metabase's static embedding, signed by Insights only for people Metabase lets open them. The "Powered by Metabase" credit stays, as the open source edition requires. Metabase's paid features (white-labeling, SSO, interactive embedding, row-level permissions) are not used.
+- Metabase needs about 1 GB of memory (`INSIGHTS_JAVA_OPTS`, default `-Xmx1g`) and takes a minute or two to start. Its own data (questions, dashboards, settings) is in the `metabase` database; back it up with the rest of Postgres.
