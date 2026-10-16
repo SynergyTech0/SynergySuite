@@ -479,6 +479,21 @@ bookings.{$SUITE_DOMAIN} {
 	}
 }
 
+sign.{$SUITE_DOMAIN} {
+	# Signers outside the organization sign from their emailed link without a suite account: the
+	# signing page, its token-checked API, the short-lived signed file links its PDF viewer loads,
+	# and the build assets. Everything else (sending, templates, the dashboard) needs a sign-in.
+	@signer path /sign/* /api/signers/access* /api/signers/secure-url* /api/signers/verify* /api/signers/fields* /api/signers/complete* /api/files/* /_next/* /favicon.png /pdf.worker.min.mjs /pdf.worker.min.js /pdfjs/*
+	handle @signer {
+		import maybe_signed_in
+		import to_app sign:3300
+	}
+	handle {
+		import signed_in
+		import to_app sign:3300
+	}
+}
+
 campaigns.{$SUITE_DOMAIN} {
 	# What recipients open from an email needs no suite account: open and click tracking,
 	# unsubscribe, the browser copy and the signup form. Everything else is for staff.

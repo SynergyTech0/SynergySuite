@@ -351,11 +351,11 @@ export function detectFieldsFromOcr(blocks: OCRBlock[]): DetectedField[] {
     // Set field dimensions based on type, using actual blank width as base
     const minWidth = fieldType === "SIGNATURE" ? 200 :
                      fieldType === "INITIALS" ? 80 :
-                     fieldType === "CHECKBOX" ? 20 : 100;
+                     (fieldType as string) === "CHECKBOX" ? 20 : 100;
 
     const minHeight = fieldType === "SIGNATURE" ? 50 :
                       fieldType === "INITIALS" ? 30 :
-                      fieldType === "CHECKBOX" ? 20 : 25;
+                      (fieldType as string) === "CHECKBOX" ? 20 : 25;
 
     const finalWidth = Math.max(blankWidth, minWidth);
     const finalHeight = Math.max(blankHeight, minHeight);

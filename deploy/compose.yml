@@ -293,6 +293,58 @@ services:
       DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
       DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
+  # E-signatures (DocuSign equivalent): templates, multi-party signing, audit trail. People sign in
+  # with their suite account; signers outside the organization sign from emailed links without one.
+  sign:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-sign:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/sign.Dockerfile
+    environment:
+      <<: *app-env
+      # The database is created on first start if postgres-init.sql didn't make it.
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sign
+      SIGN_PUBLIC_URL: https://sign.${SUITE_DOMAIN}
+      SIGN_ADMIN_EMAILS: ${SIGN_ADMIN_EMAILS:-${SEED_ADMIN_EMAIL:-}}
+      # Signs the short-lived links a signer's PDF viewer loads the document through.
+      SIGN_LINK_SECRET: ${SIGN_LINK_SECRET:-${PROXY_SHARED_SECRET}}
+      # Documents on the volume below; STORAGE_MODE=s3 with AWS_* (or any S3-compatible store) instead.
+      STORAGE_MODE: ${SIGN_STORAGE_MODE:-local}
+      ENABLE_S3_BACKUP: ${SIGN_S3_BACKUP:-false}
+      LOCAL_STORAGE_PATH: /data/files
+      AWS_REGION: ${SIGN_S3_REGION:-}
+      AWS_ENDPOINT_URL: ${SIGN_S3_ENDPOINT:-}
+      AWS_BUCKET_NAME: ${SIGN_S3_BUCKET:-}
+      AWS_FOLDER_PREFIX: ${SIGN_S3_PREFIX:-}
+      AWS_ACCESS_KEY_ID: ${SIGN_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${SIGN_S3_SECRET_ACCESS_KEY:-}
+      # Signing requests go out from the suite mailbox sign@MAIL_DOMAIN through Stalwart, as
+      # Bookings does. SIGN_SMTP_* sends through one outside mailbox instead.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+      SIGN_MAIL_FROM: ${SIGN_MAIL_FROM:-}
+      SIGN_SMTP_HOST: ${SIGN_SMTP_HOST:-}
+      SIGN_SMTP_PORT: ${SIGN_SMTP_PORT:-}
+      SIGN_SMTP_USER: ${SIGN_SMTP_USER:-}
+      SIGN_SMTP_PASSWORD: ${SIGN_SMTP_PASSWORD:-}
+      SIGN_SMTP_FROM: ${SIGN_SMTP_FROM:-}
+      SIGN_DEV_MAIL_DIR: /data/files/.unsent-mail
+      # Its own AI model for field detection, if it should differ from the suite's (needs one that reads images).
+      SIGN_AI_PROVIDER: ${SIGN_AI_PROVIDER:-}
+      SIGN_AI_BASE_URL: ${SIGN_AI_BASE_URL:-}
+      SIGN_AI_API_KEY: ${SIGN_AI_API_KEY:-}
+      SIGN_AI_MODEL: ${SIGN_AI_MODEL:-}
+    volumes:
+      - sign-files:/data/files
+
   # Email marketing (Dynamics Marketing / Mailchimp equivalent): audiences from CRM, Contacts,
   # spreadsheets and a signup form; campaigns, automations, open and click tracking, one-click
   # unsubscribe and bounce handling. Sends as its From mailbox through Stalwart, the way
@@ -1256,6 +1308,7 @@ volumes:
   stream-files: {}
   cad-files: {}
   drive-files: {}
+  sign-files: {}
   admin-exports: {}
   caddy-data: {}
   flow-cache: {}

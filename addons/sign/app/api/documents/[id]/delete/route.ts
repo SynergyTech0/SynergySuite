@@ -1,50 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { deleteFile } from "@/lib/storage";
+import { documentForOwner, isDenied } from "@/lib/access";
+import { holdChecker } from "@/lib/compliance";
+import { deleteDocument } from "@/lib/ediscovery";
 
+/**
+ * Deletes a document the signed-in person sent. When anyone on it is under a legal hold, it is
+ * kept for eDiscovery instead (and disappears for everyone else); the answer is the same either way.
+ */
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params;
-
-    if (!id) {
-      return NextResponse.json({ error: "Missing document id" }, { status: 400 });
-    }
-
-    // ✅ Fetch document metadata before deletion
-    const document = await prisma.document.findUnique({
-      where: { id },
-      select: { cloudStoragePath: true, cloudProvider: true },
-    });
-
-    if (!document) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    }
-
-    // ✅ Delete the file from cloud/local storage
-    try {
-      await deleteFile(document.cloudStoragePath, document.cloudProvider);
-    } catch (err) {
-      console.warn("⚠️ File delete warning:", err);
-    }
-
-    // ✅ Delete the document record from DB
-    const deleted = await prisma.document.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ document: deleted }, { status: 200 });
+    const owner = await documentForOwner(id);
+    if (isDenied(owner)) return owner.denied;
+    await deleteDocument(id, holdChecker());
+    return NextResponse.json({ document: { id }, deleted: true }, { status: 200 });
   } catch (error: any) {
     if (error?.code === "P2025") {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
-
-    console.error("❌ Failed to delete document:", error);
-    return NextResponse.json(
-      { error: "Failed to delete document" },
-      { status: 500 }
-    );
+    console.error("Failed to delete document:", error);
+    return NextResponse.json({ error: "Failed to delete document" }, { status: 500 });
   }
 }

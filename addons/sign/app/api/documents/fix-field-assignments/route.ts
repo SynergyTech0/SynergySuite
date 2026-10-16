@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
@@ -13,6 +13,10 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Rewrites fields across every document: an admin repair tool.
+    if (session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Admins only' }, { status: 403 });
     }
 
     // Find all fields with temp-X assignment IDs

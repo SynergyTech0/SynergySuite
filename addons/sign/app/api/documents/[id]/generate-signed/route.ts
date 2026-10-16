@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fs from "fs/promises";
 import path from "path";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export async function POST(
     }
 
     const { id: documentId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
 
     // Fetch document with fields
     const document = await prisma.document.findUnique({

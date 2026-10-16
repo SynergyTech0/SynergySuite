@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOut } from "@/lib/session-client";
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -138,7 +138,6 @@ export function DashboardHeader({ updateSearchQuery, user, onMenuClick }: Dashbo
 
                 <DropdownMenuItem 
                   onClick={async () => {
-                    await fetch('/api/auth/signoutlog', { method: 'POST' });
                     signOut({ callbackUrl: '/' });
                   }}
                   className="text-red-600 focus:text-red-600"

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/lib/session-client";
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 import { DashboardStats } from '@/components/dashboard/dashboard-stats';
 import { RecentDocuments } from '@/components/dashboard/recent-documents';

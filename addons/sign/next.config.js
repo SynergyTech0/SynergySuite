@@ -1,13 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: '.next',
-  output: "standalone",
 
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // The whole app type-checks (npm run typecheck in CI), so the build checks too.
   typescript: {
-    ignoreBuildErrors: true,  // ← FIXED 🔥 allows standalone build
+    ignoreBuildErrors: false,
   },
 
   images: { unoptimized: true },

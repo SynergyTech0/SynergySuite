@@ -13,7 +13,7 @@ import { toast } from 'react-hot-toast';
 interface Enterprise {
   id: string;
   name: string;
-  domain: string;
+  domain: string | null;
   contactName: string;
   contactEmail: string;
   contactPhone: string | null;
@@ -34,7 +34,7 @@ export default function EnterpriseEditForm({
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: enterprise.name,
-    domain: enterprise.domain,
+    domain: enterprise.domain ?? "",
     contactName: enterprise.contactName,
     contactEmail: enterprise.contactEmail,
     contactPhone: enterprise.contactPhone || '',
