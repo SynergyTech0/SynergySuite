@@ -18,6 +18,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
 | Desk (`apps/desk`) | Dynamics 365 Customer Service | yes | early | Ticket queues, email intake and threaded replies over IMAP/SMTP, internal notes, canned replies, public knowledge base, intake API, ticket feed for Portal |
 | To Do (`apps/todo`) | Microsoft To Do | yes | early | My Day with suggestions, Important, Planned, lists, steps, notes, due dates, reminders with browser notifications, repeating tasks, shared lists with assignments |
+| Engage (`apps/engage`) | Viva Engage, Viva Connections | yes | early | Company home page with news, quick links, company sites and apps; feed with discussions, questions with best answers, praise badges, polls and articles; public and private communities with admins, pinned posts and announcements; storylines, follows, mentions, #topics, reactions and threaded replies; share to Chat; AI summaries and catch-up on your own model |
 | Calendar (`apps/calendar`) | Outlook Calendar | yes | early | Week view, personal and company calendars, attendees, free/busy API; no recurring events or month view yet |
 | Chat (`apps/chat`) | Teams chat | yes | usable | Channels, direct messages, threads, reactions, mentions, unread counts, search, real-time updates |
 | Meet (`apps/meet`) | Teams meetings | yes | early | Video rooms on LiveKit, scheduling, guest links; the media server is deployed separately and is not part of the local quickstart |
@@ -39,6 +40,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Portal add-on (`addons/portal`) | (customer portal) | yes | early | Client records with private share links |
 | Sign add-on (`addons/sign`) | (DocuSign-style) | no | standalone | E-signature with multi-party signing and templates; has its own sign-in |
 | Campaigns add-on (`addons/campaigns`) | (Mailchimp-style) | no | prototype | Audiences, email builder, campaigns; sending relies on a separate mailer that is not in this repository |
+| Desktop app (`clients/app`) | Outlook and Teams desktop apps | installers from CI | early | Windows, macOS and Linux app that opens your suite's apps in a native window: launcher, app menu with shortcuts, outside links in the browser, downloads to the Downloads folder |
 | Android UI (`mobile/synergy-ui`) | | no | prototype | Kotlin UI component library; no app yet |
 
 ## Screenshots
@@ -84,6 +86,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/drive` | OneDrive | Next.js 16 + Postgres, file contents on disk |
 | `apps/contacts` | Outlook People | Next.js 16 + Postgres |
 | `apps/todo` | Microsoft To Do | Next.js 16 + Postgres |
+| `apps/engage` | Viva Engage, Viva Connections | Next.js 16 + Postgres |
 | `apps/crm` | Dynamics 365 Sales | Next.js 16 + Postgres |
 | `apps/desk` | Dynamics 365 Customer Service | Next.js 16 + Postgres |
 | `apps/forms` | Forms | Express + React/Vite |
@@ -102,6 +105,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `addons/campaigns` | (Mailchimp-style) | Next.js 15 |
 | `addons/portal` | customer portal | Express + React/Vite |
 | `addons/people` | HR records and PTO | Express + React/Vite |
+| `clients/app` | Microsoft 365 desktop apps | Tauri 2 (Rust) + TypeScript launcher page |
 | `mobile/synergy-ui` | Android UI library | Kotlin |
 
 ## Shared packages
