@@ -494,6 +494,68 @@ services:
       SEARCH_AI_MODEL: ${SEARCH_AI_MODEL:-}
       SEARCH_APP_URLS: ${SEARCH_APP_URLS:-}
 
+  # Power BI equivalent: dashboards and reports over the suite's business data. The report
+  # designer and charts are Metabase (open source edition, AGPL), served at /studio on Insights'
+  # own host; Insights signs people in to it with their suite account and connects Books, CRM,
+  # Desk, Base, Planner, Forms and Trust as read-only sources (INSIGHTS_SOURCES picks others).
+  insights:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-insights:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: insights } }
+    environment:
+      <<: *app-env
+      # Derives every password and key Insights uses with Metabase. openssl rand -hex 32
+      INSIGHTS_SECRET: ${INSIGHTS_SECRET:-}
+      METABASE_INTERNAL_URL: http://metabase:3000
+      # A superuser connection without a database name: Insights gives its read-only role
+      # access to each source's safe columns, and Metabase connects as that role.
+      INSIGHTS_PG_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432
+      INSIGHTS_SOURCES: ${INSIGHTS_SOURCES:-}
+      INSIGHTS_ADMIN_EMAILS: ${INSIGHTS_ADMIN_EMAILS:-${ADMIN_EMAILS:-${SEED_ADMIN_EMAIL:-}}}
+      INSIGHTS_ANALYST_EMAILS: ${INSIGHTS_ANALYST_EMAILS:-}
+      INSIGHTS_SYNC_MINUTES: ${INSIGHTS_SYNC_MINUTES:-}
+
+  # Insights' reporting engine. Its own settings, questions and dashboards live in the metabase
+  # database. Not published: Caddy serves it at https://insights.SUITE_DOMAIN/studio.
+  metabase:
+    image: metabase/metabase:v0.64.2.7
+    restart: unless-stopped
+    depends_on:
+      metabase-db: { condition: service_completed_successfully }
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: postgres
+      MB_DB_PORT: "5432"
+      MB_DB_DBNAME: metabase
+      MB_DB_USER: postgres
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_SITE_URL: https://insights.${SUITE_DOMAIN}/studio
+      MB_ANON_TRACKING_ENABLED: "false"
+      MB_CHECK_FOR_UPDATES: "false"
+      # Public links would open reports without a suite sign-in.
+      MB_ENABLE_PUBLIC_SHARING: "false"
+      # No sample database or example dashboards; the suite's own data is connected instead.
+      MB_LOAD_SAMPLE_CONTENT: "false"
+      JAVA_OPTS: ${INSIGHTS_JAVA_OPTS:--Xmx1g}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  # Makes the metabase database on installs that started before Insights. Runs once per `up`.
+  metabase-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'metabase'\" | grep -q 1 || psql -c 'CREATE DATABASE metabase'"]
+
   # Dynamics 365 Sales equivalent: accounts, contacts, leads, the opportunity pipeline and
   # activities. Lead scoring uses the suite's AI_* model (CRM_AI_* to give CRM its own).
   crm:
