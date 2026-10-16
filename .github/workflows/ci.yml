@@ -80,6 +80,7 @@ jobs:
           npx tsc --noEmit -p apps/engage
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
+          npx tsc --noEmit -p apps/diagrams
           npx tsc --noEmit -p apps/mail
           npx tsc --noEmit -p apps/meet
           npx tsc --noEmit -p apps/office
@@ -135,6 +136,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE desk_test"
           npm test --workspace apps/desk
+      - name: Diagrams tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/diagrams_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE diagrams_test"
+          npm test --workspace apps/diagrams
       - name: Mail tests
         run: npm test --workspace apps/mail
       - name: Meet tests

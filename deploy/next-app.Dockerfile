@@ -20,6 +20,7 @@ COPY apps/chat/package.json apps/chat/
 COPY apps/contacts/package.json apps/contacts/
 COPY apps/crm/package.json apps/crm/
 COPY apps/desk/package.json apps/desk/
+COPY apps/diagrams/package.json apps/diagrams/
 COPY apps/drive/package.json apps/drive/
 COPY apps/engage/package.json apps/engage/
 COPY apps/forms/package.json apps/forms/

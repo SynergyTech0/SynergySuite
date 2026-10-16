@@ -279,6 +279,11 @@ drive.{$SUITE_DOMAIN} {
 	}
 }
 
+diagrams.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app diagrams:3790
+}
+
 cad.{$SUITE_DOMAIN} {
 	# Share links open without an account: the review page, its API, and the engines and
 	# scripts it loads. A signed-in viewer is still known, so the owner can manage comments.
