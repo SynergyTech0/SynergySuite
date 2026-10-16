@@ -25,6 +25,20 @@ $env:DEV_USER_EMAIL='you@example.com'; node server/index.js
 
 Vite dev server with HMR: `cd web; npm run dev` (proxies /api + /ws to :3080).
 
+## Team service routes (Groups)
+
+The Groups app owns Microsoft 365-style teams and pushes each one here as a workspace
+(`server/teams.js`). These routes sit on the internal network only: they need
+`x-proxy-auth-secret: $PROXY_SHARED_SECRET` (open without a secret outside production,
+404 otherwise) and the gateway never forwards `/api/svc/`. `:source` must be `groups:<uuid>`.
+
+- `PUT /api/svc/teams/:source` `{ name, members: [{email, name?, role}], channels: [{key, name, topic?}] }`
+  makes the workspace, its members and one public channel per key exactly this (idempotent).
+  People who leave the team leave every channel in it; unlisted channel keys are kept.
+- `GET /api/svc/teams/:source/activity?limit=10` latest top-level messages across the team channels.
+- `POST /api/svc/teams/:source/messages` `{ channelKey, email, body }` posts as that channel member.
+- `DELETE /api/svc/teams/:source` removes everyone from the workspace; messages stay.
+
 ## Production
 
 Deployed with the rest of the suite; see `deploy/README.md` at the repository root.

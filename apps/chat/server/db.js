@@ -120,6 +120,6 @@ async function isMember(channelId, userId) {
 }
 
 module.exports = {
-  pool: db.pool, q, migrate, upsertUser, memberIds, isMember,
+  pool: db.pool, q, migrate, upsertUser, memberIds, isMember, slugify, colorFor,
   defaultWorkspaceId, userWorkspaces, isWorkspaceMember, workspaceMemberIds, createWorkspace,
 };

@@ -107,6 +107,10 @@ CREATE INDEX IF NOT EXISTS activity_item_idx ON activity (item_id, at DESC);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 ALTER TABLE versions ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS items_held_idx ON items (held_deleted_at) WHERE held_deleted_at IS NOT NULL;
+
+-- A team's library: "groups:<group id>". Its name and members come from Groups (lib/svc.ts).
+ALTER TABLE libraries ADD COLUMN IF NOT EXISTS source TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS libraries_source_uniq ON libraries (source) WHERE source IS NOT NULL;
 `;
 
 type Db = ReturnType<typeof createDb>;

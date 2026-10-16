@@ -44,7 +44,8 @@ export async function ensureMailbox(email: string, name: string): Promise<void> 
   }
 }
 
-async function call(url: string, methodCalls: unknown[]) {
+/** One JMAP request to Stalwart's admin API; the first method response's arguments. */
+export async function call(url: string, methodCalls: unknown[]) {
   const auth = Buffer.from(`${process.env.MAIL_ADMIN_USER || "admin"}:${process.env.MAIL_ADMIN_PASSWORD || ""}`).toString("base64");
   const res = await fetch(`${url.replace(/\/$/, "")}/jmap/`, {
     method: "POST",

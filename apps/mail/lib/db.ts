@@ -4,7 +4,8 @@ import { createDb } from "@synergy/db";
  * Mail keeps very little of its own: the outside accounts people connect. Messages stay on the
  * mail server (IMAP is the source of truth), so there is nothing to sync or migrate per message.
  * The one exception is legal hold: a copy of every message of a person on hold (preserved.ts),
- * since desktop and phone clients can delete straight from the mail server.
+ * since desktop and phone clients can delete straight from the mail server. It also remembers who
+ * it made a member of each shared mailbox on the mail server (groups.ts).
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -68,6 +69,16 @@ CREATE TABLE IF NOT EXISTS preserve_folders (
   uidvalidity  TEXT NOT NULL,
   last_uid     BIGINT NOT NULL,
   PRIMARY KEY (mailbox, folder)
+);
+
+-- Who Mail made a member of each shared mailbox (Stalwart keeps group membership on each user),
+-- so a new member list from Groups takes away exactly what was given before.
+CREATE TABLE IF NOT EXISTS shared_mailbox_grants (
+  address      TEXT NOT NULL,            -- the shared mailbox
+  member       TEXT NOT NULL,
+  user_id      TEXT NOT NULL,            -- the member's account id on the mail server
+  granted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (address, member)
 );
 `;
 

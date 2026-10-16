@@ -35,6 +35,7 @@
     "apps/office",
     "apps/planner",
     "apps/projects",
+    "apps/groups",
     "apps/photo",
     "apps/sites",
     "apps/stream",
@@ -45,8 +46,8 @@
     "addons/portal"
   ],
   "scripts": {
-    "build:packages": "npm run build -w @synergy/config -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/db -w @synergy/server -w @synergy/shell",
-    "test:packages": "npm test -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/db -w @synergy/server -w @synergy/config",
+    "build:packages": "npm run build -w @synergy/config -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/groups -w @synergy/db -w @synergy/server -w @synergy/shell",
+    "test:packages": "npm test -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/groups -w @synergy/db -w @synergy/server -w @synergy/config",
     "ports": "node -e \"for (const a of require('@synergy/config').apps) console.log(String(a.port).padEnd(6), a.id.padEnd(10), a.m365)\""
   },
   "devDependencies": {

@@ -98,6 +98,7 @@ jobs:
           npx tsc --noEmit -p apps/base
           npx tsc --noEmit -p apps/phone
           npx tsc --noEmit -p apps/projects
+          npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -198,6 +199,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE projects_test"
           npm test --workspace apps/projects
+      - name: Groups tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/groups_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE groups_test"
+          npm test --workspace apps/groups
       - name: Ops tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ops_test

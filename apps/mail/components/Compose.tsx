@@ -95,7 +95,7 @@ export function Compose(props: {
         {props.accounts.length > 1 && (
           <label><span>From</span>
             <select value={d.account} onChange={set("account")}>
-              {props.accounts.map((a) => <option key={a.id} value={a.id}>{a.address}</option>)}
+              {props.accounts.map((a) => <option key={a.id} value={a.id}>{a.kind === "shared" ? `${a.label} <${a.address}> (shared mailbox)` : a.address}</option>)}
             </select>
           </label>
         )}

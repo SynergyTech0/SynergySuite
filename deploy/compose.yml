@@ -620,6 +620,22 @@ services:
       ENGAGE_AI_API_KEY: ${ENGAGE_AI_API_KEY:-}
       ENGAGE_AI_MODEL: ${ENGAGE_AI_MODEL:-}
 
+  # Microsoft 365 Groups and Teams equivalent: teams that bring their people a Chat workspace with
+  # channels, a Drive library, a group calendar and a shared mailbox; distribution lists; shared
+  # mailboxes; security groups other apps grant access to. Groups pushes membership to Chat, Drive,
+  # Calendar (CAL_SVC_TOKEN) and Mail, and answers the other apps' "who is in what" (@synergy/groups).
+  groups:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-groups:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: groups } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/groups
+      GROUPS_MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      GROUPS_ADMIN_EMAILS: ${GROUPS_ADMIN_EMAILS:-}
+      GROUPS_CREATE: ${GROUPS_CREATE:-}
+      CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
+
   # Microsoft Project and Dynamics 365 Project Operations equivalent: plans with a Gantt chart,
   # teams and rates, weekly timesheets, expenses with receipts, approvals, and billing that
   # lands in Books as draft invoices (needs BOOKS_SVC_TOKEN on both). Imports Planner boards.
@@ -956,6 +972,8 @@ services:
       MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:?set STALWART_ADMIN_PASSWORD}
       # Suggests recipients from Contacts as you type; Mail works without it.
       CONTACTS_INTERNAL_URL: http://contacts:3190
+      # Shared mailboxes each person may open, from the Groups app.
+      GROUPS_INTERNAL_URL: http://groups:3830
 
   # Mail server (SMTP, IMAP, JMAP). Settings live in its database; deploy/stalwart/plan.template.ndjson
   # is applied on every start by stalwart-init. Its admin UI is on 127.0.0.1:8080 (log in as admin).

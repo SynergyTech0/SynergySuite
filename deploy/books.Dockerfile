@@ -26,6 +26,7 @@ COPY apps/sites/package.json apps/sites/
 COPY apps/stream/package.json apps/stream/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/groups/package.json apps/groups/
 COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/books/api --workspace apps/books/web --workspace packages/shell --workspace packages/search --include-workspace-root \

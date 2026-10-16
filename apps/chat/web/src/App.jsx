@@ -302,6 +302,7 @@ export default function App() {
       }
       case 'channel.created':
       case 'channel.invited':
+      case 'channel.removed':
         loadMe().catch(() => {});
         break;
       case 'member.joined':

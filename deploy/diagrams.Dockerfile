@@ -60,6 +60,7 @@ COPY apps/todo/package.json apps/todo/
 COPY apps/phone/package.json apps/phone/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/groups/package.json apps/groups/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/diagrams --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages

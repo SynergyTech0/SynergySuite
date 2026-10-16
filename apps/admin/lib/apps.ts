@@ -22,6 +22,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   phone: ["call", "voicemail"],
   diagrams: ["diagram"],
   projects: ["project", "task", "time", "expense"],
+  groups: ["group", "group-change"],
   devices: ["device", "alert"],
   ops: ["work_order", "maintenance", "asset"],
   hr: ["employee", "timeoff", "paycheck"],

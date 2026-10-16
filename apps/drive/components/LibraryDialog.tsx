@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { type Library, type Role, api, person } from "./client";
 
-/** Members and settings of a shared library. Owners can change both. */
+/** Members and settings of a shared library. Owners can change both, except on a team's library, which Groups manages. */
 export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   library: Library; me: string; onClose: () => void; onChanged: () => void; onDeleted: () => void;
 }) {
@@ -14,6 +14,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   const [name, setName] = useState(library.name);
   const [error, setError] = useState("");
   const owner = library.role === "owner";
+  const manage = owner && !library.team;
   const base = `/api/libraries/${library.id}`;
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   return (
     <Modal title={library.name} onClose={onClose} wide>
       <div className="form">
-        {owner && (
+        {manage && (
           <form
             className="sharerow"
             onSubmit={(e) => {
@@ -49,7 +50,8 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
           </form>
         )}
         <h3>Members</h3>
-        {owner && (
+        {library.team && <p className="muted small">Members of a team&apos;s library are managed in Groups.</p>}
+        {manage && (
           <form
             className="sharerow"
             onSubmit={(e) => {
@@ -71,7 +73,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
             <li key={m.email}>
               <span className="avatar">{m.email[0]?.toUpperCase()}</span>
               <span className="grow">{person(m.email, me)} <span className="muted small">{m.email}</span></span>
-              {owner ? (
+              {manage ? (
                 <select
                   value={m.role}
                   aria-label={`Role for ${m.email}`}
@@ -84,7 +86,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
               ) : (
                 <span className="muted small">{m.role === "owner" ? "Owner" : m.role === "editor" ? "Member" : "Visitor"}</span>
               )}
-              {(owner || m.email === me) && (
+              {!library.team && (owner || m.email === me) && (
                 <button
                   className="iconbtn"
                   title={m.email === me ? "Leave library" : "Remove"}
@@ -102,7 +104,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
         </ul>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="actions">
-          {owner && (
+          {manage && (
             <button
               className="btn danger"
               onClick={async () => {

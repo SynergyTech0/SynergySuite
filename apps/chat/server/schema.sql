@@ -92,3 +92,10 @@ CREATE TABLE IF NOT EXISTS message_held_versions (
     replaced_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS message_held_versions_msg_idx ON message_held_versions (message_id, id);
+
+-- Team workspaces pushed by the Groups app: one workspace per group ("groups:<uuid>"), and one
+-- channel per team channel key inside it. Both null for everything people create themselves.
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS source TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS workspaces_source_uq ON workspaces (source) WHERE source IS NOT NULL;
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS source_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS channels_source_key_uq ON channels (workspace_id, source_key) WHERE source_key IS NOT NULL;

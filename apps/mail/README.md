@@ -3,12 +3,13 @@
 The suite's web mailbox: folders, a reading pane, search, flags, move, archive, junk, delete, attachments, and a rich-text composer with reply, reply all and forward.
 
 - **Suite mailbox.** Each signed-in user's own mailbox on the suite's mail server (Stalwart in `deploy/compose.yml`). Mail opens it with a service login allowed to open any mailbox, so nobody types a mail password, and creates it the first time the user visits.
+- **Shared mailboxes and distribution lists.** The Groups app keeps them on the mail server through `PUT`/`DELETE /api/svc/groups/<address>` (server to server with `PROXY_SHARED_SECRET`; the gateway never forwards `/api/svc/`). `kind: "list"` makes a Stalwart mailing list whose recipients are exactly the members (outside addresses allowed); `kind: "shared"` makes a group account and gives each member it (members need an address on a domain the mail server hosts; others come back in `skipped`). Mail remembers who it added in Postgres, so a new member list takes away exactly the rest. Needs `MAIL_ADMIN_URL`; without it the answer is `provisioned: false`. Each shared mailbox or team mailbox a person belongs to (asked of Groups, `GROUPS_INTERNAL_URL`) appears as an extra account: it opens their own suite login scoped to `Shared Folders/<address>/` and sends from the shared address under its name.
 - **Outside accounts.** Users can add any IMAP/SMTP account (Gmail, Outlook.com, Yahoo, iCloud have presets). Passwords are encrypted with `MAIL_ENCRYPTION_KEY` before they are stored. Servers on private addresses and non-mail ports are refused, and TLS is required.
 - **Safe reading.** Message HTML is sanitized and shown in a sandboxed frame with no scripts. Remote images are blocked until the user asks for them, so senders can't track opens.
 
 - **Legal hold and eDiscovery.** For everyone the Admin center puts on hold, a background sweep copies every message in every folder into a preserved store in Postgres, every few minutes and within a minute of a new hold, fetching only new mail on later passes. Desktop and phone clients delete straight from the mail server, so this can't rely on catching deletes; Mail's own delete also copies first. The Admin center searches and exports through `POST /api/compliance/search` and `/export`: live mailboxes (opened with the master login) plus the store, where mail found only in the store comes back as deleted. Outside accounts are not covered.
 
-IMAP is the source of truth; Postgres holds the list of outside accounts and the preserved copies of mail on hold.
+IMAP is the source of truth; Postgres holds the list of outside accounts, the preserved copies of mail on hold, and who was added to each shared mailbox.
 
 ## Run it locally
 
@@ -21,7 +22,7 @@ MAIL_SMTP_HOST=127.0.0.1 MAIL_SMTP_PORT=3025 MAIL_SMTP_SECURE=false \
 MAIL_SUITE_AUTH=shared-password MAIL_DEV_PASSWORD=alice MAIL_ALLOW_PRIVATE_HOSTS=1 npm run dev
 ```
 
-`npm test` runs the unit tests (sanitizer, secret sealing, outside-server checks, eDiscovery query translation and ids). With `TEST_DATABASE_URL` set it also runs the legal hold tests against that Postgres, with an in-memory stand-in for the mail server.
+`npm test` runs the unit tests (sanitizer, secret sealing, outside-server checks, eDiscovery query translation and ids, the Stalwart calls for groups against a stand-in admin API, shared mailbox access and folder mapping). With `TEST_DATABASE_URL` set it also runs the legal hold tests against that Postgres, with an in-memory stand-in for the mail server.
 
 ## Settings
 
@@ -32,7 +33,9 @@ MAIL_SUITE_AUTH=shared-password MAIL_DEV_PASSWORD=alice MAIL_ALLOW_PRIVATE_HOSTS
 | `MAIL_SUITE_TLS_INSECURE` | Accept the suite mail server's self-signed certificate. |
 | `MAIL_SUITE_AUTH` | `master` (production) or `shared-password` (development only). |
 | `MAIL_MASTER_USER` / `MAIL_MASTER_PASSWORD` | The service login. `MAIL_MASTER_LOGIN` shapes the login sent, default `{user}%{master}` (Stalwart). |
-| `MAIL_ADMIN_URL` / `_USER` / `_PASSWORD` | Stalwart's admin API, used to create mailboxes on first visit. Leave unset if you create them yourself. |
+| `MAIL_ADMIN_URL` / `_USER` / `_PASSWORD` | Stalwart's admin API, used to create mailboxes on first visit and to keep shared mailboxes and distribution lists. Leave unset if you create them yourself. |
+| `GROUPS_INTERNAL_URL` | The Groups app, asked which shared mailboxes a person belongs to (default `http://groups:3830` in production, `http://localhost:3830` otherwise). Unreachable means no shared mailboxes are shown. |
+| `MAIL_SHARED_FOLDERS` | Where the mail server shows shared mailboxes in a member's login (default `Shared Folders`, Stalwart's). |
 | `MAIL_ENCRYPTION_KEY` | Key for outside-account passwords. Required in production. |
 | `MAIL_ALLOW_PRIVATE_HOSTS=1` | Development only: lets outside accounts point at local test servers. |
 | `ADMIN_INTERNAL_URL` / `COMPLIANCE_TOKEN` | The Admin center, asked who is on legal hold, and the token it uses for eDiscovery calls. Without `ADMIN_INTERNAL_URL` nobody is on hold. |
