@@ -22,6 +22,19 @@ transaction posts a balanced journal entry, and the reports read those entries.
 - **Sales tax**: rates, liabilities and filing.
 - **Reports**: profit and loss, balance sheet, trial balance, cash flow, A/R and
   A/P aging, exported as CSV or PDF.
+- **Budgets and forecasts**: plans by account and month, quarter or year (typed in,
+  spread from an annual amount, or started from last year's actuals plus a percent),
+  optionally for one class or location; budget vs actual straight from posted
+  journals with favorable and unfavorable variance; rolling forecasts that keep
+  actuals for closed periods and project the rest by run rate, trend or the plan.
+- **Multi-company and consolidation**: an admin can add companies, each with its own
+  currency and chart of accounts, and give people access with a role per company;
+  the company menu switches between them. Intercompany charges, loans and
+  settlements post a journal in both companies at once (through 1450 Intercompany
+  Receivable and 2450 Intercompany Payable). A consolidation group reports its
+  companies in one currency, with a column per company, the eliminations and the
+  group total; balance sheets translate at the closing rate, income at the period's
+  average rate, and the difference shows as the currency translation adjustment.
 - **AI**: categorization, tax classification and a tax advisor run on the suite's
   shared model setting (`AI_*`, or `BOOKS_AI_*` to give Books its own model), so
   any OpenAI-compatible server or Anthropic works. Without a model these features
@@ -68,6 +81,10 @@ npm run dev -w @synergy/books-web       # web on Vite, proxying /api to :3055
 Stripe and Square keys for invoice payments are entered per company in the app's settings.
 
 ## Not done yet
+
+- Consolidation assumes every company is fully owned: there is no minority interest
+  yet, and equity translates at the closing rate rather than historical rates.
+- Exchange rates are entered by hand on the Consolidation page; there is no rate feed.
 
 - Live bank feeds through Stripe Financial Connections need a separate payments
   service (`PAY_SERVICE_URL`, `PAY_SERVICE_TOKEN`) that is not part of this repo yet.

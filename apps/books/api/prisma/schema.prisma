@@ -605,6 +605,7 @@ model Organization {
   MobileDeposit        MobileDeposit[]
   invoices             Invoice[]           @relation("OrganizationInvoices")
   customerPayments     CustomerPayment[]   @relation("OrganizationCustomerPayments")
+  consolidationMembers ConsolidationMember[]
 
   @@index([entityType])
 }
@@ -1741,6 +1742,13 @@ model Budget {
   startDate      DateTime
   endDate        DateTime
   status         String           @default("DRAFT") // DRAFT, APPROVED, ACTIVE, CLOSED
+  // Optional dimension: actuals only count journal lines tagged with this class or location.
+  classId        String?
+  locationId     String?
+  notes          String?
+  // How the saved forecast was made (BUDGET, RUN_RATE, TREND) and the date it ran to.
+  forecastMethod String?
+  forecastAsOf   DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   lineItems      BudgetLineItem[]
@@ -1758,6 +1766,9 @@ model BudgetLineItem {
   budgetAmount   Decimal  @db.Decimal(19, 4)
   actualAmount   Decimal  @default(0) @db.Decimal(19, 4)
   forecastAmount Decimal  @default(0) @db.Decimal(19, 4)
+  // One amount per budget period (12 for monthly, 4 for quarterly, 1 for annual).
+  periodAmounts   Decimal[] @db.Decimal(19, 4)
+  forecastPeriods Decimal[] @db.Decimal(19, 4)
   type           String?
   amount         Decimal  @default(0) @db.Decimal(19, 4)
   notes          String?
@@ -1765,6 +1776,58 @@ model BudgetLineItem {
   updatedAt      DateTime @updatedAt
 
   @@unique([budgetId, accountId])
+}
+
+// ============================================================================
+// MULTI-COMPANY CONSOLIDATION
+// ============================================================================
+
+/// A set of companies reported together in one currency, with intercompany balances eliminated.
+model ConsolidationGroup {
+  id                String                @id @default(cuid())
+  name              String
+  reportingCurrency String                @default("USD")
+  /// Its chart of accounts names the consolidated lines.
+  parentOrganizationId String
+  createdBy         String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  members           ConsolidationMember[]
+}
+
+model ConsolidationMember {
+  id             String             @id @default(cuid())
+  groupId        String
+  group          ConsolidationGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime           @default(now())
+
+  @@unique([groupId, organizationId])
+  @@index([organizationId])
+}
+
+/// One intercompany entry, posted as a journal in each company. The "from" company holds
+/// the receivable; the "to" company holds the payable.
+model IntercompanyTransaction {
+  id                 String   @id @default(cuid())
+  kind               String // CHARGE, LOAN, SETTLEMENT
+  date               DateTime
+  description        String
+  fromOrganizationId String
+  toOrganizationId   String
+  fromAccountId      String
+  toAccountId        String
+  fromAmount         Decimal  @db.Decimal(19, 4)
+  toAmount           Decimal  @db.Decimal(19, 4)
+  rate               Decimal  @default(1) @db.Decimal(18, 8)
+  fromJournalId      String?
+  toJournalId        String?
+  createdBy          String?
+  createdAt          DateTime @default(now())
+
+  @@index([fromOrganizationId])
+  @@index([toOrganizationId])
 }
 
 // ============================================================================
