@@ -16,6 +16,7 @@
   { "id": "photo",     "name": "Photo",     "m365": "Designer / Photos",    "port": 3650, "icon": "image",    "dir": "apps/photo",     "core": true },
   { "id": "cad",       "name": "CAD",       "m365": "(AutoCAD equivalent)", "port": 3660, "icon": "ruler",    "dir": "apps/cad",       "core": true },
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
+  { "id": "insights",  "name": "Insights",  "m365": "Power BI",             "port": 3720, "icon": "chart",    "dir": "apps/insights",  "core": true },
   { "id": "base",      "name": "Base",      "m365": "Access, Lists",        "port": 3680, "icon": "table",    "dir": "apps/base",      "core": true },
   { "id": "sites",     "name": "Sites",     "m365": "SharePoint",           "port": 3170, "icon": "globe",    "dir": "apps/sites",     "core": true },
   { "id": "whiteboard", "name": "Whiteboard", "m365": "Microsoft Whiteboard", "port": 3750, "icon": "easel", "dir": "apps/whiteboard", "core": true },
