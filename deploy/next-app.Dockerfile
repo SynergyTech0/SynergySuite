@@ -1,8 +1,11 @@
-# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, mail, meet, office, ops, planner, projects, search, todo, trust, whiteboard). Run from the repository root:
+# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, mail, meet, office, ops, phone, planner, projects, search, todo, trust, whiteboard). Run from the repository root:
 #   docker build -f deploy/next-app.Dockerfile --build-arg APP=office -t synergy/office .
 ARG APP
 
 FROM node:22-slim
+# Extra Debian packages an app needs at run time (Phone: espeak-ng for spoken voicemail greetings).
+ARG APT_PACKAGES=""
+RUN if [ -n "$APT_PACKAGES" ]; then apt-get update && apt-get install -y --no-install-recommends $APT_PACKAGES && rm -rf /var/lib/apt/lists/*; fi
 ENV npm_config_fetch_retries=6 npm_config_fetch_retry_mintimeout=20000 npm_config_fetch_retry_maxtimeout=180000 npm_config_fetch_timeout=900000
 ARG APP
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -30,6 +33,7 @@ COPY apps/forms/package.json apps/forms/
 COPY apps/insights/package.json apps/insights/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/
+COPY apps/phone/package.json apps/phone/
 COPY apps/notes/package.json apps/notes/
 COPY apps/office/package.json apps/office/
 COPY apps/ops/package.json apps/ops/

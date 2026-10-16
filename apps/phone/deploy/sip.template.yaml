@@ -1,0 +1,12 @@
+# LiveKit SIP service config. Copy to sip.yaml (chmod 600) and fill in the same key and secret as
+# Meet's livekit.yaml. Never commit the filled-in file.
+api_key: __LIVEKIT_API_KEY__
+api_secret: __LIVEKIT_API_SECRET__
+ws_url: ws://127.0.0.1:7880
+redis:
+  address: 127.0.0.1:6379
+sip_port: 5060
+rtp_port: 10000-20000
+# Advertise the host's public IP to the phone company; set nat_1_to_1_ip instead if it can't be discovered.
+use_external_ip: true
+log_level: info

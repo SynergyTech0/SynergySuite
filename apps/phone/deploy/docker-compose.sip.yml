@@ -1,0 +1,30 @@
+# Synergy Phone's link to real phone numbers: LiveKit's SIP service (Apache-2.0, headless) and the
+# Valkey (BSD) store it shares with the LiveKit media server. Runs next to Meet's media server
+# (apps/meet/deploy/docker-compose.yml), on the same host, with host networking like it:
+#   5060/udp+tcp       SIP signalling   -> open to your SIP trunk provider (or your PBX)
+#   10000-20000/udp    call audio (RTP) -> open to the same
+# Fill in sip.template.yaml as sip.yaml, and add the redis and webhook sections to livekit.yaml
+# (see apps/phone/README.md). Calls between colleagues don't need any of this.
+services:
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    container_name: synergyphone-valkey
+    command: ["valkey-server", "--bind", "127.0.0.1", "--port", "6379", "--save", "60", "1"]
+    network_mode: host
+    volumes:
+      - valkey-data:/data
+    restart: unless-stopped
+
+  sip:
+    image: livekit/sip:v1.19
+    container_name: synergyphone-sip
+    network_mode: host
+    environment:
+      SIP_CONFIG_FILE: /etc/sip.yaml
+    volumes:
+      - ./sip.yaml:/etc/sip.yaml:ro
+    depends_on: [valkey]
+    restart: unless-stopped
+
+volumes:
+  valkey-data:

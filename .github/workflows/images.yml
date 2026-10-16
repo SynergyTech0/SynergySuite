@@ -65,6 +65,7 @@ jobs:
             {"name":"mail","file":"deploy/next-app.Dockerfile","context":".","args":"APP=mail","paths":["apps/mail/"]},
             {"name":"meet","file":"deploy/next-app.Dockerfile","context":".","args":"APP=meet","paths":["apps/meet/"]},
             {"name":"office","file":"deploy/next-app.Dockerfile","context":".","args":"APP=office","paths":["apps/office/"]},
+            {"name":"phone","file":"deploy/next-app.Dockerfile","context":".","args":"APP=phone\nAPT_PACKAGES=espeak-ng","paths":["apps/phone/"]},
             {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
             {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
             {"name":"engage","file":"deploy/next-app.Dockerfile","context":".","args":"APP=engage","paths":["apps/engage/"]},

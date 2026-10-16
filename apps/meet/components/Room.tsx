@@ -18,7 +18,7 @@ import { Track, RoomEvent, LocalParticipant, Participant } from "livekit-client"
 import {
   Mic, Video as VideoIcon, MonitorUp, Hand, Smile, Users, MessageSquare,
   Sparkles, PhoneOff, Link2, MicOff, UserX, Circle, Square, Captions,
-  FileText, Download, Check, BarChart3, Plus, X, Boxes, ScrollText, Presentation,
+  FileText, Download, Check, BarChart3, Plus, X, Boxes, ScrollText, Phone, Presentation,
 } from "lucide-react";
 
 const REACTIONS = ["👍", "👏", "🎉", "❤️", "😂", "😮", "🙌"];
@@ -694,6 +694,7 @@ export default function Room({
               );
             })}
           </ul>
+          {isStaff && <DialIn room={roomName} />}
         </aside>
       )}
       {showTranscript && (
@@ -858,5 +859,33 @@ export default function Room({
 
       <RoomAudioRenderer />
     </div>
+  );
+}
+
+/** Calls a phone number into the meeting through Synergy Phone, from the host's own number. */
+function DialIn({ room }: { room: string }) {
+  const [number, setNumber] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form className="dialin" onSubmit={async (e) => {
+      e.preventDefault();
+      if (!number.trim()) return;
+      setBusy(true);
+      setMsg("");
+      try {
+        const r = await fetch("/api/dialout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room, number }) });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok) { setMsg("Calling…"); setNumber(""); } else setMsg(d.error || "That didn't work");
+      } catch { setMsg("That didn't work"); }
+      finally { setBusy(false); }
+    }}>
+      <div className="dialin-h"><Phone size={14} /> Call a phone into the meeting</div>
+      <div className="dialin-row">
+        <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="+1 555 123 4567" aria-label="Phone number to call in" />
+        <button className="btn primary" disabled={busy || !number.trim()}>Call</button>
+      </div>
+      {msg && <div className="dialin-msg">{msg}</div>}
+    </form>
   );
 }

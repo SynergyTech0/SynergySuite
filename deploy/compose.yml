@@ -300,6 +300,31 @@ services:
       LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      # Hosts call phone numbers into meetings through Phone.
+      PHONE_SVC_TOKEN: ${PHONE_SVC_TOKEN:-}
+
+  # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
+  # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through
+  # LiveKit's SIP service and the SIP trunks set up in Phone admin (see apps/phone/deploy).
+  phone:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-phone:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: phone, APT_PACKAGES: espeak-ng } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/phone
+      NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      PHONE_ADMIN_EMAILS: ${PHONE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      PHONE_COUNTRY_CODE: ${PHONE_COUNTRY_CODE:-1}
+      PHONE_SIP_HOST: ${PHONE_SIP_HOST:-sip.${SUITE_DOMAIN}}
+      PHONE_SVC_TOKEN: ${PHONE_SVC_TOKEN:-}
+      PHONE_AI_SPEECH_MODEL: ${PHONE_AI_SPEECH_MODEL:-${AI_SPEECH_MODEL:-}}
+      CONTACTS_INTERNAL_URL: http://contacts:3190
 
   office:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-office:${SYNERGY_IMAGE_TAG:-latest}
