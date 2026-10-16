@@ -6,10 +6,15 @@ import { api, formatDate } from "./client";
 import { Avatar, Badge, type AppCtx } from "./shared";
 
 const ABOUT: Record<Role, string> = {
-  admin: "Edits every record, reassigns owners and manages roles.",
-  manager: "Edits every record and reassigns owners.",
-  rep: "Sees every record; edits the ones they own.",
+  admin: "Sees and edits every record, reassigns owners and manages roles.",
+  manager: "Sees and edits every record and reassigns owners.",
+  rep: "Edits the records they own.",
 };
+
+const REP_READ = {
+  own: "Only their own records, records shared with them, and what is on those (an account's contacts and deals, any record's activities)",
+  all: "Every record in the CRM",
+} as const;
 
 export function Team({ app, onMembers }: { app: AppCtx; onMembers: (m: Member[]) => void }) {
   const admin = app.me.role === "admin";
@@ -33,6 +38,29 @@ export function Team({ app, onMembers }: { app: AppCtx; onMembers: (m: Member[])
             <li key={r}><Badge value={r} /><span>{ABOUT[r]}</span></li>
           ))}
         </ul>
+      </section>
+      <section className="panel">
+        <h3>What reps can see</h3>
+        <p className="muted small" style={{ marginTop: 0 }}>This applies in the CRM and in suite search. Owners and managers can share any record with someone from its page.</p>
+        {admin ? (
+          <select
+            aria-label="What reps can see"
+            value={app.repRead}
+            onChange={async (e) => {
+              try {
+                const r = await api<{ repRead: "own" | "all" }>("/api/settings", { method: "PATCH", json: { repRead: e.target.value } });
+                app.setRepRead(r.repRead);
+                app.changed();
+                app.say("Saved");
+              } catch (x) {
+                app.say((x as Error).message);
+              }
+            }}
+          >
+            <option value="own">{REP_READ.own}</option>
+            <option value="all">{REP_READ.all}</option>
+          </select>
+        ) : <p>{REP_READ[app.repRead]}</p>}
       </section>
       <section className="panel">
         <h3>People ({app.members.length})</h3>
