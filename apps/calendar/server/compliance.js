@@ -10,6 +10,8 @@ const {
   MAX_PAGE, MAX_EXPORT_IDS,
 } = require('@synergy/compliance');
 
+const recur = require('./recur');
+
 const APP = 'calendar';
 const KINDS = ['event'];
 const policy = createPolicyClient({ app: APP });
@@ -104,19 +106,49 @@ function createCompliance(q) {
       const c = p(s.custodians);
       where.push(`(x.owner = ANY(${c}::text[]) OR x.participants && ${c}::text[])`);
     }
-    if (s.from) where.push(`x.start_at >= ${p(s.from)}`);
-    if (s.to) where.push(`x.start_at < ${p(s.to)}`);
+    // A repeating series is found by any occurrence in the dates: the SQL keeps every series
+    // whose span overlaps them, and expansion below drops the ones with no occurrence there.
+    const from = s.from ? p(s.from) : null;
+    const to = s.to ? p(s.to) : null;
+    if (from || to) {
+      const single = [from && `x.start_at >= ${from}`, to && `x.start_at < ${to}`].filter(Boolean).join(' AND ');
+      const series = [to && `x.start_at < ${to}`, from && `(x.series_end IS NULL OR x.series_end > ${from})`].filter(Boolean).join(' AND ');
+      where.push(`((x.rrule IS NULL AND ${single}) OR (x.rrule IS NOT NULL AND ${series}))`);
+    }
     const base = `FROM (${ROWS}) x WHERE ${where.join(' AND ')}`;
-    const total = Number((await q(`SELECT count(*) AS n ${base}`, params)).rows[0].n);
-    const rows = (await q(
-      `SELECT x.* ${base} ORDER BY x.start_at DESC, x.id DESC LIMIT ${p(s.limit)} OFFSET ${p(s.offset)}`,
+    if (!from && !to) {
+      const total = Number((await q(`SELECT count(*) AS n ${base}`, params)).rows[0].n);
+      const rows = (await q(
+        `SELECT x.* ${base} ORDER BY x.start_at DESC, x.id DESC LIMIT ${p(s.limit)} OFFSET ${p(s.offset)}`,
+        params)).rows;
+      return page(rows.map(r => hit(r, s.query)), total, s);
+    }
+    const lo = s.from || new Date(-8.64e15);
+    const hi = s.to || new Date(8.64e15);
+    const cands = (await q(
+      `SELECT x.id, x.rrule, x.start_at, x.end_at, x.tzid, x.all_day, x.exdates ${base} ORDER BY x.start_at DESC, x.id DESC LIMIT 20000`,
       params)).rows;
-    const next = s.offset + rows.length;
+    const firstIn = new Map();
+    const ids = [];
+    for (const c of cands) {
+      if (!c.rrule) { ids.push(c.id); continue; }
+      const occ = recur.expand(c, lo, hi, { limit: 400 }).find(o => o.start >= lo);
+      if (occ) { ids.push(c.id); firstIn.set(String(c.id), occ.start); }
+    }
+    const slice = ids.slice(s.offset, s.offset + s.limit);
+    const byId = new Map((await q(`SELECT x.* FROM (${ROWS}) x WHERE x.id = ANY($1::bigint[])`, [slice])).rows.map(r => [String(r.id), r]));
+    const hits = slice.map(id => byId.get(String(id))).filter(Boolean)
+      .map(r => ({ ...hit(r, s.query), ...(firstIn.has(String(r.id)) ? { date: firstIn.get(String(r.id)).toISOString() } : {}) }));
+    return page(hits, ids.length, s);
+  }
+
+  function page(hits, total, s) {
+    const next = s.offset + hits.length;
     return {
       app: APP,
-      hits: rows.map(r => hit(r, s.query)),
+      hits,
       total,
-      ...(next < total ? { nextCursor: Buffer.from(String(next)).toString('base64url') } : {}),
+      ...(next < total && hits.length ? { nextCursor: Buffer.from(String(next)).toString('base64url') } : {}),
     };
   }
 
@@ -144,6 +176,9 @@ function createCompliance(q) {
           allDay: r.all_day,
           attendees: r.participants,
           source: r.source,
+          timeZone: r.tzid,
+          ...(r.rrule ? { repeat: r.rrule, skipped: r.exdates } : {}),
+          ...(r.series_id ? { seriesId: `event:${r.series_id}`, occurrence: r.recurrence_id } : {}),
           createdAt: r.created_at,
           deletedAt: r.held_deleted_at,
           previousVersions: r.previous_versions,
@@ -158,17 +193,19 @@ function createCompliance(q) {
     await q(
       `INSERT INTO event_held_versions (event_id, fields)
        SELECT id, jsonb_build_object('title', title, 'description', description, 'location', location,
-                'start', start_at, 'end', end_at, 'allDay', all_day, 'calendar', calendar, 'attendees', attendees)
+                'start', start_at, 'end', end_at, 'allDay', all_day, 'calendar', calendar, 'attendees', attendees,
+                'timeZone', tzid, 'repeat', rrule, 'skipped', exdates)
          FROM events WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL`, [id, owner]);
   }
 
   // The one way events are deleted: for real, unless the organizer is on hold, in which
-  // case the rows stay, marked held_deleted_at. Returns how many were removed from view.
+  // case the rows stay, marked held_deleted_at. A series goes with the occurrences changed on
+  // their own (overrides). Returns how many were removed from view.
   async function deleteEvents(owner, ids) {
     if (await policy.onHold(owner)) {
       return (await q(
         `UPDATE events SET held_deleted_at = now()
-          WHERE id = ANY($1::bigint[]) AND owner_email = $2 AND held_deleted_at IS NULL`, [ids, owner])).rowCount;
+          WHERE (id = ANY($1::bigint[]) OR series_id = ANY($1::bigint[])) AND owner_email = $2 AND held_deleted_at IS NULL`, [ids, owner])).rowCount;
     }
     return (await q(
       'DELETE FROM events WHERE id = ANY($1::bigint[]) AND owner_email = $2 AND held_deleted_at IS NULL',
@@ -176,19 +213,21 @@ function createCompliance(q) {
   }
 
   // Retention: events that ended more than the policy's days ago, organizer by organizer,
-  // skipping anyone on hold.
+  // skipping anyone on hold. A series counts as ended when its last occurrence has (one that
+  // repeats forever never has), and occurrences changed on their own go with their series.
+  const ENDED = `(CASE WHEN rrule IS NULL THEN end_at ELSE series_end END) < $1`;
   async function sweepRetention() {
     const days = await policy.retentionDays('event');
     if (days == null) return 0;
     const cutoff = new Date(Date.now() - days * 86400000);
     const owners = (await q(
-      'SELECT DISTINCT owner_email FROM events WHERE held_deleted_at IS NULL AND end_at < $1', [cutoff])).rows;
+      `SELECT DISTINCT owner_email FROM events WHERE held_deleted_at IS NULL AND series_id IS NULL AND ${ENDED}`, [cutoff])).rows;
     let n = 0;
     for (const { owner_email: owner } of owners) {
       if (await policy.onHold(owner)) continue;
       const ids = (await q(
-        'SELECT id FROM events WHERE owner_email = $1 AND held_deleted_at IS NULL AND end_at < $2',
-        [owner, cutoff])).rows.map(r => r.id);
+        `SELECT id FROM events WHERE owner_email = $2 AND held_deleted_at IS NULL AND series_id IS NULL AND ${ENDED}`,
+        [cutoff, owner])).rows.map(r => r.id);
       n += await deleteEvents(owner, ids);
     }
     return n;

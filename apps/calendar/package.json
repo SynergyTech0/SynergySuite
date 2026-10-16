@@ -10,9 +10,11 @@
   "dependencies": {
     "@synergy/compliance": "*",
     "@synergy/config": "*",
+    "@synergy/dav": "*",
     "@synergy/db": "*",
     "@synergy/search": "*",
     "@synergy/server": "*",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "rrule-temporal": "^2.2.8"
   }
 }

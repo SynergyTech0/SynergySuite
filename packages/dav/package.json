@@ -1,0 +1,11 @@
+{
+  "name": "@synergy/dav",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebDAV sync for phones and desktop clients: the CalDAV and CardDAV protocol (discovery, PROPFIND, REPORT, sync tokens, ETags) over an app's own storage, and Basic sign-in with Account app passwords.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "node --test test/*.test.js" },
+  "dependencies": { "@xmldom/xmldom": "^0.9.12" }
+}
