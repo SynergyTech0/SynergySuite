@@ -131,6 +131,7 @@ export async function overview() {
        count(*) FILTER (WHERE platform = 'darwin')::int AS darwin,
        count(*) FILTER (WHERE platform = 'linux')::int AS linux,
        count(*) FILTER (WHERE platform = 'ios')::int AS ios,
+       count(*) FILTER (WHERE platform = 'android')::int AS android,
        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM mdm_enrollments e WHERE e.device_id = devices.id AND e.status = 'enrolled'))::int AS managed
      FROM devices WHERE retired_at IS NULL`,
   );
@@ -162,7 +163,7 @@ export async function listPolicies() {
 
 function platforms(v: unknown): string[] {
   if (v === undefined || v === null) return [];
-  if (!Array.isArray(v) || v.some((p) => !["windows", "darwin", "linux", "ios"].includes(p))) throw new UserError("platforms must be windows, darwin, linux or ios");
+  if (!Array.isArray(v) || v.some((p) => !["windows", "darwin", "linux", "ios", "android"].includes(p))) throw new UserError("platforms must be windows, darwin, linux, ios or android");
   return [...new Set(v as string[])].sort();
 }
 

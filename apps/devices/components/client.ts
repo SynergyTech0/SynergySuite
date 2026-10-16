@@ -66,8 +66,8 @@ export function download(name: string, text: string, type = "text/plain") {
 }
 
 export type View =
-  | "overview" | "devices" | "compliance" | "profiles" | "apps" | "apple" | "alerts" | "vulnerabilities" | "hunting" | "indicators" | "enroll" | "my" | "audit" | "about";
-export const VIEWS: View[] = ["overview", "devices", "compliance", "profiles", "apps", "apple", "alerts", "vulnerabilities", "hunting", "indicators", "enroll", "my", "audit", "about"];
+  | "overview" | "devices" | "compliance" | "profiles" | "apps" | "apple" | "android" | "alerts" | "vulnerabilities" | "hunting" | "indicators" | "enroll" | "my" | "audit" | "about";
+export const VIEWS: View[] = ["overview", "devices", "compliance", "profiles", "apps", "apple", "android", "alerts", "vulnerabilities", "hunting", "indicators", "enroll", "my", "audit", "about"];
 export type Route = { view: View; id: string | null; tab: string | null };
 
 function parse(hash: string, fallback: View): Route {

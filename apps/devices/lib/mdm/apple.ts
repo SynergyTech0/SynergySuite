@@ -5,10 +5,11 @@ import { serverHost } from "../enroll";
 import type { Facts } from "../rules";
 import { recompute } from "../state";
 import { UserError, secret, sha256, text, uuid } from "../util";
+import { androidCommand, androidRefreshDue, androidRetire, androidWipe, refreshAndroid } from "./android";
 import { deployToEnrollment } from "./catalog";
 import { MdmUnavailable, type PushCert, enqueue, mdmConfig, uploadPushCert } from "./nanomdm";
 import { type PlistValue, PlistError, boolOrNull, dict, num, parsePlist, str } from "./plist";
-import { type ApplePlatform, MDM_PROFILE_ID, enrollmentProfile } from "./profiles";
+import { type ApplePlatform, MDM_PROFILE_ID, type MdmPlatform, enrollmentProfile } from "./profiles";
 
 /**
  * Apple device management: enrollment of iPhones, iPads and Macs, what they report, and the
@@ -276,11 +277,12 @@ let lastSweep = 0;
  * overview requests and device check-ins (Devices has no scheduler of its own).
  */
 export async function refreshDue(only?: string[]): Promise<void> {
+  if (!only) await androidRefreshDue();
   if (!mdmConfig()) return;
   if (!only && Date.now() - lastSweep < 15 * 60_000) return;
   if (!only) lastSweep = Date.now();
   const rows = await q<{ id: string }>(
-    `SELECT id FROM mdm_enrollments WHERE status = 'enrolled' AND (info_asked_at IS NULL OR info_asked_at < now() - interval '1 day')
+    `SELECT id FROM mdm_enrollments WHERE status = 'enrolled' AND platform <> 'android' AND (info_asked_at IS NULL OR info_asked_at < now() - interval '1 day')
        AND ($1::text[] IS NULL OR id = ANY($1)) LIMIT 200`,
     [only ?? null],
   );
@@ -435,12 +437,12 @@ export async function send(ids: string[], command: Record<string, PlistValue | u
   return cmdUuid;
 }
 
-export type Managed = { enrollment_id: string; platform: ApplePlatform; status: string; owner: string | null; hostname: string; supervised: boolean | null };
+export type Managed = { enrollment_id: string; device_id: string; platform: MdmPlatform; mode: string; status: string; owner: string | null; hostname: string; supervised: boolean | null };
 
 /** The device's active Apple enrollment, checked against who is asking. */
 export async function managed(me: Me, deviceId: string): Promise<Managed> {
   const [m] = await q<Managed>(
-    `SELECT e.id AS enrollment_id, e.platform, e.status, d.owner, d.hostname, (e.info->>'IsSupervised')::boolean AS supervised
+    `SELECT e.id AS enrollment_id, e.device_id, e.platform, e.enrollment_type AS mode, e.status, d.owner, d.hostname, (e.info->>'IsSupervised')::boolean AS supervised
      FROM mdm_enrollments e JOIN devices d ON d.id = e.device_id
      WHERE e.device_id = $1 AND d.retired_at IS NULL AND ($2 OR d.owner = $3)
      ORDER BY (e.status = 'enrolled') DESC, e.last_seen DESC LIMIT 1`,
@@ -459,6 +461,11 @@ const pin6 = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
  */
 export async function lock(me: Me, deviceId: string, v: { message?: unknown; phone?: unknown }): Promise<{ pin: string | null }> {
   const m = await managed(me, deviceId);
+  if (m.platform === "android") {
+    await androidCommand(m.enrollment_id, "LOCK", me.email);
+    await audit(me.email, "mdm.lock", deviceId, { hostname: m.hostname });
+    return { pin: null };
+  }
   const pin = m.platform === "darwin" ? pin6() : null;
   const message = text(v.message, 200) || undefined;
   const phone = text(v.phone, 40) || undefined;
@@ -475,6 +482,11 @@ export async function erase(me: Me, deviceId: string, v: { confirm?: unknown; ke
   if (me.role !== "admin") throw new UserError("Only device admins can erase a device", 403);
   const m = await managed(me, deviceId);
   if (text(v.confirm, 300) !== m.hostname) throw new UserError("Type the device's name exactly to confirm");
+  if (m.platform === "android") {
+    await androidWipe(m.enrollment_id, m.device_id, me.email, v.keep_data_plan !== false);
+    await audit(me.email, "mdm.erase", deviceId, { hostname: m.hostname, work_profile_only: m.mode === "work_profile" });
+    return { pin: null };
+  }
   const pin = m.platform === "darwin" ? pin6() : null;
   await send(
     [m.enrollment_id],
@@ -490,13 +502,23 @@ export async function erase(me: Me, deviceId: string, v: { confirm?: unknown; ke
 export async function power(me: Me, deviceId: string, action: "restart" | "shutdown"): Promise<void> {
   if (me.role !== "admin") throw new UserError("Only device admins can restart or shut down devices", 403);
   const m = await managed(me, deviceId);
+  if (m.platform === "android") {
+    if (action !== "restart" || m.mode !== "fully_managed") throw new UserError("Android phones can only be restarted remotely, and only company phones (not work profiles)");
+    await androidCommand(m.enrollment_id, "REBOOT", me.email);
+    await audit(me.email, "mdm.restart", deviceId, { hostname: m.hostname });
+    return;
+  }
   if (m.platform === "ios" && m.supervised !== true) throw new UserError("iPhones and iPads can be restarted remotely only when supervised (Apple Business Manager or Apple Configurator)");
   await send([m.enrollment_id], { RequestType: action === "restart" ? "RestartDevice" : "ShutDownDevice" }, action === "restart" ? "Restart" : "Shut down", me.email);
   await audit(me.email, `mdm.${action}`, deviceId, { hostname: m.hostname });
 }
 
 export async function refreshManaged(me: Me, deviceId: string): Promise<boolean> {
-  const [e] = await q<{ id: string }>(`SELECT id FROM mdm_enrollments WHERE device_id = $1 AND status = 'enrolled' LIMIT 1`, [deviceId]);
+  const [e] = await q<{ id: string; platform: string }>(`SELECT id, platform FROM mdm_enrollments WHERE device_id = $1 AND status = 'enrolled' LIMIT 1`, [deviceId]);
+  if (e?.platform === "android") {
+    await refreshAndroid(e.id);
+    return true;
+  }
   if (!e || !mdmConfig()) return false;
   await askForInfo([e.id], me.email);
   return true;
@@ -504,7 +526,9 @@ export async function refreshManaged(me: Me, deviceId: string): Promise<boolean>
 
 /** Retiring a managed device also removes management from it: the device deletes the enrollment profile. */
 export async function unenroll(actor: string, deviceId: string): Promise<void> {
-  const rows = await q<{ id: string }>(`SELECT id FROM mdm_enrollments WHERE device_id = $1 AND status = 'enrolled'`, [deviceId]);
+  const all = await q<{ id: string; platform: string; enrollment_type: string }>(`SELECT id, platform, enrollment_type FROM mdm_enrollments WHERE device_id = $1 AND status = 'enrolled'`, [deviceId]);
+  for (const a of all.filter((r) => r.platform === "android")) await androidRetire(a.id, a.enrollment_type, actor);
+  const rows = all.filter((r) => r.platform !== "android");
   if (!rows.length || !mdmConfig()) return;
   await send(rows.map((r) => r.id), { RequestType: "RemoveProfile", Identifier: MDM_PROFILE_ID }, "Remove management", actor);
 }

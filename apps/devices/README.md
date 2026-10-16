@@ -32,6 +32,13 @@ iPhones, iPads and Macs can also be put under Apple device management, through
   device; App Store apps and Mac `.pkg` installers, installed by admins or by people on their own
   devices, and optionally on every new device. iPhones and iPads report their passcode and data
   protection for compliance; a Mac that also runs osquery is one device, matched by serial number.
+- **Android management** through Google's
+  [Android Management API](https://developers.google.com/android/management): a work profile on
+  personal phones (the organization never sees personal apps or data) or full management of
+  company phones; remote lock, erase (on a personal phone only the work profile goes) and restart;
+  passcode, Wi-Fi and restriction profiles; managed Google Play apps installed by admins or by
+  people on their own phones. Phones report encryption, screen lock and Play Integrity for
+  compliance.
 - **Suite links**: search results and eDiscovery (devices and alerts per person) through the
   Admin center, and the `endpoint_compliance` and `endpoint_threats` evidence collectors in Trust.
 
@@ -68,6 +75,22 @@ to Devices (`/api/svc/apple/webhook`, signed with `DEVICES_MDM_WEBHOOK_KEY`) sta
 network. Restart and shut down on iPhones and iPads need supervised devices; App Store installs
 without an Apple ID prompt need Apple Business Manager licenses, which aren't supported yet.
 
+## Android devices
+
+1. In a Google Cloud project, turn on the Android Management API and make a service account
+   with the Android Management User role. Download its JSON key and give it to Devices as
+   `DEVICES_ANDROID_SERVICE_ACCOUNT` (the JSON on one line, or base64 of it).
+2. In Devices › Android devices, choose Connect to Google and sign up with a Google account for
+   the organization (it doesn't need Google Workspace). Google sends you back to Devices, which
+   creates the organization's policy.
+3. People get a one-time work profile link from My devices and open it on their phone. Admins
+   enroll company phones from Android devices: factory reset the phone, tap its welcome screen six
+   times and scan the QR code.
+
+Commands and state go through Google, so phones need nothing installed and Devices needs no
+public port for them. Devices reads phones back every 15 minutes (or on Sync now). Each phone
+that has an app of its own gets its own policy; everything else comes from the shared one.
+
 ## Settings
 
 | Variable | |
@@ -83,12 +106,14 @@ without an Apple ID prompt need Apple Business Manager licenses, which aren't su
 | `DEVICES_MDM_API_KEY` | NanoMDM's API key, shared with `devices-mdm` |
 | `DEVICES_MDM_WEBHOOK_KEY` | Key NanoMDM signs its webhook with, shared with `devices-mdm` |
 | `DEVICES_SCEP_CHALLENGE` | SCEP challenge put in enrollment profiles, shared with `devices-scep` |
-| `DEVICES_ORG_NAME` | Organization name on management profiles (default `Synergy`) |
+| `DEVICES_ORG_NAME` | Organization name on management profiles and managed Google Play (default `Synergy`) |
+| `DEVICES_ANDROID_SERVICE_ACCOUNT` | Google Cloud service account key (JSON or base64) for the Android Management API |
 
 ## Not yet
 
-Android phones, Windows device management (lock, wipe, settings and apps on Windows), and
-blocking sign-in from non-compliant devices are the next milestones. Apple Business Manager
+Windows device management (lock, wipe, settings and apps on Windows) and blocking sign-in from
+non-compliant devices are the next milestones. Android zero-touch enrollment and private Play
+apps aren't supported yet. Apple Business Manager
 (automated enrollment and app licenses) isn't supported yet. Retiring a computer stops it
 reporting; it doesn't uninstall osquery.
 
