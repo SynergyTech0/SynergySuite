@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, Download, Plus, Settings2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Ctx, addDays, api, dayLabel, dollars, formData, money, rangeLabel, today } from "./client";
 import { Modal } from "./Modal";
@@ -36,6 +36,7 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
   const [open, setOpen] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
+  const [editingEmployer, setEditingEmployer] = useState(false);
   const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
   const [summary, setSummary] = useState<Quarter[]>([]);
 
@@ -60,14 +61,15 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
       <div className="viewhead">
         <h1>Payroll</h1>
         <div className="right row">
+          <button className="btn" onClick={() => setEditingEmployer(true)}><Building2 size={16} /> Company and bank</button>
           <button className="btn" onClick={() => setEditingSettings(true)}><Settings2 size={16} /> Settings</button>
           <button className="btn primary" onClick={() => setCreating(true)}><Plus size={16} /> New pay run</button>
         </div>
       </div>
       <div className="viewbody">
         <div className="banner">
-          Payroll works out US federal withholding, Social Security, Medicare and FUTA from the published 2026 figures, and state tax as a flat
-          rate you set. It does not file returns, deposit taxes or move money. Check the results against IRS Publication 15-T before you pay people.
+          Payroll works out US federal withholding, Social Security, Medicare and FUTA from the published 2026 figures, and state withholding from each state's
+          published tables. It does not file returns, deposit taxes or move money. Check the results against IRS Publication 15-T before you pay people.
         </div>
         {!settings.booksConnected && (
           <div className="banner info">Books isn&apos;t connected, so paid runs won&apos;t reach the ledger. Set BOOKS_SVC_TOKEN for HR and Books to the same value.</div>
@@ -121,6 +123,7 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
         </section>
       </div>
       {creating && <NewRunDialog settings={settings} last={runs.find((r) => r.status !== "void" && !r.totals.offCycle)} onClose={() => setCreating(false)} onDone={(id) => { setCreating(false); setOpen(id); }} />}
+      {editingEmployer && <EmployerDialog onClose={() => setEditingEmployer(false)} onDone={() => { setEditingEmployer(false); ctx.toast("Company and bank details saved"); }} />}
       {editingSettings && <SettingsDialog s={settings} onClose={() => setEditingSettings(false)} onDone={(s) => { setSettings(s); setEditingSettings(false); ctx.toast("Payroll settings saved"); }} />}
     </main>
   );
@@ -207,6 +210,7 @@ function SettingsDialog({ s, onClose, onDone }: { s: Settings; onClose: () => vo
 function RunView({ ctx, id, settings, onBack }: { ctx: Ctx; id: string; settings: Settings | null; onBack: () => void }) {
   const [data, setData] = useState<{ run: Run; paychecks: Check[] } | null>(null);
   const [editing, setEditing] = useState<Check | null>(null);
+  const [deposit, setDeposit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const load = () => api<{ run: Run; paychecks: Check[] }>(`/api/payroll/runs/${id}`).then(setData, (e) => setErr((e as Error).message));
@@ -243,6 +247,7 @@ function RunView({ ctx, id, settings, onBack }: { ctx: Ctx; id: string; settings
           {draft && <button className="btn" disabled={busy} onClick={() => act("recalculate")}>Recalculate</button>}
           {draft && <button className="btn" disabled={busy} onClick={() => act("void", "Void this pay run? It can't be undone.")}>Void</button>}
           {draft && <button className="btn primary" disabled={busy} onClick={() => act("approve")}>Approve</button>}
+          {(run.status === "approved" || run.status === "paid") && <button className="btn" onClick={() => setDeposit(true)}><Download size={16} /> Deposit file</button>}
           {run.status === "approved" && <button className="btn" disabled={busy} onClick={() => act("reopen")}>Back to draft</button>}
           {run.status === "approved" && (
             <button className="btn primary" disabled={busy} onClick={() => act("pay", `Mark pay run ${run.number} as paid${settings?.booksConnected ? " and post it to Books" : ""}? Employees will see their pay stubs.`)}>
@@ -296,6 +301,7 @@ function RunView({ ctx, id, settings, onBack }: { ctx: Ctx; id: string; settings
         </div>
         {draft && <p className="small muted">Click someone to change their hours or add a bonus. Pay details changed since this run started? Recalculate.</p>}
       </div>
+      {deposit && <DepositDialog runId={run.id} onClose={() => setDeposit(false)} />}
       {editing && <HoursDialog c={editing} onClose={() => setEditing(null)} onDone={async () => { setEditing(null); await load(); }} onRemoved={async () => { setEditing(null); ctx.toast("Taken out of this run"); await load(); }} />}
     </main>
   );
@@ -335,6 +341,159 @@ function HoursDialog({ c, onClose, onDone, onRemoved }: { c: Check; onClose: () 
           <button className="btn primary">Save</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+type Ach = {
+  odfiRouting: string; odfiName: string; originId: string; companyId: string; companyName: string; balanced: boolean; offsetRouting: string;
+  offsetType: "checking" | "savings"; offsetLast4: string;
+};
+type Employer = {
+  ein: string; legalName: string; address1: string; address2: string; city: string; state: string; zip: string; phone: string;
+  stateIds: Record<string, string>; contactName: string; contactEmail: string; contactPhone: string; bsoUserId: string; ach: Ach;
+};
+
+/** The company as tax forms and the bank know it. */
+function EmployerDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [e, setE] = useState<Employer | null>(null);
+  const [balanced, setBalanced] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api<Employer>("/api/payroll/employer").then((x) => { setE(x); setBalanced(x.ach.balanced); }, (x) => setErr((x as Error).message));
+  }, []);
+  return (
+    <Modal title="Company and bank" onClose={onClose} wide>
+      {!e ? <p className={err ? "error" : "muted"}>{err || "Loading…"}</p> : (
+        <form className="form" autoComplete="off" onSubmit={async (ev) => {
+          ev.preventDefault();
+          const b = formData(ev.currentTarget);
+          const ach: Record<string, unknown> = {};
+          const stateIds: Record<string, string> = {};
+          for (const [k, v] of Object.entries(b)) {
+            if (k.startsWith("ach_")) { ach[k.slice(4)] = v; delete b[k]; }
+          }
+          for (const line of String(b.stateIdsText ?? "").split(/\n/)) {
+            const m = line.trim().match(/^([A-Za-z]{2})\s*[:=,\s]\s*(.+)$/);
+            if (m) stateIds[m[1].toUpperCase()] = m[2].trim();
+          }
+          delete b.stateIdsText;
+          if (!ach.offsetAccount) delete ach.offsetAccount;
+          try {
+            await api("/api/payroll/employer", { method: "PUT", json: { ...b, stateIds, ach } });
+            onDone();
+          } catch (x) {
+            setErr((x as Error).message);
+          }
+        }}>
+          <fieldset>
+            <legend>Employer, as on W-2s and tax returns</legend>
+            <div className="grid2">
+              <label><span>Legal name</span><input name="legalName" defaultValue={e.legalName} /></label>
+              <label><span>EIN</span><input name="ein" defaultValue={e.ein} placeholder="12-3456789" /></label>
+              <label><span>Street address</span><input name="address1" defaultValue={e.address1} /></label>
+              <label><span>Suite</span><input name="address2" defaultValue={e.address2} /></label>
+            </div>
+            <div className="grid3">
+              <label><span>City</span><input name="city" defaultValue={e.city} /></label>
+              <label><span>State</span><input name="state" maxLength={2} defaultValue={e.state} style={{ textTransform: "uppercase" }} /></label>
+              <label><span>ZIP code</span><input name="zip" defaultValue={e.zip} /></label>
+            </div>
+            <label><span>Phone</span><input name="phone" defaultValue={e.phone} /></label>
+            <label>
+              <span>State withholding account numbers, one per line (CA: 123-4567-8)</span>
+              <textarea name="stateIdsText" rows={3} defaultValue={Object.entries(e.stateIds).map(([k, v]) => `${k}: ${v}`).join("\n")} />
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend>W-2 filing with the Social Security Administration</legend>
+            <div className="grid2">
+              <label><span>Contact name</span><input name="contactName" defaultValue={e.contactName} /></label>
+              <label><span>Contact email</span><input name="contactEmail" defaultValue={e.contactEmail} /></label>
+              <label><span>Contact phone</span><input name="contactPhone" defaultValue={e.contactPhone} /></label>
+              <label><span>BSO user ID</span><input name="bsoUserId" maxLength={8} defaultValue={e.bsoUserId} /></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Direct deposit, from your bank&apos;s ACH setup</legend>
+            <div className="grid2">
+              <label><span>Your bank&apos;s routing number</span><input name="ach_odfiRouting" inputMode="numeric" maxLength={9} defaultValue={e.ach.odfiRouting} /></label>
+              <label><span>Your bank&apos;s name</span><input name="ach_odfiName" maxLength={23} defaultValue={e.ach.odfiName} /></label>
+              <label><span>Immediate origin (often 1 and your EIN)</span><input name="ach_originId" maxLength={10} defaultValue={e.ach.originId} /></label>
+              <label><span>Company ID</span><input name="ach_companyId" maxLength={10} defaultValue={e.ach.companyId} /></label>
+              <label><span>Name on employees&apos; bank statements</span><input name="ach_companyName" maxLength={16} defaultValue={e.ach.companyName} /></label>
+            </div>
+            <label className="check">
+              <input type="checkbox" name="ach_balanced" checked={balanced} onChange={(x) => setBalanced(x.target.checked)} /> My bank wants balanced files (one debit from the company account)
+            </label>
+            <div className="grid3" hidden={!balanced}>
+              <label><span>Company routing number</span><input name="ach_offsetRouting" inputMode="numeric" maxLength={9} defaultValue={e.ach.offsetRouting} /></label>
+              <label><span>Company account number</span><input name="ach_offsetAccount" placeholder={e.ach.offsetLast4 ? `On file, ending ${e.ach.offsetLast4}` : ""} /></label>
+              <label><span>Account type</span><select name="ach_offsetType" defaultValue={e.ach.offsetType}><option value="checking">Checking</option><option value="savings">Savings</option></select></label>
+            </div>
+          </fieldset>
+          <p className="error" role="alert">{err}</p>
+          <div className="actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Save</button></div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+type DepositPreview = {
+  runNumber: number; payDate: string; checks: number; totalCents: number; ready: boolean;
+  lines: { employeeId: string; name: string; amountCents: number; accountLast4: string; problem: string }[];
+};
+
+/** Who's in the run's NACHA file, what's missing, and the download. */
+function DepositDialog({ runId, onClose }: { runId: string; onClose: () => void }) {
+  const [d, setD] = useState<DepositPreview | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api<DepositPreview>(`/api/payroll/runs/${runId}/deposit`).then(setD, (x) => setErr((x as Error).message));
+  }, [runId]);
+  const download = async () => {
+    setErr("");
+    const res = await fetch(`/api/payroll/runs/${runId}/deposit?download=1`);
+    if (!res.ok) {
+      setErr(((await res.json().catch(() => ({}))) as { error?: string }).error || `Request failed (${res.status})`);
+      return;
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "payroll.ach";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  return (
+    <Modal title="Direct deposit file" onClose={onClose} wide>
+      {!d ? <p className={err ? "error" : "muted"}>{err || "Loading…"}</p> : (
+        <div className="form">
+          <p className="small muted" style={{ margin: 0 }}>
+            A NACHA file for pay run {d.runNumber}, settling {dayLabel(d.payDate)}. Upload it to your bank&apos;s ACH or payroll page
+            {d.checks ? `. ${d.checks} ${d.checks === 1 ? "person is" : "people are"} paid by check and not in the file` : ""}.
+          </p>
+          <table className="list">
+            <thead><tr><th>Person</th><th>Account</th><th className="num">Amount</th></tr></thead>
+            <tbody>
+              {d.lines.map((l) => (
+                <tr key={l.employeeId}>
+                  <td>{l.name}</td>
+                  <td>{l.problem ? <span className="error">{l.problem}</span> : `ending ${l.accountLast4}`}</td>
+                  <td className="num">{money(l.amountCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr><td>Total</td><td /><td className="num">{money(d.totalCents)}</td></tr></tfoot>
+          </table>
+          <p className="error" role="alert">{err}</p>
+          <div className="actions">
+            <button type="button" className="btn" onClick={onClose}>Close</button>
+            <button type="button" className="btn primary" disabled={!d.ready} onClick={download}><Download size={15} /> Download file</button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
