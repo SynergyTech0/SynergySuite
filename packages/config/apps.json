@@ -1,11 +1,11 @@
 [
-  { "id": "home",      "name": "Home",      "m365": "Microsoft 365 home",   "port": 4400, "icon": "grid",     "dir": "prototype/workspace", "core": true },
   { "id": "admin",     "name": "Admin",     "m365": "Microsoft 365 admin center, Purview eDiscovery", "port": 3700, "icon": "settings", "dir": "apps/admin", "core": true },
   { "id": "search",    "name": "Search",    "m365": "Microsoft Search, Copilot", "port": 3710, "icon": "search", "dir": "apps/search", "core": true },
   { "id": "auth",      "name": "Account",   "m365": "Entra ID",             "port": 3500, "icon": "shield",   "dir": "apps/auth",      "core": true },
   { "id": "mail",      "name": "Mail",      "m365": "Outlook",              "port": 3200, "icon": "mail",     "dir": "apps/mail",      "core": true },
   { "id": "calendar",  "name": "Calendar",  "m365": "Outlook Calendar",     "port": 3130, "icon": "calendar", "dir": "apps/calendar",  "core": true },
   { "id": "bookings",  "name": "Bookings",  "m365": "Microsoft Bookings",   "port": 3150, "icon": "calendar", "dir": "apps/bookings",  "core": true },
+  { "id": "groups",    "name": "Groups",    "m365": "Microsoft 365 Groups, Teams teams, shared mailboxes, distribution lists", "port": 3830, "icon": "users", "dir": "apps/groups", "core": true },
   { "id": "chat",      "name": "Chat",      "m365": "Teams chat",           "port": 3080, "icon": "chat",     "dir": "apps/chat",      "core": true },
   { "id": "meet",      "name": "Meet",      "m365": "Teams meetings",       "port": 3420, "icon": "video",    "dir": "apps/meet",      "core": true },
   { "id": "phone",     "name": "Phone",     "m365": "Teams Phone",          "port": 3440, "icon": "phone",    "dir": "apps/phone",     "core": true },

@@ -44,7 +44,7 @@ export function MailApp({ me }: { me: string }) {
 
   const loadFolders = useCallback(async (account: string) => {
     try {
-      const { folders: fs } = await api<{ folders: Folder[] }>(`/api/folders?account=${account}`);
+      const { folders: fs } = await api<{ folders: Folder[] }>(`/api/folders?account=${encodeURIComponent(account)}`);
       setFolders((cur) => ({ ...cur, [account]: fs }));
       return fs;
     } catch (e) {

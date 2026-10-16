@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
 import { parseMsipHeader } from "@synergy/compliance";
-import { type Account, type Endpoint, UserError, vetEndpoint } from "./accounts";
+import { type Account, type Endpoint, UserError, onSuiteServer, vetEndpoint } from "./accounts";
 import { cleanHtml } from "./sanitize";
 import { policy } from "./policy";
 import { preserveUids } from "./preserved";
@@ -13,7 +13,7 @@ import { preserveUids } from "./preserved";
 async function endpoint(acct: Account, e: Endpoint): Promise<Endpoint> {
   // The suite mail server is ours, on the deployment's private network; outside servers are
   // checked every time we connect.
-  return acct.id === "suite" ? { ...e, allowPlain: true } : vetEndpoint(e);
+  return onSuiteServer(acct) ? { ...e, allowPlain: true } : vetEndpoint(e);
 }
 
 function tlsOptions(e: Endpoint) {
@@ -55,25 +55,71 @@ const ROLE_ORDER = ["\\Inbox", "\\Drafts", "\\Sent", "\\Archive", "\\Junk", "\\T
 
 export async function listFolders(acct: Account): Promise<Folder[]> {
   return withImap(acct, async (c) => {
-    const boxes: ListResponse[] = await c.list({ statusQuery: { messages: true, unseen: true } });
+    const boxes = scopeBoxes(acct, await c.list({ statusQuery: { messages: true, unseen: true } }));
     const folders = boxes
       .filter((b) => !b.flags.has("\\Noselect") && !b.flags.has("\\NonExistent"))
       .map((b) => ({
-        path: b.path,
-        name: b.specialUse === "\\Inbox" ? "Inbox" : b.name,
-        role: b.specialUse ?? null,
+        path: b.shown,
+        name: b.role === "\\Inbox" ? "Inbox" : b.name,
+        role: b.role,
         unread: b.status?.unseen ?? 0,
         total: b.status?.messages ?? 0,
-        depth: b.parent.length,
+        depth: b.depth,
       }));
     const rank = (f: Folder) => (f.role && ROLE_ORDER.includes(f.role) ? ROLE_ORDER.indexOf(f.role) : ROLE_ORDER.length);
     return folders.sort((a, b) => rank(a) - rank(b) || a.path.localeCompare(b.path));
   });
 }
 
-async function folderByRole(c: ImapFlow, role: string): Promise<string | null> {
-  const boxes = await c.list();
-  return boxes.find((b) => b.specialUse === role)?.path ?? null;
+async function folderByRole(c: ImapFlow, acct: Account, role: string): Promise<string | null> {
+  return scopeBoxes(acct, await c.list()).find((b) => b.role === role)?.path ?? null;
+}
+
+// ---------- shared mailboxes ----------
+
+/**
+ * A shared mailbox is the folder tree under acct.folderRoot in the member's own login. The
+ * browser only sees paths inside it with the root taken off ("INBOX", "Sent Items"), and every
+ * path it sends back is put under the root again, so nothing outside the tree can be named.
+ * Other accounts pass through unchanged.
+ */
+export type Box = ListResponse & { shown: string; role: string | null; depth: number };
+
+// imapflow picks one folder per role across the whole login, which is the member's own, so the
+// shared tree's roles come from its SPECIAL-USE flags or, failing that, its top-level names.
+const ROLE_NAMES: Record<string, string> = {
+  inbox: "\\Inbox", sent: "\\Sent", "sent items": "\\Sent", drafts: "\\Drafts", trash: "\\Trash",
+  "deleted items": "\\Trash", junk: "\\Junk", "junk email": "\\Junk", spam: "\\Junk", archive: "\\Archive",
+};
+
+export function scopeBoxes(acct: Pick<Account, "folderRoot">, boxes: ListResponse[]): Box[] {
+  const root = acct.folderRoot;
+  if (!root) return boxes.map((b) => ({ ...b, shown: b.path, role: b.specialUse ?? null, depth: b.parent.length }));
+  const out: Box[] = [];
+  for (const b of boxes) {
+    const d = b.delimiter || "/";
+    const prefix = root + d;
+    if (b.path.length <= prefix.length || b.path.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) continue;
+    const shown = b.path.slice(prefix.length);
+    const parts = shown.split(d);
+    const role = ROLE_ORDER.find((r) => b.flags.has(r)) ?? (parts.length === 1 ? ROLE_NAMES[shown.toLowerCase()] ?? null : null);
+    out.push({ ...b, shown, role, depth: parts.length - 1 });
+  }
+  return out;
+}
+
+/** The server's path for a path the browser sent, from a scoped LIST (no LIST needed otherwise). */
+export function serverPath(acct: Pick<Account, "folderRoot">, boxes: Box[], shown: string): string {
+  if (!acct.folderRoot) return shown;
+  const found = boxes.find((b) => b.shown === shown);
+  if (found) return found.path;
+  // Not there (yet): under the root, spelled as the server spells it.
+  const any = boxes[0];
+  return (any ? any.path.slice(0, any.path.length - any.shown.length) : `${acct.folderRoot}/`) + shown;
+}
+
+async function realPath(c: ImapFlow, acct: Account, shown: string): Promise<string> {
+  return acct.folderRoot ? serverPath(acct, scopeBoxes(acct, await c.list()), shown) : shown;
 }
 
 // ---------- message lists ----------
@@ -126,7 +172,7 @@ export async function listMessages(
   const pageSize = Math.min(Math.max(opts.pageSize ?? 50, 1), 200);
   const page = Math.max(opts.page ?? 0, 0);
   return withImap(acct, async (c) => {
-    const lock = await c.getMailboxLock(folder, { readOnly: true });
+    const lock = await c.getMailboxLock(await realPath(c, acct, folder), { readOnly: true });
     try {
       const exists = typeof c.mailbox === "object" ? c.mailbox.exists : 0;
       if (!exists) return { total: 0, messages: [] };
@@ -185,7 +231,7 @@ export async function getMessage(
   opts: { allowRemoteImages?: boolean; attachmentUrl: (index: number) => string },
 ): Promise<MessageDetail> {
   return withImap(acct, async (c) => {
-    const lock = await c.getMailboxLock(folder);
+    const lock = await c.getMailboxLock(await realPath(c, acct, folder));
     try {
       const { meta, parsed } = await fetchParsed(c, uid);
       if (!meta.flags?.has("\\Seen")) {
@@ -230,7 +276,7 @@ export function msipLabelOf(parsed: ParsedMail): { id: string; name?: string } |
 
 export async function getAttachment(acct: Account, folder: string, uid: number, index: number) {
   return withImap(acct, async (c) => {
-    const lock = await c.getMailboxLock(folder, { readOnly: true });
+    const lock = await c.getMailboxLock(await realPath(c, acct, folder), { readOnly: true });
     try {
       const { parsed } = await fetchParsed(c, uid);
       const a = parsed.attachments[index];
@@ -255,25 +301,27 @@ export async function changeMessages(acct: Account, folder: string, uids: number
   if (!uids.length) return;
   const range = uids.join(",");
   await withImap(acct, async (c) => {
-    const lock = await c.getMailboxLock(folder);
+    const boxes = acct.folderRoot ? scopeBoxes(acct, await c.list()) : [];
+    const real = (shown: string) => serverPath(acct, boxes, shown);
+    const lock = await c.getMailboxLock(real(folder));
     try {
       switch (change.action) {
         case "read": await c.messageFlagsAdd(range, ["\\Seen"], { uid: true }); break;
         case "unread": await c.messageFlagsRemove(range, ["\\Seen"], { uid: true }); break;
         case "flag": await c.messageFlagsAdd(range, ["\\Flagged"], { uid: true }); break;
         case "unflag": await c.messageFlagsRemove(range, ["\\Flagged"], { uid: true }); break;
-        case "move": await c.messageMove(range, change.to, { uid: true }); break;
+        case "move": await c.messageMove(range, real(change.to), { uid: true }); break;
         case "archive":
         case "junk": {
           const role = change.action === "archive" ? "\\Archive" : "\\Junk";
-          const dest = (await folderByRole(c, role)) ?? (await ensureFolder(c, change.action === "archive" ? "Archive" : "Junk"));
+          const dest = (await folderByRole(c, acct, role)) ?? (await ensureFolder(c, acct, change.action === "archive" ? "Archive" : "Junk"));
           await c.messageMove(range, dest, { uid: true });
           break;
         }
         case "delete": {
           // Like Outlook: delete moves to Deleted Items; deleting from there removes for good.
-          const trash = await folderByRole(c, "\\Trash");
-          const forGood = !trash || trash === folder;
+          const trash = await folderByRole(c, acct, "\\Trash");
+          const forGood = !trash || trash === real(folder);
           // Legal hold: keep a copy first (the server may also empty Deleted Items on its own),
           // in the suite mailbox and in outside accounts alike. The hold sweep copies everything
           // anyway; this covers mail newer than its last pass.
@@ -289,17 +337,20 @@ export async function changeMessages(acct: Account, folder: string, uids: number
   });
 }
 
-async function ensureFolder(c: ImapFlow, name: string): Promise<string> {
-  const boxes = await c.list();
-  const found = boxes.find((b) => b.path.toLowerCase() === name.toLowerCase());
+async function ensureFolder(c: ImapFlow, acct: Account, name: string): Promise<string> {
+  const boxes = scopeBoxes(acct, await c.list());
+  const found = boxes.find((b) => b.shown.toLowerCase() === name.toLowerCase());
   if (found) return found.path;
-  return (await c.mailboxCreate(name)).path;
+  return (await c.mailboxCreate(serverPath(acct, boxes, name))).path;
 }
 
 export async function createFolder(acct: Account, name: string): Promise<string> {
   const clean = name.trim();
   if (!clean || clean.length > 100) throw new UserError("Folder name must be 1 to 100 characters");
-  return withImap(acct, async (c) => (await c.mailboxCreate(clean)).path);
+  return withImap(acct, async (c) => {
+    const path = (await c.mailboxCreate(await realPath(c, acct, clean))).path;
+    return acct.folderRoot ? clean : path;
+  });
 }
 
 // ---------- sending ----------
@@ -352,7 +403,7 @@ export async function sendMessage(acct: Account, m: Outgoing): Promise<{ message
     // Keep a copy in Sent. Bcc stays in our copy so the sender can see who was included.
     const raw = await new MailComposer({ ...mail, messageId: info.messageId }).compile().build();
     await withImap(acct, async (c) => {
-      const sent = (await folderByRole(c, "\\Sent")) ?? (await ensureFolder(c, "Sent"));
+      const sent = (await folderByRole(c, acct, "\\Sent")) ?? (await ensureFolder(c, acct, "Sent"));
       await c.append(sent, raw, ["\\Seen"]);
     }).catch(() => { /* the mail went out; a missing Sent copy is not worth failing the send */ });
   }

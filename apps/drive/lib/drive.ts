@@ -1067,11 +1067,14 @@ export async function linkFolder(token: string, itemId?: string | null): Promise
 /* --------------------------------------------------------------- libraries */
 
 /** `managedBy`: the app that decides who is in it (e.g. "sites:12"), or null when its owners do. */
-export type Library = { id: string; name: string; description: string; role: Role; members: number; managedBy: string | null };
+/** `team` is set for a team's library: its name and members are managed in Groups. */
+export type Library = { id: string; name: string; description: string; role: Role; members: number; managedBy: string | null; team: boolean };
+
+export const TEAM_MEMBERS = "Members of a team's library are managed in Groups";
 
 export async function libraries(me: Me): Promise<Library[]> {
-  const rows = await q<{ id: string; name: string; description: string; role: Role; members: string; managed_by: string | null }>(
-    `SELECT l.id, l.name, l.description, m.role, l.managed_by,
+  const rows = await q<{ id: string; name: string; description: string; role: Role; members: string; managed_by: string | null; team: boolean }>(
+    `SELECT l.id, l.name, l.description, m.role, l.managed_by, l.source IS NOT NULL AS team,
             (SELECT COUNT(*) FROM library_members x WHERE x.library_id = l.id) AS members
      FROM libraries l JOIN library_members m ON m.library_id = l.id AND m.email = $1 ORDER BY lower(l.name)`,
     [me.email],
@@ -1090,7 +1093,7 @@ export async function createLibrary(me: Me, rawName: string, description = ""): 
     await tq("INSERT INTO library_members (library_id, email, role) VALUES ($1, $2, 'owner')", [l.id, me.email]);
     return l;
   });
-  return { id: lib.id, name, description, role: "owner", members: 1, managedBy: null };
+  return { id: lib.id, name, description, role: "owner", members: 1, managedBy: null, team: false };
 }
 
 async function libraryOwner(me: Me, libraryId: string): Promise<string> {
@@ -1099,6 +1102,12 @@ async function libraryOwner(me: Me, libraryId: string): Promise<string> {
   if (!role) throw new UserError("Not found", 404);
   if (role !== "owner") throw new UserError("Only the library's owners can do that", 403);
   return lib;
+}
+
+/** Groups pushes a team library's members and name, so a change made here would not last. */
+async function notTeam(libraryId: string, message = TEAM_MEMBERS): Promise<void> {
+  const [l] = await q<{ source: string | null }>("SELECT source FROM libraries WHERE id = $1", [libraryId]);
+  if (l?.source) throw new UserError(message, 409);
 }
 
 /** Refuses changes to a library's name or people when another app keeps them. */
@@ -1110,6 +1119,7 @@ async function refuseManaged(lib: string): Promise<void> {
 
 async function unmanagedLibrary(me: Me, libraryId: string): Promise<string> {
   const lib = await libraryOwner(me, libraryId);
+  if (patch.name !== undefined) await notTeam(lib, "A team's library is renamed in Groups");
   await refuseManaged(lib);
   return lib;
 }
@@ -1127,6 +1137,7 @@ export async function deleteLibrary(me: Me, libraryId: string): Promise<void> {
 
 /** Deletes an empty library (409 while it holds files); one with held files loses its members and stays. */
 export async function removeLibrary(lib: string): Promise<void> {
+  await notTeam(lib, "A team's library goes when the team is deleted in Groups");
   const [live] = await q("SELECT 1 FROM items WHERE library_id = $1 AND trash_root IS NULL LIMIT 1", [lib]);
   if (live) throw new UserError("Move or delete everything in the library first", 409);
   const ids = (await q<{ id: string }>("SELECT id FROM items WHERE library_id = $1 AND parent_id IS NULL", [lib])).map((r) => r.id);
@@ -1148,6 +1159,7 @@ export async function members(me: Me, libraryId: string): Promise<{ email: strin
 
 export async function setMember(me: Me, libraryId: string, rawEmail: unknown, rawRole: unknown): Promise<void> {
   const lib = await unmanagedLibrary(me, libraryId);
+  await notTeam(lib);
   const email = cleanEmail(rawEmail);
   if (!isRole(rawRole)) throw new UserError("Pick a role");
   await tx(async (tq) => {
@@ -1163,6 +1175,7 @@ export async function setMember(me: Me, libraryId: string, rawEmail: unknown, ra
 export async function removeMember(me: Me, libraryId: string, rawEmail: unknown): Promise<void> {
   const email = String(rawEmail ?? "").toLowerCase();
   const lib = email === me.email ? id(libraryId) : await libraryOwner(me, libraryId);
+  await notTeam(lib);
   await refuseManaged(lib);
   await tx(async (tq) => {
     await tq("DELETE FROM library_members WHERE library_id = $1 AND email = $2", [lib, email]);

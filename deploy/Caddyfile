@@ -73,8 +73,14 @@ calendar.{$SUITE_DOMAIN} {
 }
 
 chat.{$SUITE_DOMAIN} {
-	import signed_in
-	import to_app chat:3080
+	# Groups sets up team workspaces on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app chat:3080
+	}
 }
 
 forms.{$SUITE_DOMAIN} {
@@ -131,8 +137,14 @@ portal.{$SUITE_DOMAIN} {
 }
 
 mail.{$SUITE_DOMAIN} {
-	import signed_in
-	import to_app mail:3200
+	# Groups sets up shared mailboxes and lists on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app mail:3200
+	}
 }
 
 meet.{$SUITE_DOMAIN} {
@@ -408,6 +420,17 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+groups.{$SUITE_DOMAIN} {
+	# Other suite apps ask who is in which group on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app groups:3830
+	}
+}
+
 contracts.{$SUITE_DOMAIN} {
 	# The signing service reports progress on the internal network; never from outside.
 	handle /api/svc/* {
@@ -458,6 +481,10 @@ drive.{$SUITE_DOMAIN} {
 	handle @shared {
 		import maybe_signed_in
 		import to_app drive:3180
+	}
+	# Groups sets up team libraries on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
 	}
 	handle {
 		import signed_in

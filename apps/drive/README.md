@@ -20,6 +20,18 @@ Postgres holds the folder tree, versions, sharing and activity (`lib/db.ts`). Fi
 
 Downloads and previews are served with `nosniff` and a sandbox CSP, and HTML, SVG, XML and scripts go out as plain text or images, so an uploaded file can never run as a page on the Drive origin.
 
+## Team libraries
+
+Groups (apps/groups) gives each team a library and keeps it in step over a server-to-server API under `/api/svc/` (`lib/svc.ts`). Calls must carry `x-proxy-auth-secret: $PROXY_SHARED_SECRET`; anything else gets a 404, and the gateway never forwards `/api/svc/`.
+
+| Route | Does |
+|---|---|
+| `PUT /api/svc/libraries/groups:<id>` | `{ name, description?, members: [{ email, role }] }`: creates the library or renames it, and makes its members exactly that list. Returns `{ id, url }` |
+| `GET /api/svc/libraries/groups:<id>/recent?limit=8` | Latest files and folders in it (at most 50), recycle bin and held items left out |
+| `DELETE /api/svc/libraries/groups:<id>` | Removes every member; the files stay, and come back if the team does |
+
+A team's library is renamed, re-membered and deleted only from Groups: Drive shows its members read-only and refuses those changes.
+
 ## Settings
 
 | Setting | Meaning |

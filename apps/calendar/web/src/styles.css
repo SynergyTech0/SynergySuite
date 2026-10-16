@@ -34,9 +34,11 @@ body { font: 14.5px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; backgroun
 }
 .event.company { background: #7c3aed; }
 .event.booking { background: #0e9f6e; }
+.event.group, .allday-chip.group { background: #c2410c; }
 .event.other { opacity: .72; outline: 1px dashed rgba(255,255,255,.6); }
 .ev-title { display: block; font-weight: 700; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-time { display: block; font-size: 11px; opacity: .85; }
+.ev-cal { display: block; font-size: 11px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 button { font: inherit; }
 .event:focus-visible, .allday-chip:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }

@@ -5,6 +5,7 @@ const { baseApp, requireUser, requireBearer, wrap, errorHandler, serveSpa } = re
 const { portFor } = require('@synergy/config');
 const { createCompliance } = require('./compliance');
 const { createSearch } = require('./search');
+const groupCalendars = require('./groups');
 const { SearchInputError } = require('@synergy/search');
 
 const PORT = portFor('calendar');
@@ -14,12 +15,13 @@ const SVC_TOKEN = process.env.CAL_SVC_TOKEN || '';
 const db = createDb({ devUrl: 'postgres://dev:dev@127.0.0.1:5475/cal' });
 const q = db.q;
 const compliance = createCompliance(q);
+const groups = groupCalendars.createGroups(db);
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS events (
     id          BIGSERIAL PRIMARY KEY,
     owner_email TEXT NOT NULL,
-    calendar    TEXT NOT NULL DEFAULT 'personal' CHECK (calendar IN ('personal','company')),
+    calendar    TEXT NOT NULL DEFAULT 'personal' CHECK (calendar IN ('personal','company','group')),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     location    TEXT NOT NULL DEFAULT '',
@@ -46,8 +48,10 @@ CREATE INDEX IF NOT EXISTS event_held_versions_event_idx ON event_held_versions 
 `;
 
 
-// events visible to a user: own, company calendar, or where they're an attendee
-const VISIBLE = `(owner_email = $1 OR calendar = 'company' OR attendees ? $1) AND held_deleted_at IS NULL`;
+// events visible to a user: own, company calendar, where they're an attendee, or on a group
+// calendar they're a member of
+const VISIBLE = `(owner_email = $1 OR calendar = 'company' OR attendees ? $1
+  OR ${groupCalendars.VISIBLE_GROUP}) AND held_deleted_at IS NULL`;
 
 async function busyBlocks(email, from, to) {
   const { rows } = await q(
@@ -66,19 +70,50 @@ function cleanAttendees(list) {
 function cleanEvent(b, ownerEmail) {
   const s = new Date(b.startAt), e = new Date(b.endAt);
   if (isNaN(s) || isNaN(e) || !(s < e)) return null;
+  const calendar = ['company', 'group'].includes(b.calendar) ? b.calendar : 'personal';
   return [
     ownerEmail,
-    b.calendar === 'company' ? 'company' : 'personal',
+    calendar,
     String(b.title || '').slice(0, 300).trim() || '(untitled)',
     String(b.description || '').slice(0, 2000),
     String(b.location || '').slice(0, 300),
     s, e, Boolean(b.allDay),
     JSON.stringify(cleanAttendees(b.attendees)),
+    calendar === 'group' ? String(b.groupSource || '') : null,
   ];
+}
+
+// A new event on a group calendar: the organizer must be a member of it. Returns an error
+// [status, message] or null when the event may be added.
+async function groupRefusal(vals) {
+  if (vals[1] !== 'group') return null;
+  if (!groupCalendars.isSource(vals[9])) return [400, 'groupSource required for a group event'];
+  if (!(await groups.roleOf(vals[0], vals[9]))) return [403, 'not a member of that group calendar'];
+  return null;
+}
+
+// The event if this person may change it: its organizer, or an owner of the group calendar it is on.
+async function editableEvent(email, id) {
+  const { rows } = await q(
+    'SELECT id, owner_email, calendar, group_source, start_at, end_at FROM events WHERE id = $1 AND held_deleted_at IS NULL',
+    [id]);
+  const ev = rows[0];
+  if (!ev) return null;
+  if (ev.owner_email === email) return ev;
+  if (ev.calendar === 'group' && (await groups.roleOf(email, ev.group_source)) === 'owner') return ev;
+  return null;
 }
 
 const router = express.Router();
 router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail })));
+
+router.get('/calendars', wrap(async (req, res) => {
+  res.json([
+    { id: 'personal', name: 'Personal' },
+    { id: 'company', name: 'Company' },
+    ...(await groups.calendarsFor(req.userEmail)),
+  ]);
+}));
 
 router.get('/events', wrap(async (req, res) => {
   const from = new Date(req.query.from || Date.now() - 7 * 86400000);
@@ -91,51 +126,74 @@ router.get('/events', wrap(async (req, res) => {
 router.post('/events', wrap(async (req, res) => {
   const vals = cleanEvent(req.body || {}, req.userEmail);
   if (!vals) return res.status(400).json({ error: 'title, valid startAt < endAt required' });
+  const refused = await groupRefusal(vals);
+  if (refused) return res.status(refused[0]).json({ error: refused[1] });
   const { rows } = await q(
-    `INSERT INTO events (owner_email, calendar, title, description, location, start_at, end_at, all_day, attendees)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, vals);
+    `INSERT INTO events (owner_email, calendar, title, description, location, start_at, end_at, all_day, attendees, group_source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`, vals);
   res.json(rows[0]);
 }));
 
 router.patch('/events/:id', wrap(async (req, res) => {
   const b = req.body || {};
   const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id)) return res.status(404).json({ error: 'not found' });
+  const cur = await editableEvent(req.userEmail, id);
+  if (!cur) return res.status(404).json({ error: 'not found' });
   let start = null, end = null;
   if (b.startAt != null || b.endAt != null) {
-    const cur = await q('SELECT start_at, end_at FROM events WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL',
-      [id, req.userEmail]);
-    if (!cur.rows.length) return res.status(404).json({ error: 'not found' });
     start = b.startAt != null ? new Date(b.startAt) : null;
     end = b.endAt != null ? new Date(b.endAt) : null;
     if ((start && isNaN(start)) || (end && isNaN(end))) {
       return res.status(400).json({ error: 'startAt and endAt must be valid dates' });
     }
-    if (!((start || cur.rows[0].start_at) < (end || cur.rows[0].end_at))) {
+    if (!((start || cur.start_at) < (end || cur.end_at))) {
       return res.status(400).json({ error: 'startAt must be before endAt' });
     }
   }
-  await compliance.keepVersion(req.userEmail, id);
+  // Moving between calendars: only the organizer, and onto a group calendar only as its member.
+  let calendar = cur.calendar, groupSource = cur.group_source;
+  if (['personal', 'company', 'group'].includes(b.calendar)) {
+    calendar = b.calendar;
+    groupSource = calendar !== 'group' ? null : b.groupSource != null ? String(b.groupSource) : cur.group_source;
+    if (calendar !== cur.calendar || groupSource !== cur.group_source) {
+      if (cur.owner_email !== req.userEmail) {
+        return res.status(403).json({ error: 'only the organizer can move an event to another calendar' });
+      }
+      if (calendar === 'group') {
+        if (!groupCalendars.isSource(groupSource)) return res.status(400).json({ error: 'groupSource required for a group event' });
+        if (!(await groups.roleOf(req.userEmail, groupSource))) {
+          return res.status(403).json({ error: 'not a member of that group calendar' });
+        }
+      }
+    }
+  }
+  await compliance.keepVersion(cur.owner_email, id);
   const { rows } = await q(
     `UPDATE events SET
        title = COALESCE($3, title), description = COALESCE($4, description),
        location = COALESCE($5, location),
        start_at = COALESCE($6, start_at), end_at = COALESCE($7, end_at),
-       calendar = COALESCE($8, calendar),
+       calendar = $8, group_source = $10,
        attendees = COALESCE($9, attendees)
      WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL RETURNING *`,
-    [id, req.userEmail,
+    [id, cur.owner_email,
      b.title != null ? String(b.title).slice(0, 300) : null,
      b.description != null ? String(b.description).slice(0, 2000) : null,
      b.location != null ? String(b.location).slice(0, 300) : null,
      start, end,
-     b.calendar === 'company' ? 'company' : b.calendar === 'personal' ? 'personal' : null,
-     Array.isArray(b.attendees) ? JSON.stringify(cleanAttendees(b.attendees)) : null]);
+     calendar,
+     Array.isArray(b.attendees) ? JSON.stringify(cleanAttendees(b.attendees)) : null,
+     groupSource]);
   if (!rows.length) return res.status(404).json({ error: 'not found' });
   res.json(rows[0]);
 }));
 
 router.delete('/events/:id', wrap(async (req, res) => {
-  const rowCount = await compliance.deleteEvents(req.userEmail, [Number(req.params.id)]);
+  const id = Number(req.params.id);
+  const cur = Number.isSafeInteger(id) ? await editableEvent(req.userEmail, id) : null;
+  // Deleted as the organizer's event, so the organizer's hold (if any) keeps it.
+  const rowCount = cur ? await compliance.deleteEvents(cur.owner_email, [id]) : 0;
   if (!rowCount) return res.status(404).json({ error: 'not found' });
   res.json({ ok: true });
 }));
@@ -159,7 +217,7 @@ router.get('/freebusy', wrap(async (req, res) => {
 }));
 
 async function main() {
-  await db.migrate(SCHEMA, 'calendar');
+  await db.migrate(SCHEMA + groupCalendars.SCHEMA, 'calendar');
   const app = express();
   baseApp(app, express, '256kb');
 
@@ -181,12 +239,16 @@ async function main() {
     if (!owner.includes('@')) return res.status(400).json({ error: 'ownerEmail required' });
     const vals = cleanEvent(b, owner);
     if (!vals) return res.status(400).json({ error: 'title, valid startAt < endAt required' });
+    const refused = await groupRefusal(vals);
+    if (refused) return res.status(refused[0]).json({ error: refused[1] });
     const { rows } = await q(
-      `INSERT INTO events (owner_email, calendar, title, description, location, start_at, end_at, all_day, attendees, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      `INSERT INTO events (owner_email, calendar, title, description, location, start_at, end_at, all_day, attendees, group_source, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [...vals, String(b.source || 'api').slice(0, 20)]);
     res.json({ id: rows[0].id });
   }));
+  // Group calendars, pushed by the Groups app.
+  app.use('/api/svc', svcAuth, groups.svc);
   // A service may move or remove only the events it added, on the organizer's calendar it names
   // (Bookings rescheduling or cancelling an appointment). Held organizers keep what is replaced.
   const svcEvent = (b) => ({
