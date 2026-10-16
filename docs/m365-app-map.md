@@ -24,7 +24,7 @@
 | Viva Engage / M365 Groups | Communities, group mailboxes | workspace `groups` | Prototype |
 | Visio | Flowcharts, org charts, network and floor plans | `apps/diagrams` (draw.io editor, .vsdx import; no .vsdx export) | Have |
 | Stream / Clipchamp | Video library, recordings | none (meet recordings only) | **Gap** |
-| Power Automate | Workflows between apps | none (n8n runs separately on your PC) | **Gap** |
+| Power Automate | Workflows between apps | `apps/flow` (Synergy Flow) on the Activepieces engine, with Synergy steps for the suite apps | Have |
 | Power Apps | Low-code business apps | `apps/builder` (Synergy Builder, on Base data) | Have |
 | Power BI | Dashboards, reports | `apps/insights` (Synergy Insights, on Metabase) | Have |
 | Microsoft Search | One search across mail, files, chats, sites | `apps/search` (fans out to each app's `/api/search` as the signed-in person) + search box in the suite header | Have |
