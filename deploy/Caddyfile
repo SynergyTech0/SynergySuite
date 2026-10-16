@@ -270,6 +270,11 @@ todo.{$SUITE_DOMAIN} {
 	import to_app todo:3195
 }
 
+engage.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app engage:3740
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.
