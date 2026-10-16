@@ -94,6 +94,7 @@ COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
 COPY apps/trust/package.json apps/trust/
 COPY addons/people/package.json addons/people/
+COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/cad --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages

@@ -21,6 +21,7 @@
   { "id": "notes",     "name": "Notes",     "m365": "OneNote",              "port": 3135, "icon": "note",     "dir": "apps/notes",     "core": true },
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },
   { "id": "crm",       "name": "CRM",       "m365": "Dynamics 365 Sales",   "port": 3095, "icon": "target",   "dir": "apps/crm",       "core": true },
+  { "id": "hr",        "name": "HR",        "m365": "Dynamics 365 Human Resources, payroll", "port": 3145, "icon": "users", "dir": "apps/hr", "core": true },
   { "id": "desk",      "name": "Desk",      "m365": "Dynamics 365 Customer Service", "port": 3105, "icon": "lifebuoy", "dir": "apps/desk", "core": true },
   { "id": "sign",      "name": "Sign",      "m365": "(add-on)",             "port": 3300, "icon": "pen",      "dir": "addons/sign",    "core": false },
   { "id": "campaigns", "name": "Campaigns", "m365": "(add-on)",             "port": 3400, "icon": "send",     "dir": "addons/campaigns", "core": false },

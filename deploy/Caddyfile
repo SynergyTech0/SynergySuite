@@ -109,9 +109,14 @@ sites.{$SUITE_DOMAIN} {
 	}
 }
 
-people.{$SUITE_DOMAIN} {
+hr.{$SUITE_DOMAIN} {
 	import signed_in
-	import to_app people:3140
+	import to_app hr:3145
+}
+
+# HR took over from the People add-on; old links land there.
+people.{$SUITE_DOMAIN} {
+	redir https://hr.{$SUITE_DOMAIN}{uri}
 }
 
 portal.{$SUITE_DOMAIN} {
