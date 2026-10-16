@@ -57,6 +57,7 @@ jobs:
             {"name":"contacts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contacts","paths":["apps/contacts/"]},
             {"name":"crm","file":"deploy/next-app.Dockerfile","context":".","args":"APP=crm","paths":["apps/crm/"]},
             {"name":"desk","file":"deploy/next-app.Dockerfile","context":".","args":"APP=desk","paths":["apps/desk/"]},
+            {"name":"ops","file":"deploy/next-app.Dockerfile","context":".","args":"APP=ops","paths":["apps/ops/"]},
             {"name":"drive","file":"deploy/next-app.Dockerfile","context":".","args":"APP=drive","paths":["apps/drive/"]},
             {"name":"insights","file":"deploy/next-app.Dockerfile","context":".","args":"APP=insights","paths":["apps/insights/"]},
             {"name":"mail","file":"deploy/next-app.Dockerfile","context":".","args":"APP=mail","paths":["apps/mail/"]},

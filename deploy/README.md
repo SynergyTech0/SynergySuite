@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, bookings, cad, calendar, chat, commerce, contacts, crm, desk, drive, engage, forms, insights, mail, meet, notes, office, photo, planner, search, sites, stream, todo, trust, hr (which took over the People add-on's database) and the portal add-on) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, bookings, cad, calendar, chat, commerce, contacts, crm, desk, drive, engage, forms, insights, mail, meet, notes, office, ops, photo, planner, search, sites, stream, todo, trust, hr (which took over the People add-on's database) and the portal add-on) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -43,7 +43,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `bookings`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `crm`, `desk`, `drive`, `engage`, `forms`, `insights`, `mail`, `meet`, `notes`, `office`, `people`, `hr`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `bookings`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `crm`, `desk`, `drive`, `engage`, `forms`, `insights`, `mail`, `meet`, `notes`, `office`, `ops`, `people`, `hr`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.
@@ -64,7 +64,7 @@ To turn demo mode off, clear `DEMO_MODE` and `up` again: the `demo` service exit
 
 ## Public paths
 
-These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`).
+These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Ops' demand and purchase-request feeds (`ops.<domain>/api/svc/*`, which check `OPS_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`).
 
 ## Mail
 

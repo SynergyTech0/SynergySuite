@@ -43,7 +43,7 @@ const BY_SLUG: Record<string, string> = {
   sign: 'pen', signature: 'pen', esign: 'pen',
   boards: 'board', kanban: 'board', tasks: 'board', projects: 'board',
   routes: 'pin', dispatch: 'pin', field: 'pin',
-  msp: 'wrench', tools: 'wrench', maintenance: 'wrench',
+  msp: 'wrench', tools: 'wrench', maintenance: 'wrench', ops: 'wrench', operations: 'wrench', manufacturing: 'wrench',
   desk: 'ticket', support: 'ticket', helpdesk: 'ticket', tickets: 'ticket',
   books: 'book', ledger: 'book', accounting: 'book',
   exec: 'chart', reports: 'chart', dashboard: 'chart',
