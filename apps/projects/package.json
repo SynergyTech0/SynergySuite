@@ -1,0 +1,32 @@
+{
+  "name": "synergy-projects",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy Projects - project plans, team and rates, timesheets, expenses, approvals and billing to Books",
+  "scripts": {
+    "dev": "next dev -p 3820",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3820",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@synergy/ai": "*",
+    "@synergy/compliance": "*",
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/shell": "*",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

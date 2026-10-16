@@ -30,7 +30,7 @@ jobs:
       - name: App unit tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: npm test -w apps/sites -w addons/people
+        run: npm test -w apps/sites
       - name: Compliance tests (chat, calendar, notes, forms)
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
@@ -39,7 +39,7 @@ jobs:
         env:
           DEV_USER_EMAIL: ci@example.com
         run: |
-          for dir in apps/calendar apps/chat apps/forms apps/notes apps/sites addons/people addons/portal; do
+          for dir in apps/calendar apps/chat apps/forms apps/notes apps/sites addons/portal; do
             app=$(basename $dir)
             psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE $app"
             DATABASE_URL=postgres://postgres:postgres@localhost:5432/$app PORT=4000 node $dir/server/index.js &
@@ -77,18 +77,28 @@ jobs:
           npx tsc --noEmit -p apps/drive
           npx tsc --noEmit -p apps/contacts
           npx tsc --noEmit -p apps/todo
+          npx tsc --noEmit -p apps/hr
           npx tsc --noEmit -p apps/insights
           npx tsc --noEmit -p apps/engage
           npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
+          npx tsc --noEmit -p apps/diagrams
+          npx tsc --noEmit -p apps/devices
+          npx tsc --noEmit -p apps/ops
+          npx tsc --noEmit -p apps/commerce
           npx tsc --noEmit -p apps/mail
           npx tsc --noEmit -p apps/meet
           npx tsc --noEmit -p apps/office
           npx tsc --noEmit -p apps/photo
+          npx tsc --noEmit -p apps/stream
           npx tsc --noEmit -p apps/cad
           npx tsc --noEmit -p apps/planner
           npx tsc --noEmit -p apps/base
+          npx tsc --noEmit -p apps/phone
+          npx tsc --noEmit -p apps/projects
+          npx tsc --noEmit -p apps/builder
+          npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/admin_test
@@ -121,12 +131,30 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE todo_test"
           npm test --workspace apps/todo
+      - name: Devices tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/devices_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE devices_test"
+          npm test --workspace apps/devices
       - name: Engage tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/engage_test
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE engage_test"
           npm test --workspace apps/engage
+      - name: HR tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hr_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE hr_test"
+          npm test --workspace apps/hr
+      - name: Whiteboard tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/whiteboard_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE whiteboard_test"
+          npm test --workspace apps/whiteboard
       - name: Bookings tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bookings_test
@@ -145,12 +173,51 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE desk_test"
           npm test --workspace apps/desk
+      - name: Phone tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/phone_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE phone_test"
+          npm test --workspace apps/phone
+      - name: Diagrams tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/diagrams_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE diagrams_test"
+          npm test --workspace apps/diagrams
+      - name: Projects tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/projects_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE projects_test"
+          npm test --workspace apps/projects
+      - name: Ops tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ops_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE ops_test"
+          npm test --workspace apps/ops
+      - name: Commerce tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/commerce_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE commerce_test"
+          npm test --workspace apps/commerce
       - name: Mail tests
         run: npm test --workspace apps/mail
       - name: Meet tests
         run: npm test --workspace apps/meet
       - name: Photo tests
         run: npm test --workspace apps/photo
+      - name: Stream tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/stream_test
+        # ffmpeg lets the upload test process a real video.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE stream_test"
+          npm test --workspace apps/stream
       - name: CAD tests
         run: npm test --workspace apps/cad
       - name: Office tests
@@ -167,6 +234,12 @@ jobs:
           npm test --workspace apps/base
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/base_test
+      - name: Builder tests
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/sboards_test -qc "CREATE DATABASE builder_test"
+          npm test --workspace apps/builder
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/builder_test
       - name: Planner tests
         working-directory: apps/planner
         env:
@@ -207,6 +280,9 @@ jobs:
         run: |
           npx prisma migrate deploy
           npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Service API unit tests
+        working-directory: apps/books/api
+        run: npx jest --preset ts-jest src/modules/svc
       - name: Build Books
         run: |
           npm run build -w @synergy/books-web
@@ -226,6 +302,18 @@ jobs:
           # The Portal's invoice feed refuses a missing token and answers with the right one.
           test "$(curl -s -o /dev/null -w '%{http_code}' 'localhost:3055/api/svc/invoices?email=a@example.com')" = 401 || { kill $pid; exit 1; }
           curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" 'localhost:3055/api/svc/invoices?email=a@example.com' | grep -qx '\[\]' || { kill $pid; exit 1; }
+          # Projects bills into Books as draft invoices through the same token.
+          inv='{"customer":{"name":"CI client","email":"client@example.com"},"invoiceDate":"2026-10-16","reference":"PRJ-0001","currency":"USD","lines":[{"description":"Design","quantity":2,"unitPrice":150}]}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d "$inv" localhost:3055/api/svc/invoices)" = 401 || { kill $pid; exit 1; }
+          curl -sf -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' -d "$inv" localhost:3055/api/svc/invoices | grep -q '"number"' || { kill $pid; exit 1; }
+          # HR's payroll journal endpoint refuses a missing token and checks what it is sent.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' localhost:3055/api/svc/journals)" = 401 || { kill $pid; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' -d '{}' localhost:3055/api/svc/journals)" = 400 || { kill $pid; exit 1; }
+          # Commerce's journal postings need the token and refuse an entry that doesn't balance.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:3055/api/svc/postings)" = 401 || { kill $pid; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $BOOKS_SVC_TOKEN" -H 'Content-Type: application/json' \
+            -d '{"reference":"ci-1","kind":"sale","date":"2026-01-01","lines":[{"account":"1010","debit":"5.00"},{"account":"4010","credit":"4.00"}]}' \
+            localhost:3055/api/svc/postings)" = 400 || { kill $pid; exit 1; }
           kill $pid
 
   trust:

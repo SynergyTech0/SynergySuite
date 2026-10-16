@@ -11,7 +11,7 @@ import { LibraryDialog } from "./LibraryDialog";
 import { Confirm, Prompt } from "./Modal";
 import { Preview } from "./Preview";
 import { ShareDialog } from "./ShareDialog";
-import { type Crumb, type Item, type Library, type Me, type Role, api, contentUrl, formatSize, formatWhen, person } from "./client";
+import { type Crumb, type Item, type Library, type Me, type Role, api, contentUrl, formatSize, formatWhen, openWith, person } from "./client";
 
 type View = "files" | "recent" | "starred" | "shared" | "sharedbyme" | "trash" | "search";
 type Loc = { view: View; parent?: string; library?: string; q?: string };
@@ -713,6 +713,7 @@ export function DriveApp() {
           onPrev={pi > 0 ? () => setPreview(files[pi - 1].id) : undefined}
           onNext={pi < files.length - 1 ? () => setPreview(files[pi + 1].id) : undefined}
           onShare={() => setDialog({ kind: "share", item: previewItem })}
+          openWith={openWith(previewItem)}
         />
       )}
 

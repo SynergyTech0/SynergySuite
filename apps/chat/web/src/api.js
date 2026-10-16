@@ -38,6 +38,7 @@ export const api = {
   edit: (id, body) => req('PATCH', `/api/messages/${id}`, { body }),
   remove: id => req('DELETE', `/api/messages/${id}`),
   react: (id, emoji) => req('POST', `/api/messages/${id}/reactions`, { emoji }),
+  whiteboard: id => req('POST', `/api/channels/${id}/whiteboard`),
   markRead: (id, lastMessageId) => req('POST', `/api/channels/${id}/read`, { lastMessageId }),
   search: (q, ws) => req('GET', `/api/search?q=${encodeURIComponent(q)}${ws ? `&ws=${ws}` : ''}`),
   // Upload an attachment; the server stores it in SynergyDrive and returns

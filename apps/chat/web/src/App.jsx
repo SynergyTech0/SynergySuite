@@ -85,6 +85,7 @@ const EMOJI = ['👍', '❤️', '😂', '🎉', '👀', '✅'];
 // Sibling suite apps live next to chat: chat.example.com -> meet.example.com.
 const suiteApp = (id) => `${location.protocol}//${location.hostname.replace(/^[^.]+/, id)}`;
 const MEET_BASE = suiteApp('meet'); // SynergyMeet — video huddles
+const PHONE_BASE = suiteApp('phone'); // Synergy Phone — voice calls
 const DRIVE_BASE = suiteApp('drive'); // SynergyDrive — files
 // Optional Synapse integration; the button only shows when VITE_SYNAPSE_URL is set at build time.
 const SYNAPSE_URL = import.meta.env.VITE_SYNAPSE_URL || '';
@@ -106,6 +107,7 @@ const ICON = {
   lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
   at: 'M16 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM16 8v5a3 3 0 0 0 5 2c1-2 1-4 0-6a9 9 0 1 0-4 9',
   video: 'M4 7h11v10H4zM15 10l5-3v10l-5-3',
+  phone: 'M6.6 3.5 9 3l1.6 4.2-2 1.4a12 12 0 0 0 6.8 6.8l1.4-2L21 15l-.5 2.4A2 2 0 0 1 18.5 19 15.5 15.5 0 0 1 5 5.5a2 2 0 0 1 1.6-2z',
   mic: 'M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3',
   slash: 'M14 4 10 20',
   bold: 'M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z',
@@ -116,6 +118,7 @@ const ICON = {
   quote: 'M7 7H4v6h3l-1 4M17 7h-3v6h3l-1 4',
   emoji: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9 10h.01M15 10h.01M8 14a4 4 0 0 0 8 0',
   send: 'M4 12l16-8-6 16-2-6-8-2z',
+  board: 'M3 4h18v12H3zM8 20l4-4 4 4M7 12c2-3 3-3 5-1s3 1 5-2',
 };
 function Icon({ name, size = 18, className }) {
   return (
@@ -276,6 +279,7 @@ export default function App() {
   }, [loadMe]);
 
   // Deep link from suite search: /?ws=<id>&channel=<id>&msg=<id>[&thread=<root id>].
+  // From Phone's call history: /?dm=<email> opens a direct message with that person.
   const deepLinkRef = useRef(null);
   useEffect(() => {
     let ws;
@@ -285,6 +289,9 @@ export default function App() {
       const general = linked || d.channels.find(c => c.name === 'general') || d.channels[0];
       if (linked) deepLinkRef.current = { msg: Number(link.get('msg')) || null, thread: Number(link.get('thread')) || null };
       if (general) setActiveId(Number(general.id));
+      const dmEmail = (link.get('dm') || '').toLowerCase();
+      const dmUser = dmEmail && [...(d.directory || []), ...(d.users || [])].find(u => (u.email || '').toLowerCase() === dmEmail);
+      if (dmUser && Number(dmUser.id) !== Number(d.me?.id)) openDm(Number(dmUser.id));
       ws = connectWs(onEvent, setConnected);
       wsRef.current = ws;
     }).catch(flashError);
@@ -638,6 +645,16 @@ function ChannelView({ channel, label, online, me, users, directory, usersById, 
     try { await api.send(chId, `📞 started a huddle — [Join the call](${url})`); } catch (e) { flashError(e); }
   }
 
+  // Open the channel's whiteboard; the first time, Chat posts its link here for everyone.
+  async function openWhiteboard() {
+    const tab = window.open('', '_blank');
+    try {
+      const { url } = await api.whiteboard(chId);
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank', 'noopener');
+    } catch (e) { tab?.close(); flashError(e); }
+  }
+
   // Upload a file to SynergyDrive, then post it as an attachment link.
   async function doUpload(file) {
     if (!file) return;
@@ -726,7 +743,12 @@ function ChannelView({ channel, label, online, me, users, directory, usersById, 
               )}
             </div>
           )}
+          {isDm && dmUser?.email && (
+            <a className="tool-btn" title={`Call ${label}`} aria-label={`Call ${label}`}
+              href={`${PHONE_BASE}/?call=${encodeURIComponent(dmUser.email)}`} target="_blank" rel="noopener"><Icon name="phone" /></a>
+          )}
           <button className="tool-btn call-btn" title="Start a video huddle" onClick={startCall}><Icon name="headphones" /></button>
+          <button className="tool-btn" title="Whiteboard for this conversation" aria-label="Whiteboard" onClick={openWhiteboard}><Icon name="board" /></button>
           {!isDm && (
             <div className="invite-wrap">
               <button ref={inviteBtnRef} className="tool-btn" title="Add people" aria-label="Add people"
