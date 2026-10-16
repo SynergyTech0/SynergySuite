@@ -1,0 +1,32 @@
+{
+  "name": "synergy-bookings",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy Bookings - public booking pages with services, staff availability, Meet links, confirmations and reminders",
+  "scripts": {
+    "dev": "next dev -p 3145",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3145",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@synergy/compliance": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/shell": "*",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "nodemailer": "^10.1.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

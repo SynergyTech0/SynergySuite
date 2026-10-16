@@ -11,14 +11,15 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM and Desk, audit log |
-| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites and Base, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM and Desk, audit log |
+| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, Bookings, CRM, Desk, Office, Planner, Sites and Base, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
 | Desk (`apps/desk`) | Dynamics 365 Customer Service | yes | early | Ticket queues, email intake and threaded replies over IMAP/SMTP, internal notes, canned replies, public knowledge base, intake API, ticket feed for Portal |
 | To Do (`apps/todo`) | Microsoft To Do | yes | early | My Day with suggestions, Important, Planned, lists, steps, notes, due dates, reminders with browser notifications, repeating tasks, shared lists with assignments |
 | Calendar (`apps/calendar`) | Outlook Calendar | yes | early | Week view, personal and company calendars, attendees, free/busy API; no recurring events or month view yet |
+| Bookings (`apps/bookings`) | Microsoft Bookings | yes | early | Public booking pages with services, staff and opening hours, free times from each person's suite calendar, buffers, notice and booking windows, custom questions, a Meet link per online appointment, confirmation, change and cancellation emails with calendar invites, reminders, customer links to reschedule or cancel, staff booking on a customer's behalf, customer list, embedding in Sites |
 | Chat (`apps/chat`) | Teams chat | yes | usable | Channels, direct messages, threads, reactions, mentions, unread counts, search, real-time updates |
 | Meet (`apps/meet`) | Teams meetings | yes | early | Video rooms on LiveKit, scheduling, guest links; the media server is deployed separately and is not part of the local quickstart |
 | Office (`apps/office`) | Word, Excel, PowerPoint | yes | early | Documents with live co-editing, comments and DOCX import; spreadsheets (Univer) and slides are more basic |
@@ -74,6 +75,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/search` | Microsoft Search, Microsoft 365 Copilot chat | Next.js 16, no database |
 | `apps/mail` | Outlook mail | Next.js 15 + Stalwart mail server |
 | `apps/calendar` | Outlook calendar | Express + React/Vite |
+| `apps/bookings` | Microsoft Bookings | Next.js 16 + Postgres |
 | `apps/chat` | Teams chat | Express + ws + React/Vite |
 | `apps/meet` | Teams meetings | Next.js 15 + LiveKit |
 | `apps/office` | Word, Excel, PowerPoint | Next.js 15 + Tiptap/Hocuspocus + Univer |

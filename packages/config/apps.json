@@ -5,6 +5,7 @@
   { "id": "auth",      "name": "Account",   "m365": "Entra ID",             "port": 3500, "icon": "shield",   "dir": "apps/auth",      "core": true },
   { "id": "mail",      "name": "Mail",      "m365": "Outlook",              "port": 3200, "icon": "mail",     "dir": "apps/mail",      "core": true },
   { "id": "calendar",  "name": "Calendar",  "m365": "Outlook Calendar",     "port": 3130, "icon": "calendar", "dir": "apps/calendar",  "core": true },
+  { "id": "bookings",  "name": "Bookings",  "m365": "Microsoft Bookings",   "port": 3145, "icon": "calendar", "dir": "apps/bookings",  "core": true },
   { "id": "chat",      "name": "Chat",      "m365": "Teams chat",           "port": 3080, "icon": "chat",     "dir": "apps/chat",      "core": true },
   { "id": "meet",      "name": "Meet",      "m365": "Teams meetings",       "port": 3420, "icon": "video",    "dir": "apps/meet",      "core": true },
   { "id": "office",    "name": "Office",    "m365": "Word, Excel, PowerPoint", "port": 3070, "icon": "doc",   "dir": "apps/office",    "core": true },
