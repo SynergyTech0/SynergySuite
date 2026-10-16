@@ -21,3 +21,5 @@ CREATE DATABASE crm;
 CREATE DATABASE desk;
 CREATE DATABASE ops;
 CREATE DATABASE admin;
+-- Metabase's own settings, questions and dashboards (Insights).
+CREATE DATABASE metabase;
