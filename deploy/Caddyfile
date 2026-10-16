@@ -232,7 +232,7 @@ search.{$SUITE_DOMAIN} {
 
 flow.{$SUITE_DOMAIN} {
 	import signed_in
-	import to_app flow:3720
+	import to_app flow:3730
 }
 
 # The flow designer and engine (Activepieces). People are signed in to it by Flow, through
@@ -254,7 +254,7 @@ flow-studio.{$SUITE_DOMAIN} {
 	}
 	handle /synergy/* {
 		import signed_in
-		import to_app flow:3720
+		import to_app flow:3730
 	}
 	handle {
 		import signed_in
@@ -317,5 +317,37 @@ cad.{$SUITE_DOMAIN} {
 	handle {
 		import signed_in
 		import to_app cad:3660
+	}
+}
+
+insights.{$SUITE_DOMAIN} {
+	import signed_in
+	redir /studio /studio/ 308
+	# The report designer (Metabase) at /studio. Signed dashboard addresses, which Insights
+	# shows in its own pages, and the designer's scripts and styles need no Metabase session.
+	@embed path /studio/embed/* /studio/api/embed/* /studio/app/*
+	handle @embed {
+		uri strip_prefix /studio
+		reverse_proxy metabase:3000
+	}
+	# Everything else in the designer needs the Metabase session Insights opened for whoever is
+	# signed in to the suite; when it is missing or someone else's, Insights signs them in.
+	# route keeps this order: the check (and the return address it sends) sees the full path.
+	handle /studio/* {
+		route {
+			forward_auth insights:3720 {
+				uri /api/studio/check
+				header_up X-Proxy-Auth-Secret {$PROXY_SHARED_SECRET}
+				@mismatch status 401
+				handle_response @mismatch {
+					redir * /api/studio/login?rd={uri}
+				}
+			}
+			uri strip_prefix /studio
+			reverse_proxy metabase:3000
+		}
+	}
+	handle {
+		import to_app insights:3720
 	}
 }

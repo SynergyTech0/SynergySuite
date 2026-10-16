@@ -66,6 +66,7 @@ else
   setvar HTTPS_PUBLISH 127.0.0.1:443
   setvar MAIL_ENCRYPTION_KEY "$(openssl rand -base64 32)"
   setvar BOOKS_ENCRYPTION_KEY "$(hex 32)"
+  setvar INSIGHTS_SECRET "$(hex 32)"
   setvar STALWART_ADMIN_PASSWORD "$(hex 24)"
   setvar MAIL_MASTER_PASSWORD "$(hex 24)"
   # Out of the way of a local mail server; nothing outside this machine can reach them.
@@ -77,8 +78,9 @@ else
   if [ "${DEMO_MODE:-}" = 1 ]; then setvar DEMO_MODE 1; fi
 fi
 
-# Secrets that apps added after this file was written need, filled in once (new and old files alike).
+# Settings added since an existing .env was written, filled in once (new and old files alike).
 fill() { [ -n "$(getvar "$1")" ] || setvar "$1" "$2"; }
+fill INSIGHTS_SECRET "$(hex 32)"
 fill FLOW_SECRET "$(hex 32)"
 fill FLOW_DB_PASSWORD "$(hex 24)"
 fill FLOW_ENCRYPTION_KEY "$(hex 16)"
@@ -106,7 +108,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1"
-  for h in auth sso admin base books calendar chat contacts crm desk drive flow flow-studio forms mail meet notes office people planner portal search sites todo trust; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin base books calendar chat contacts crm desk drive flow flow-studio forms insights mail meet notes office people planner portal search sites todo trust; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi
@@ -196,7 +198,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|calendar|chat|contacts|crm|desk|drive|flow|forms|mail|notes|office|people|planner|portal|search|sites|todo|trust)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|calendar|chat|contacts|crm|desk|drive|flow|forms|insights|mail|notes|office|people|planner|portal|search|sites|todo|trust)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""

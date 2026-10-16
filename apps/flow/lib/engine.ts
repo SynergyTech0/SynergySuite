@@ -38,7 +38,7 @@ export function engineUrl(env: NodeJS.ProcessEnv = process.env): string {
 
 /** Where the engine reaches Flow, which the Synergy piece calls back. */
 export function flowInternalUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const u = env.FLOW_INTERNAL_URL || (env.NODE_ENV === "production" ? "http://flow:3720" : "http://localhost:3720");
+  const u = env.FLOW_INTERNAL_URL || (env.NODE_ENV === "production" ? "http://flow:3730" : "http://localhost:3730");
   return u.replace(/\/+$/, "");
 }
 

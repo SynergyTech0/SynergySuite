@@ -77,6 +77,7 @@ jobs:
           npx tsc --noEmit -p apps/drive
           npx tsc --noEmit -p apps/contacts
           npx tsc --noEmit -p apps/todo
+          npx tsc --noEmit -p apps/insights
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/mail
@@ -96,6 +97,10 @@ jobs:
         run: npm test --workspace apps/search
       - name: Flow tests
         run: npm test --workspace apps/flow
+      - name: Insights tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: npm test --workspace apps/insights
       - name: Drive tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/drive_test

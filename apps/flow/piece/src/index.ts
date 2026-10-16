@@ -14,7 +14,7 @@ export const synergyAuth = PieceAuth.CustomAuth({
   description: "Synergy Flow fills this in for you. The key acts as you in the suite apps; keep it private.",
   required: true,
   props: {
-    baseUrl: Property.ShortText({ displayName: "Flow address", description: "Where the engine reaches the Flow app, e.g. http://flow:3720", required: true }),
+    baseUrl: Property.ShortText({ displayName: "Flow address", description: "Where the engine reaches the Flow app, e.g. http://flow:3730", required: true }),
     key: PieceAuth.SecretText({ displayName: "Synergy key", required: true }),
   },
   validate: async ({ auth }) => {

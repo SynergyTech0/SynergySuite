@@ -19,6 +19,7 @@
     "apps/drive",
     "apps/flow",
     "apps/forms",
+    "apps/insights",
     "apps/mail",
     "apps/meet",
     "apps/notes",
