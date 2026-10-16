@@ -7,7 +7,7 @@ const env = {
   FLOW_SECRET: "a-test-secret-that-is-long",
   SUITE_DOMAIN: "suite.test",
   FLOW_ENGINE_URL: "http://engine",
-  FLOW_INTERNAL_URL: "http://flow:3730",
+  FLOW_INTERNAL_URL: "http://flow:3780",
   FLOW_PIECE_DIR: path.join(import.meta.dirname, "fixtures"),
 } as unknown as NodeJS.ProcessEnv;
 const ada = { email: "Ada@Example.com", subject: "sub-1", name: "Ada Lovelace" };
@@ -60,7 +60,7 @@ describe("engine accounts", () => {
     expect(e.connections).toHaveLength(1);
     const c = e.connections[0];
     expect(c).toMatchObject({ externalId: "synergy", pieceName: "@synergy/piece-synergy", projectId: "proj-ada@example.com", type: "CUSTOM_AUTH" });
-    expect(c.value.props.baseUrl).toBe("http://flow:3730");
+    expect(c.value.props.baseUrl).toBe("http://flow:3780");
     expect(keyOwner(c.value.props.key, env)).toEqual({ email: "ada@example.com", subject: "sub-1", name: "Ada Lovelace" });
     expect(c.token).toBe("Bearer tok-ada@example.com");
   });

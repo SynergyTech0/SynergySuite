@@ -4,10 +4,10 @@
   "private": true,
   "description": "Synergy Flow - automated workflows across the suite and outside services, built on the Activepieces engine",
   "scripts": {
-    "dev": "next dev -p 3730",
+    "dev": "next dev -p 3780",
     "build": "npm run build:piece && next build",
     "build:piece": "node piece/build.mjs",
-    "start": "next start -H 0.0.0.0 -p 3730",
+    "start": "next start -H 0.0.0.0 -p 3780",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

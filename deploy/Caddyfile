@@ -232,7 +232,7 @@ search.{$SUITE_DOMAIN} {
 
 flow.{$SUITE_DOMAIN} {
 	import signed_in
-	import to_app flow:3730
+	import to_app flow:3780
 }
 
 # The flow designer and engine (Activepieces). People are signed in to it by Flow, through
@@ -254,7 +254,7 @@ flow-studio.{$SUITE_DOMAIN} {
 	}
 	handle /synergy/* {
 		import signed_in
-		import to_app flow:3730
+		import to_app flow:3780
 	}
 	handle {
 		import signed_in

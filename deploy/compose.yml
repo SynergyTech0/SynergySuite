@@ -510,7 +510,7 @@ services:
       # Signs people in to the engine and makes their Synergy keys; changing it revokes every key.
       FLOW_SECRET: ${FLOW_SECRET:-}
       FLOW_ENGINE_URL: http://flow-engine:80
-      FLOW_INTERNAL_URL: http://flow:3730
+      FLOW_INTERNAL_URL: http://flow:3780
       FLOW_ENGINE_VERSION: ${FLOW_ENGINE_VERSION:-0.92.3}
       FLOW_APP_URLS: ${FLOW_APP_URLS:-}
 
