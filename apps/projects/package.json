@@ -4,9 +4,9 @@
   "private": true,
   "description": "Synergy Projects - project plans, team and rates, timesheets, expenses, approvals and billing to Books",
   "scripts": {
-    "dev": "next dev -p 3730",
+    "dev": "next dev -p 3820",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3730",
+    "start": "next start -H 0.0.0.0 -p 3820",
     "test": "vitest run"
   },
   "dependencies": {

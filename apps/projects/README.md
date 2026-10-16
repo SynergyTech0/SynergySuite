@@ -50,7 +50,7 @@ client through Synergy Books.
 
 ```sh
 createdb projects
-npm run dev --workspace apps/projects   # http://localhost:3730
+npm run dev --workspace apps/projects   # http://localhost:3820
 ```
 
 `DATABASE_URL` defaults to `postgres://postgres@127.0.0.1:5499/projects`. Tests need a
