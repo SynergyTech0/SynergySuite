@@ -77,6 +77,7 @@ jobs:
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
             {"name":"contracts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contracts","paths":["apps/contracts/"]},
             {"name":"projects","file":"deploy/next-app.Dockerfile","context":".","args":"APP=projects","paths":["apps/projects/"]},
+            {"name":"field","file":"deploy/next-app.Dockerfile","context":".","args":"APP=field","paths":["apps/field/"]},
             {"name":"groups","file":"deploy/next-app.Dockerfile","context":".","args":"APP=groups","paths":["apps/groups/"]},
             {"name":"devices","file":"deploy/next-app.Dockerfile","context":".","args":"APP=devices","paths":["apps/devices/"]},
             {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]},

@@ -148,6 +148,10 @@ describe.skipIf(!url)("ops", async () => {
     pressId = press.id;
     expect(press.tag).toBe(`AST-${year}-0001`);
     expect(press.bookValue).toBeLessThan(60000);
+    // Field Service sees what the unit is and where, not what it cost.
+    const [listed] = await assets.svcAssets({ tag: press.tag.toLowerCase() });
+    expect(listed).toEqual({ tag: press.tag, name: "Hydraulic press", category: "Machinery", location: "Bay 2", make: "", model: "", serial: "", status: "active", purchaseDate: "2024-01-01" });
+    expect((await assets.svcAssets({ q: "hydraulic" })).map((a) => a.tag)).toEqual([press.tag]);
     const plan = await assets.savePlan(null, { assetId: press.id, title: "Change hydraulic oil", intervalMeter: 250, assignee: tech }, me);
     planId = plan.id;
     expect(plan).toMatchObject({ nextMeter: 1150, nextDue: null, due: null });

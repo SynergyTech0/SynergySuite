@@ -35,6 +35,7 @@
     "apps/office",
     "apps/planner",
     "apps/projects",
+    "apps/field",
     "apps/groups",
     "apps/contracts",
     "apps/photo",

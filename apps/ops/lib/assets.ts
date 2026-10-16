@@ -98,6 +98,21 @@ export async function listAssets(opts: { q?: string; status?: string; mine?: str
   return rows.map(toAsset);
 }
 
+/**
+ * The asset register for Field Service (/api/svc/assets, Bearer OPS_API_TOKEN), which brings
+ * equipment onto a customer by its tag: what the unit is and where, without costs or the books.
+ * `tag` finds exactly one; otherwise in-service assets matching `q`.
+ */
+export async function svcAssets(opts: { q?: string; tag?: string }) {
+  let rows: Asset[];
+  if (opts.tag) rows = (await q(`${ASSET_SELECT} WHERE lower(a.tag) = lower($1)`, [opts.tag.trim()])).map(toAsset);
+  else rows = (await listAssets({ q: opts.q?.trim() || undefined, status: "in_service" })).slice(0, 100);
+  return rows.map((a) => ({
+    tag: a.tag, name: a.name, category: a.category, location: a.location, make: a.make, model: a.model, serial: a.serial,
+    status: a.status, purchaseDate: a.purchaseDate,
+  }));
+}
+
 export async function getAsset(id: number): Promise<Asset> {
   const [r] = await q(`${ASSET_SELECT} WHERE a.id = $1`, [id]);
   if (!r) throw new UserError("Asset not found", 404);
