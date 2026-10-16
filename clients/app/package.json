@@ -6,6 +6,7 @@
   "description": "Synergy for Windows, macOS, Linux, iOS and Android: the suite in its own app.",
   "type": "module",
   "scripts": {
+    "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
     "build:web": "tsc --noEmit && vite build",

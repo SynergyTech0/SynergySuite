@@ -191,6 +191,35 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/calendar
       CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
 
+  # Microsoft Bookings equivalent: public booking pages, services, staff availability from
+  # Calendar, Meet links, and confirmations and reminders sent from each page's suite mailbox.
+  bookings:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-bookings:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: bookings } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/bookings
+      # Free/busy and appointment events on staff calendars. Without it, Bookings only knows its own appointments.
+      CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
+      CALENDAR_INTERNAL_URL: http://calendar:3130
+      CONTACTS_INTERNAL_URL: http://contacts:3190
+      # Sends as each page's mailbox through Stalwart, the way Mail does. BOOKINGS_SMTP_* sends
+      # everything through one outside mailbox instead.
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+      BOOKINGS_SMTP_HOST: ${BOOKINGS_SMTP_HOST:-}
+      BOOKINGS_SMTP_PORT: ${BOOKINGS_SMTP_PORT:-}
+      BOOKINGS_SMTP_USER: ${BOOKINGS_SMTP_USER:-}
+      BOOKINGS_SMTP_PASSWORD: ${BOOKINGS_SMTP_PASSWORD:-}
+      BOOKINGS_SMTP_FROM: ${BOOKINGS_SMTP_FROM:-}
+
   chat:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-chat:${SYNERGY_IMAGE_TAG:-latest}
     <<: *express
@@ -233,7 +262,8 @@ services:
     environment:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sites
-      SITES_BOOKING_URL: ${SITES_BOOKING_URL:-}
+      # The Booking block embeds pages from Bookings.
+      SITES_BOOKING_URL: ${SITES_BOOKING_URL:-https://bookings.${SUITE_DOMAIN}}
       SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
 
   # ---- add-ons ----

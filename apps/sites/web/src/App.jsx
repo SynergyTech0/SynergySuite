@@ -30,14 +30,14 @@ const BLOCKS = {
   cta: { label: 'Call to action', fields: ['heading', 'text', 'buttonText', 'buttonUrl'] },
   columns: { label: 'Columns', fields: ['columns'] },
   form: { label: 'Form (SynergyForms)', fields: ['slug'] },
-  booking: { label: 'Booking (SynergyBook)', fields: ['owner', 'slug'] },
+  booking: { label: 'Booking (Bookings page, and a service if you like)', fields: ['owner', 'slug'] },
   embed: { label: 'Embed (iframe)', fields: ['url'] },
   footer: { label: 'Footer', fields: ['text'] },
 };
 const FIELD_LABEL = {
   heading: 'Heading', subheading: 'Subheading', buttonText: 'Button text', buttonUrl: 'Button URL',
   image: 'Image URL', bg: 'Background color (hex)', text: 'Text', alt: 'Alt text', caption: 'Caption',
-  slug: 'Form/page slug', owner: 'Owner (e.g. shane)', url: 'URL', columns: 'Columns',
+  slug: 'Form or service slug', owner: 'Booking page (its web address)', url: 'URL', columns: 'Columns',
 };
 const MULTILINE = new Set(['text', 'subheading']);
 
@@ -182,7 +182,7 @@ function Editor({ initial, onBack, flash }) {
                   {MULTILINE.has(f)
                     ? <textarea value={b.data[f] || ''} onChange={e => setField(i, f, e.target.value)} />
                     : <input value={b.data[f] || ''} onChange={e => setField(i, f, e.target.value)}
-                        placeholder={f === 'slug' && b.type === 'form' ? 'contact-sales' : f === 'bg' ? '#f6f7f9' : ''} />}
+                        placeholder={f === 'slug' && b.type === 'form' ? 'contact-sales' : b.type === 'booking' ? (f === 'owner' ? 'contoso-clinic' : 'first-assessment (optional)') : f === 'bg' ? '#f6f7f9' : ''} />}
                 </label>
               ))}
             </div>
