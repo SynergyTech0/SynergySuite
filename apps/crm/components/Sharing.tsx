@@ -1,6 +1,6 @@
 "use client";
 // Who else can see a record. Sharing gives read access; changing it stays with the owner and managers.
-import { Share2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { RecordType } from "@/lib/types";
 import { api } from "./client";
@@ -30,7 +30,7 @@ export function SharePanel({ app, kind, id, canShare }: { app: AppCtx; kind: Rec
 
   return (
     <section className="panel">
-      <h3><Share2 size={14} /> Shared with</h3>
+      <h3>Shared with</h3>
       {shares.length ? (
         <ul className="people">
           {shares.map((s) => (

@@ -12,8 +12,8 @@ const ABOUT: Record<Role, string> = {
 };
 
 const REP_READ = {
-  own: "Only their own records, records shared with them, and what is on those (an account's contacts and deals, any record's activities)",
-  all: "Every record in the CRM",
+  own: { label: "Their own and shared records", about: "Records they own or that were shared with them, plus what hangs off those: an account's contacts and deals, any record's activities." },
+  all: { label: "Every record", about: "Every record in the CRM, whoever owns it." },
 } as const;
 
 export function Team({ app, onMembers }: { app: AppCtx; onMembers: (m: Member[]) => void }) {
@@ -57,10 +57,11 @@ export function Team({ app, onMembers }: { app: AppCtx; onMembers: (m: Member[])
               }
             }}
           >
-            <option value="own">{REP_READ.own}</option>
-            <option value="all">{REP_READ.all}</option>
+            <option value="own">{REP_READ.own.label}</option>
+            <option value="all">{REP_READ.all.label}</option>
           </select>
-        ) : <p>{REP_READ[app.repRead]}</p>}
+        ) : <p style={{ margin: 0 }}><strong>{REP_READ[app.repRead].label}</strong></p>}
+        <p className="muted small" style={{ marginBottom: 0 }}>{REP_READ[app.repRead].about}</p>
       </section>
       <section className="panel">
         <h3>People ({app.members.length})</h3>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { headers } from "next/headers";
 import { identify, optionsFromEnv } from "@synergy/identity";
+import { viewer, type Viewer } from "./agents";
 import { UserError } from "./util";
 
 export type Me = { email: string; name: string };
@@ -35,14 +36,17 @@ function fail(err: unknown): Response {
   return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
 }
 
-/** Wraps a route: requires a signed-in user and turns errors into JSON responses. */
-export function route<A extends unknown[]>(fn: (me: Me, req: Request, ...rest: A) => Promise<Response | unknown>) {
+/**
+ * Wraps a route: requires a signed-in user, works out whether they are an agent (lib/agents.ts),
+ * and turns errors into JSON responses.
+ */
+export function route<A extends unknown[]>(fn: (me: Viewer, req: Request, ...rest: A) => Promise<Response | unknown>) {
   return async (req: Request, ...rest: A): Promise<Response> => {
     try {
       if (!sameOrigin(req)) return NextResponse.json({ error: "Cross-site request refused" }, { status: 403 });
-      const me = await currentUser();
-      if (!me) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
-      const out = await fn(me, req, ...rest);
+      const who = await currentUser();
+      if (!who) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+      const out = await fn(await viewer(who), req, ...rest);
       return out instanceof Response ? out : NextResponse.json(out ?? { ok: true });
     } catch (err) {
       return fail(err);
