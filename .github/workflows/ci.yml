@@ -78,6 +78,7 @@ jobs:
           npx tsc --noEmit -p apps/todo
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
+          npx tsc --noEmit -p apps/devices
           npx tsc --noEmit -p apps/mail
           npx tsc --noEmit -p apps/meet
           npx tsc --noEmit -p apps/office
@@ -111,6 +112,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE todo_test"
           npm test --workspace apps/todo
+      - name: Devices tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/devices_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE devices_test"
+          npm test --workspace apps/devices
       - name: CRM tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm_test

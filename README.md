@@ -11,7 +11,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | App | Microsoft 365 equivalent | In the Docker deploy | Maturity | What works today |
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
-| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM and Desk, audit log |
+| Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk and Devices, audit log |
 | Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites and Base, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
@@ -29,6 +29,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Base (`apps/base`) | Access, Lists | yes | early | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
 | Sites (`apps/sites`) | SharePoint | yes | early | Page builder for team sites, published as public pages |
 | Notes (`apps/notes`) | OneNote | yes | usable | Wiki spaces, page tree, live co-editing, version history, comments, attachments, PDF and Word export |
+| Devices (`apps/devices`) | Intune, Defender for Endpoint | yes | early | Windows, macOS and Linux computers enrolled with the open source osquery agent: hardware, OS, software and sign-in inventory; compliance policies (disk encryption, firewall, antivirus, screen lock, updates, OS version, admins, vulnerabilities, open threats); threat detections and known-bad file hashes with alert triage; OSV vulnerability scanning of Linux packages; live queries; evidence for Trust; no remote lock, wipe or app push yet |
 | Trust (`apps/trust`) | Purview Compliance Manager | yes | early | SOC 2, ISO 27001, HIPAA and GDPR readiness: control library mapped across frameworks, automated evidence collectors and a collector agent, append-only evidence and audit log, opt-in public trust centre |
 | Home, Groups, Admin, Purview (`prototype/workspace`) | Microsoft 365 home and others | no | prototype | Zero-dependency Node prototype; features are being ported into `apps/` |
 | People add-on (`addons/people`) | (HR records) | yes | early | Employee records and PTO requests with approval |
@@ -90,6 +91,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/sites` | SharePoint | Express + React/Vite |
 | `apps/books` | Dynamics 365 Business Central (accounting) | NestJS + Prisma + React/Vite |
 | `apps/notes` | OneNote | Express + React/Vite |
+| `apps/devices` | Intune, Defender for Endpoint | Next.js 16 + Postgres, osquery agents |
 | `apps/trust` | Purview Compliance Manager | Next.js 16 + postgres.js (raw SQL migrations, row-level security) |
 | `prototype/workspace` | 365 home, People, To Do, Groups, Admin, Purview | zero-dependency Node prototype; features to be ported into `apps/` |
 | `addons/sign` | (DocuSign-style) | Next.js 14 + Prisma |

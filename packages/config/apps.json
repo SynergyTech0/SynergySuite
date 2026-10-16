@@ -16,6 +16,7 @@
   { "id": "photo",     "name": "Photo",     "m365": "Designer / Photos",    "port": 3650, "icon": "image",    "dir": "apps/photo",     "core": true },
   { "id": "cad",       "name": "CAD",       "m365": "(AutoCAD equivalent)", "port": 3660, "icon": "ruler",    "dir": "apps/cad",       "core": true },
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
+  { "id": "devices",   "name": "Devices",   "m365": "Intune, Defender for Endpoint", "port": 3760, "icon": "laptop", "dir": "apps/devices", "core": true },
   { "id": "base",      "name": "Base",      "m365": "Access, Lists",        "port": 3680, "icon": "table",    "dir": "apps/base",      "core": true },
   { "id": "sites",     "name": "Sites",     "m365": "SharePoint",           "port": 3170, "icon": "globe",    "dir": "apps/sites",     "core": true },
   { "id": "notes",     "name": "Notes",     "m365": "OneNote",              "port": 3135, "icon": "note",     "dir": "apps/notes",     "core": true },

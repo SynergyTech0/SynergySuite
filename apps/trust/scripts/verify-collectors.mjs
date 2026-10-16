@@ -9,6 +9,7 @@ import { adminSql } from '../src/lib/db.mjs';
 import { PHI_NAME_PATTERN, suggestsPhi } from '../src/lib/phi-names.mjs';
 import { COLLECTORS, collectorCatalogue, validateMonitorConfig } from '../src/lib/collectors/registry.mjs';
 import { runMonitors } from '../src/lib/collect-runner.mjs';
+import { createServer } from 'node:http';
 
 // The organisation the suite runs against (scripts/seed.mjs --tenant <slug> provisions it).
 const TENANT = process.env.TRUST_TENANT ?? 'example';
@@ -78,6 +79,9 @@ try {
     ['dependency_vulns', {}, /directories/i],
     ['dependency_vulns', { directories: ['/x'], sla_days: { catastrophic: 1 } }, /unknown severity/i],
     ['patch_currency', { hosts: ['h'], max_security_updates: -1 }, /non-negative/i],
+    ['endpoint_compliance', { active_days: 0 }, /active_days/i],
+    ['endpoint_compliance', { min_compliant_pct: 120 }, /0 to 100/i],
+    ['endpoint_threats', { max_open_critical: -1 }, /non-negative/i],
   ];
   for (const [kind, config, pattern] of BAD) {
     const r = validateMonitorConfig(kind, config);
@@ -147,6 +151,48 @@ try {
     `status=${auditEmpty.status} · ${auditEmpty.message.slice(0, 80)}`,
   );
   await sql`DELETE FROM tenants WHERE slug = 'verify-empty'`;
+
+  console.log('\n=== 4b. Device posture from Synergy Devices ===\n');
+
+  // A stand-in for Devices' /api/svc/posture, so the endpoint collectors are checked against
+  // the cases that matter: no feed, an empty fleet, a healthy fleet and an unhealthy one.
+  const POSTURE = {
+    generated_at: new Date().toISOString(), active_days: 30, policies: 1, devices: 4, stale: 1,
+    compliant: 4, noncompliant: 0, unknown: 0,
+    encryption: { encrypted: 4, not_encrypted: 0, unknown: 0 }, noncompliant_sample: [],
+    alerts_open: { critical: 0, high: 0, medium: 1, low: 0 }, oldest_open_days: { critical: null, high: null },
+    vulnerabilities: { critical_devices: 0, high_devices: 1, critical_advisories: 0, checked_devices: 4 },
+  };
+  let feed = POSTURE;
+  const server = createServer((req, res) => {
+    if (req.headers.authorization !== 'Bearer verify-token') { res.writeHead(401).end('{}'); return; }
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(feed));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const feedEnv = { DEVICES_INTERNAL_URL: `http://127.0.0.1:${server.address().port}`, DEVICES_SVC_TOKEN: 'verify-token' };
+  const runEp = (kind, env, config = {}) => COLLECTORS.get(kind).run(config, { tenantId: tenant.id, sql, env });
+  try {
+    for (const kind of ['endpoint_compliance', 'endpoint_threats']) {
+      const none = await runEp(kind, {});
+      check(`${kind} returns 'error' when Devices isn't configured`, none.status === 'error' && !none.content_hash, `status=${none.status} · ${none.message.slice(0, 80)}`);
+      const badToken = await runEp(kind, { ...feedEnv, DEVICES_SVC_TOKEN: 'wrong' });
+      check(`${kind} returns 'error' when Devices refuses the token`, badToken.status === 'error', `status=${badToken.status} · ${badToken.message.slice(0, 80)}`);
+      feed = { ...POSTURE, devices: 0, compliant: 0 };
+      const empty = await runEp(kind, feedEnv);
+      check(`${kind} refuses to pass an empty fleet`, empty.status === 'error' && !empty.content_hash, `status=${empty.status} · ${empty.message.slice(0, 80)}`);
+      feed = POSTURE;
+      const good = await runEp(kind, feedEnv);
+      check(`${kind} passes a healthy fleet and records evidence`, good.status === 'pass' && !!good.content_hash, `status=${good.status} · ${good.message.slice(0, 80)}`);
+    }
+    feed = { ...POSTURE, compliant: 2, unknown: 1, noncompliant: 1, encryption: { encrypted: 3, not_encrypted: 1, unknown: 0 } };
+    const comp = await runEp('endpoint_compliance', feedEnv, { min_compliant_pct: 95 });
+    check('endpoint_compliance fails a fleet with an unencrypted, unknown or non-compliant computer', comp.status === 'fail', `status=${comp.status} · ${comp.message.slice(0, 90)}`);
+    feed = { ...POSTURE, alerts_open: { critical: 1, high: 2, medium: 0, low: 0 }, oldest_open_days: { critical: 0, high: 9 } };
+    const threats = await runEp('endpoint_threats', feedEnv);
+    check('endpoint_threats fails open critical alerts and stale high ones', threats.status === 'fail' && /critical/.test(threats.message) && /9 days/.test(threats.message), `status=${threats.status} · ${threats.message.slice(0, 90)}`);
+  } finally {
+    server.close();
+  }
 
   console.log('\n=== 5. Self-referential collectors measure the real thing ===\n');
 

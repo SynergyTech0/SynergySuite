@@ -62,6 +62,7 @@ jobs:
             {"name":"planner","file":"deploy/next-app.Dockerfile","context":".","args":"APP=planner","paths":["apps/planner/"]},
             {"name":"search","file":"deploy/next-app.Dockerfile","context":".","args":"APP=search","paths":["apps/search/"]},
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
+            {"name":"devices","file":"deploy/next-app.Dockerfile","context":".","args":"APP=devices","paths":["apps/devices/"]},
             {"name":"trust","file":"deploy/next-app.Dockerfile","context":".","args":"APP=trust","paths":["apps/trust/"]}
           ]'
           if [ "$EVENT" = workflow_dispatch ] || [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then

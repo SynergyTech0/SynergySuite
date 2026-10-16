@@ -17,7 +17,7 @@ export type Collector = {
   selfReferential?: boolean;
   suggestedControls?: string[];
   validateConfig(config: unknown): { ok: true } | { ok: false; reason: string };
-  run(config: unknown, ctx: { tenantId: string; sql: Sql }): Promise<CollectorOutcome>;
+  run(config: unknown, ctx: { tenantId: string; sql: Sql; env?: Record<string, string | undefined> }): Promise<CollectorOutcome>;
 };
 
 export const COLLECTORS: Map<string, Collector>;
