@@ -44,9 +44,9 @@ function renderBlock(b) {
       // GLUE: embed a SynergyForms form by slug.
       return `<section class="blk"><div class="wrap"><iframe class="embed" src="${esc(appUrl('forms'))}/f/${esc(d.slug || '')}" title="Form"></iframe></div></section>`;
     case 'booking':
-      // GLUE: embed a booking page (user/slug) from SITES_BOOKING_URL.
-      if (!process.env.SITES_BOOKING_URL) return '';
-      return `<section class="blk"><div class="wrap"><iframe class="embed tall" src="${esc(process.env.SITES_BOOKING_URL)}/book/${esc(d.owner || '')}/${esc(d.slug || '')}" title="Booking"></iframe></div></section>`;
+      // GLUE: embed a Bookings page (owner = the page's web address, slug = one service, optional).
+      if (!process.env.SITES_BOOKING_URL || !d.owner) return '';
+      return `<section class="blk"><div class="wrap"><iframe class="embed tall" src="${esc(process.env.SITES_BOOKING_URL.replace(/\/$/, ''))}/book/${encodeURIComponent(d.owner)}${d.slug ? `/${encodeURIComponent(d.slug)}` : ''}?embed=1" title="Booking"></iframe></div></section>`;
     case 'embed':
       return `<section class="blk"><div class="wrap"><iframe class="embed" src="${url(d.url)}" title="Embed"></iframe></div></section>`;
     case 'footer':

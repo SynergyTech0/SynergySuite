@@ -1,0 +1,84 @@
+# Builds the Synergy app (clients/app) for Android and iOS. The Android job uploads a debug
+# APK that installs on any phone with "install unknown apps" allowed; the iOS job builds for
+# the simulator. Store builds need an Android upload key and an Apple Developer team, added
+# as repository secrets later. The native projects are generated fresh on each run
+# (`tauri android init`, `tauri ios init`), so only clients/app is checked in.
+name: mobile
+
+on:
+  pull_request:
+    paths: ["clients/app/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/mobile.yml"]
+  push:
+    branches: [main]
+    paths: ["clients/app/**", "packages/config/apps.json", "packages/shell/assets/**", ".github/workflows/mobile.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/app
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      # The runner image ships the Android SDK; add the NDK and platform the build needs.
+      - run: |
+          sdkmanager=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          (yes || true) | "$sdkmanager" --install "ndk;$NDK_VERSION" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+      - run: echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: clients/app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/app/src-tauri
+      - run: npm ci
+      - run: npx tauri android init --ci
+      - run: npm run icons
+      - run: npx tauri android build --debug --apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synergy-android
+          if-no-files-found: error
+          path: clients/app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: clients/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: clients/app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/app/src-tauri
+      - run: npm ci
+      - run: npx tauri ios init --ci
+      - run: npm run icons
+      - run: npx tauri ios build --debug --target aarch64-sim

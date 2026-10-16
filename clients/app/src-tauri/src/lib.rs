@@ -1,6 +1,7 @@
-//! Synergy desktop: each suite app in a native window, with a launcher, an app menu and
-//! links outside the suite sent to the system browser.
+//! Synergy for desktop and mobile: each suite app in a native window, with a launcher, an app
+//! menu (desktop) and links outside the suite sent to the system browser.
 
+#[cfg(desktop)]
 mod menu;
 mod settings;
 mod suite;
@@ -131,8 +132,17 @@ pub(crate) fn open_window(app: &AppHandle, url: WebviewUrl) -> tauri::Result<Web
             }
             true
         });
-
+    // Phones have no menu bar, so suite pages get a small button back to the launcher.
+    #[cfg(mobile)]
+    let builder = builder.initialization_script(mobile_launcher_button(&launcher_url(app)));
     builder.build()
+}
+
+/// A round "All apps" button in the bottom-left corner of every suite page, above the
+/// home indicator. The launcher page itself doesn't get one.
+#[cfg_attr(desktop, allow(dead_code))]
+fn mobile_launcher_button(launcher: &Url) -> String {
+    include_str!("launcher-button.js").replace("__LAUNCHER__", launcher.as_str())
 }
 
 /// Decides whether a page may load in the window. Called for every top-level navigation.
@@ -162,7 +172,9 @@ fn allow_navigation(app: &AppHandle, url: &Url) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -171,10 +183,11 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .menu(menu::build)
+        .on_menu_event(menu::handle);
+    builder
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![get_state, set_server, open_app])
-        .menu(menu::build)
-        .on_menu_event(menu::handle)
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = Settings::load(&handle);

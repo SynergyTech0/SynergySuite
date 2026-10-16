@@ -78,6 +78,7 @@ jobs:
           npx tsc --noEmit -p apps/todo
           npx tsc --noEmit -p apps/insights
           npx tsc --noEmit -p apps/engage
+          npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/commerce
@@ -124,6 +125,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE engage_test"
           npm test --workspace apps/engage
+      - name: Bookings tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bookings_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE bookings_test"
+          npm test --workspace apps/bookings
       - name: CRM tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/crm_test
