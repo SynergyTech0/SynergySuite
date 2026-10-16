@@ -368,7 +368,7 @@ services:
       # Names the organisation created for the first user who opens Trust (default My Company).
       TRUST_COMPANY_NAME: ${TRUST_COMPANY_NAME:-}
       # Endpoint compliance and threat evidence from Devices.
-      DEVICES_INTERNAL_URL: http://devices:3760
+      DEVICES_INTERNAL_URL: http://devices:3810
       DEVICES_SVC_TOKEN: ${DEVICES_SVC_TOKEN:-}
 
   # Databases and lists (Access and Lists equivalent). Makes its catalog on first use; each

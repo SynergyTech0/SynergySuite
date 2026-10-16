@@ -4,9 +4,9 @@
   "private": true,
   "description": "Synergy Devices - device management and endpoint security: inventory, compliance policies, threat alerts, vulnerabilities and live queries over osquery",
   "scripts": {
-    "dev": "next dev -p 3760",
+    "dev": "next dev -p 3810",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3760",
+    "start": "next start -H 0.0.0.0 -p 3810",
     "test": "vitest run"
   },
   "dependencies": {

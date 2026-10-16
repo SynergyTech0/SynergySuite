@@ -60,6 +60,6 @@ it doesn't uninstall osquery.
 ## Development
 
 ```sh
-npm run dev --workspace apps/devices     # http://localhost:3760
+npm run dev --workspace apps/devices     # http://localhost:3810
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/devices_test npm test --workspace apps/devices
 ```
