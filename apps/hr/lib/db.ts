@@ -185,6 +185,16 @@ CREATE TABLE IF NOT EXISTS audit (
   detail  JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS audit_at_idx ON audit (at DESC);
+
+-- State withholding certificates. Profiles saved before state tables existed keep their flat rate.
+ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_method TEXT CHECK (state_method IN ('table','flat'));
+UPDATE pay_profiles SET state_method = CASE WHEN state_rate > 0 THEN 'flat' ELSE 'table' END WHERE state_method IS NULL;
+ALTER TABLE pay_profiles ALTER COLUMN state_method SET DEFAULT 'table';
+ALTER TABLE pay_profiles ALTER COLUMN state_method SET NOT NULL;
+ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_filing_status TEXT NOT NULL DEFAULT '' CHECK (state_filing_status IN ('','single','married','head'));
+ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_allowances INT NOT NULL DEFAULT 0 CHECK (state_allowances BETWEEN 0 AND 99);
+ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_extra_withholding_cents BIGINT NOT NULL DEFAULT 0 CHECK (state_extra_withholding_cents >= 0);
+ALTER TABLE pay_profiles ADD COLUMN IF NOT EXISTS state_exempt BOOLEAN NOT NULL DEFAULT false;
 `;
 
 type Db = ReturnType<typeof createDb>;

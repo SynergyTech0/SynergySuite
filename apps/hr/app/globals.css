@@ -111,6 +111,8 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .form { padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .form p { margin: 0; }
 .form label { display: flex; flex-direction: column; gap: 4px; }
+.form [hidden] { display: none !important; }
+.form .stack { display: flex; flex-direction: column; gap: 10px; }
 .form label.check { flex-direction: row; align-items: center; gap: 8px; }
 .form label span, .form legend { font-size: 13px; color: var(--muted); }
 .form input:not([type=checkbox]), .form select, .form textarea { border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; background: var(--panel); width: 100%; }
