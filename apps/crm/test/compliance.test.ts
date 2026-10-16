@@ -28,6 +28,7 @@ const fakePolicy: PolicyClient = {
 
 describe.skipIf(!base)("crm compliance", async () => {
   if (base) process.env.DATABASE_URL = process.env.CRM_DATABASE_URL = await ownDatabase(base);
+  const { setShares } = await import("../lib/access");
   const members = await import("../lib/members");
   const accounts = await import("../lib/accounts");
   const contacts = await import("../lib/contacts");
@@ -59,7 +60,7 @@ describe.skipIf(!base)("crm compliance", async () => {
 
   beforeAll(async () => {
     setPolicy(fakePolicy);
-    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls, held_records CASCADE");
+    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls, held_records, crm_settings, record_shares CASCADE");
     admin = await members.join("ada@example.com", "Ada Admin");
     rex = await members.join("rex@example.com", "Rex Rep");
     rita = await members.join("rita@example.com", "Rita Rep");
@@ -128,6 +129,7 @@ describe.skipIf(!base)("crm compliance", async () => {
     expect(await search({ custodians: [rita.email] })).toMatchObject({ hits: [], total: 0 });
     // An activity is kept when whoever logged it is held, even if it is someone else's.
     const other = await accounts.create(rita, { name: "Contoso" });
+    await setShares(rita, "account", other.id, [rex.email]);
     const note = await activities.create(rex, { relatedType: "account", relatedId: other.id, type: "note", subject: "Rex's note", assignee: rex.email });
     await q("UPDATE activities SET assignee = $2 WHERE id = $1", [note.id, rita.email]);
     await activities.remove(admin, note.id);

@@ -34,6 +34,8 @@ describe.skipIf(!base)("crm search", async () => {
   const activities = await import("../lib/activities");
   const { q, db } = await import("../lib/db");
   const { setPolicy } = await import("../lib/compliance");
+  const access = await import("../lib/access");
+  const { dashboard } = await import("../lib/dashboard");
   const searchRoute = await import("../app/api/search/route");
 
   const call = (email: string | null, body: unknown) => {
@@ -49,13 +51,13 @@ describe.skipIf(!base)("crm search", async () => {
   };
   const titles = (r: SearchResults) => r.results.map((h) => `${h.kind}:${h.title}`).sort();
 
-  let rex: Ctx, rita: Ctx;
+  let ada: Ctx, rex: Ctx, rita: Ctx;
   let northwind: { id: string }, deal: { id: string }, lead: { id: string };
 
   beforeAll(async () => {
     setPolicy({ onHold: async (e) => held.has(e), retention: async () => [], retentionDays: async () => null, invalidate() {} });
-    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls, held_records CASCADE");
-    await members.join("ada@example.com", "Ada Admin");
+    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls, held_records, crm_settings, record_shares CASCADE");
+    ada = await members.join("ada@example.com", "Ada Admin");
     rex = await members.join("rex@example.com", "Rex Rep");
     rita = await members.join("rita@example.com", "Rita Rep");
     northwind = await accounts.create(rex, { name: "Northwind", industry: "Shipping", type: "customer" });
@@ -83,12 +85,67 @@ describe.skipIf(!base)("crm search", async () => {
     expect(call1.text).toContain("Discussed the volume discount");
   });
 
-  it("shows every member the organization's records, as the CRM's own lists do", async () => {
-    // Reads are open to the whole organization in the CRM: Rita sees Rex's account and Rex her lead.
+  it("shows a rep only their own records, in search and in the CRM itself", async () => {
+    expect(await access.readScope()).toBe("own");
+    expect((await search(rita.email, { query: "northwind" })).results).toEqual([]);
+    expect((await search(rita.email, { query: "volume" })).results).toEqual([]);
+    expect((await search(rex.email, { query: "bletchley" })).results).toEqual([]);
+    // A newcomer becomes a member on first visit, like opening the CRM, and owns nothing yet.
+    expect((await search("new@example.com", { query: "turing" })).results).toEqual([]);
+
+    expect((await accounts.list(rita)).map((a) => a.name)).toEqual([]);
+    expect(await contacts.list(rita)).toEqual([]);
+    expect(await opps.list(rita)).toEqual([]);
+    await expect(accounts.get(rita, northwind.id)).rejects.toThrow(/not found/);
+    await expect(opps.get(rita, deal.id)).rejects.toThrow(/not found/);
+    await expect(opps.moveStage(rita, deal.id, "proposal")).rejects.toThrow(/not found/);
+    await expect(leads.get(rex, lead.id)).rejects.toThrow(/not found/);
+    expect(await activities.forRecord(rita, "opportunity", deal.id)).toEqual([]);
+    // She can't hang a contact, a deal or a note on an account she can't see.
+    await expect(contacts.create(rita, { accountId: northwind.id, name: "Sneaky" })).rejects.toThrow(/no longer exists/);
+    await expect(activities.create(rita, { relatedType: "account", relatedId: northwind.id, subject: "Peek" })).rejects.toThrow(/no longer exists/);
+    const d = await dashboard(rita);
+    expect(d.counts).toMatchObject({ accounts: 0, contacts: 0, openLeads: 1 });
+    expect(d.pipeline.openCount).toBe(0);
+    // Managers and admins see everything.
+    expect(titles(await search(ada.email, { query: "northwind", kinds: ["account"] }))).toEqual(["account:Northwind"]);
+    expect((await dashboard(ada)).pipeline.openCount).toBe(1);
+  });
+
+  it("sharing an account opens it, its contacts, deals and activities, read-only", async () => {
+    await expect(access.setShares(rita, "account", northwind.id, [rita.email])).rejects.toThrow(/not found/i);
+    const shared = await access.setShares(rex, "account", northwind.id, ["Rita@Example.com", rex.email]);
+    expect(shared).toEqual([{ principal: rita.email, name: "Rita" }]);
+    expect(titles(await search(rita.email, { query: "northwind" }))).toEqual(["account:Northwind", "contact:Grace Hopper", "opportunity:Fleet renewal"]);
+    expect(titles(await search(rita.email, { query: "volume" }))).toEqual(["activity:Pricing call"]);
+    const a = await accounts.get(rita, northwind.id);
+    expect(a.editable).toBe(false);
+    expect(a.contacts.map((c) => c.name)).toEqual(["Grace Hopper"]);
+    await expect(accounts.update(rita, northwind.id, { name: "Mine" })).rejects.toThrow(/owner or a manager/);
+    // Only the owner or a manager changes who it is shared with.
+    await expect(access.setShares(rita, "account", northwind.id, [])).rejects.toThrow(/owner or a manager/);
+    await expect(access.setShares(rex, "account", northwind.id, ["not an email"])).rejects.toThrow(/not an email/);
+    await access.setShares(rex, "account", northwind.id, []);
+    expect((await search(rita.email, { query: "northwind" })).results).toEqual([]);
+  });
+
+  it("shows a rep the account they own a deal on, but not its other people", async () => {
+    const theirs = await opps.create(ada, { accountId: northwind.id, name: "Side deal", owner: rita.email });
+    expect(titles(await search(rita.email, { query: "northwind" }))).toEqual(["account:Northwind", "opportunity:Side deal"]);
+    expect((await accounts.get(rita, northwind.id)).opportunities.map((o) => o.name)).toEqual(["Side deal"]);
+    await opps.remove(ada, theirs.id);
+  });
+
+  it("can share with everyone, or open everything to reps", async () => {
+    await access.setShares(rita, "lead", lead.id, ["*"]);
+    expect(titles(await search("new@example.com", { query: "turing" }))).toEqual(["lead:Alan Turing"]);
+    await access.setShares(rita, "lead", lead.id, []);
+    await expect(access.setReadScope(rex, "all")).rejects.toThrow(/Only an admin/);
+    expect(await access.setReadScope(ada, "all")).toBe("all");
     expect(titles(await search(rita.email, { query: "northwind", kinds: ["account"] }))).toEqual(["account:Northwind"]);
     expect(titles(await search(rex.email, { query: "bletchley" }))).toEqual(["lead:Alan Turing"]);
-    // A newcomer becomes a member on first visit, like opening the CRM.
-    expect(titles(await search("new@example.com", { query: "turing" }))).toEqual(["lead:Alan Turing"]);
+    await access.setReadScope(ada, "own");
+    expect((await search(rex.email, { query: "bletchley" })).results).toEqual([]);
   });
 
   it("honours kinds and limit", async () => {

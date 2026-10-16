@@ -50,20 +50,20 @@ How it behaves:
 
 The `desktop` workflow builds them on every pull request and push that touches this folder:
 `.exe` and `.msi` for Windows, a universal `.dmg` for macOS, and `.deb`, `.rpm` and `.AppImage`
-for Linux, attached to the run as artifacts. Pushing a `desktop-v0.1.0` style tag drafts a
-GitHub release with them.
+for Linux, attached to the run as artifacts. These test builds are not signed, so Windows
+SmartScreen and macOS Gatekeeper warn on first open (on macOS, right-click the app and choose
+Open).
 
-They are not code signed yet, so Windows SmartScreen and macOS Gatekeeper warn on first open
-(on macOS, right-click the app and choose Open). Signing needs a Windows code signing
-certificate and an Apple Developer ID added as repository secrets.
+Pushing an `app-v0.1.0` style tag builds signed Windows installers and a signed, notarized
+macOS app, drafts a GitHub release with them, and sends the mobile builds to Google Play and
+TestFlight. [RELEASING.md](RELEASING.md) lists the accounts and secrets each store needs.
 
 ### Mobile
 
 The `mobile` workflow builds an Android debug APK (artifact `synergy-android`) that installs
 on any Android 7 or later phone once "install unknown apps" is allowed for your browser or
 file manager. It also builds the iOS app for the simulator to prove it compiles; iOS 15 or
-later is supported. Publishing to Google Play and the App Store needs an Android upload key and
-an Apple Developer account added as repository secrets; until then there are no store builds.
+later is supported. Store builds come from an `app-v*` tag, as described above.
 
 The Android and Xcode projects are not checked in. `tauri android init` and `tauri ios init`
 generate them under `src-tauri/gen/` from `tauri.conf.json`, and `npm run icons` fills in

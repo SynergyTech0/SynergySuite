@@ -1,3 +1,4 @@
+import { seesNotes, ticketVisible, type Viewer } from "./agents";
 import { holdChecker, policy } from "./compliance";
 import { q, tx, type Tq } from "./db";
 import { outbox } from "./mailer";
@@ -57,30 +58,33 @@ function like(s: string): string {
   return `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
-export async function list(me: string, opts: { view?: string; q?: string } = {}): Promise<Ticket[]> {
-  const where: string[] = [];
+/** The tickets `v` can open (lib/agents.ts), in one of the navigation's views. */
+export async function list(v: Viewer, opts: { view?: string; q?: string } = {}): Promise<Ticket[]> {
   const params: unknown[] = [];
+  const where: string[] = [ticketVisible(v, "t", params)];
   const view = opts.view || "open";
   if ((STATUSES as readonly string[]).includes(view)) where.push(`t.status = $${params.push(view)}`);
-  else if (view === "mine") where.push(`t.assignee = $${params.push(me)} AND t.status IN ('open','pending')`);
+  else if (view === "mine") where.push(`t.assignee = $${params.push(v.email)} AND t.status IN ('open','pending')`);
   else if (view === "unassigned") where.push(`t.assignee = '' AND t.status IN ('open','pending')`);
   const search = text(opts.q, 200);
   if (search) {
     const p = params.push(like(search));
     where.push(`(t.number ILIKE $${p} OR t.subject ILIKE $${p} OR t.requester_email ILIKE $${p} OR t.requester_name ILIKE $${p}
-      OR EXISTS (SELECT 1 FROM ticket_messages m WHERE m.ticket_id = t.id AND m.body ILIKE $${p}))`);
+      OR EXISTS (SELECT 1 FROM ticket_messages m WHERE m.ticket_id = t.id AND m.body ILIKE $${p}${seesNotes(v) ? "" : " AND m.direction <> 'note'"}))`);
   }
   const rows = await q(
     `SELECT ${LIST_COLUMNS} FROM tickets t ${LAST_JOIN}
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+     WHERE ${where.join(" AND ")}
      ORDER BY t.updated_at DESC LIMIT 300`,
     params,
   );
   return rows.map(toTicket);
 }
 
-/** How many tickets each navigation entry holds. */
-export async function counts(me: string): Promise<Record<View, number>> {
+/** How many of the tickets `v` can open each navigation entry holds. */
+export async function counts(v: Viewer): Promise<Record<View, number>> {
+  const params: unknown[] = [v.email];
+  const visible = ticketVisible(v, "t", params);
   const [r] = await q<Record<string, number>>(
     `SELECT count(*) FILTER (WHERE status = 'open')::int AS open,
             count(*) FILTER (WHERE status = 'pending')::int AS pending,
@@ -89,23 +93,29 @@ export async function counts(me: string): Promise<Record<View, number>> {
             count(*)::int AS "all",
             count(*) FILTER (WHERE assignee = $1 AND status IN ('open','pending'))::int AS mine,
             count(*) FILTER (WHERE assignee = '' AND status IN ('open','pending'))::int AS unassigned
-     FROM tickets`,
-    [me],
+     FROM tickets t WHERE ${visible}`,
+    params,
   );
   return r as Record<View, number>;
 }
 
-export async function get(id: number): Promise<TicketDetail> {
-  const [t] = await q(`SELECT ${LIST_COLUMNS} FROM tickets t ${LAST_JOIN} WHERE t.id = $1`, [id]);
+/**
+ * One ticket with its conversation. With a viewer, only if they can open it, and internal notes
+ * only for agents; without one (the desk's own code), as stored.
+ */
+export async function get(id: number, v: Viewer | null = null): Promise<TicketDetail> {
+  const params: unknown[] = [id];
+  const [t] = await q(`SELECT ${LIST_COLUMNS} FROM tickets t ${LAST_JOIN} WHERE t.id = $1 AND ${v ? ticketVisible(v, "t", params) : "TRUE"}`, params);
   if (!t) throw new UserError("That ticket doesn't exist", 404);
-  const messages = await q("SELECT * FROM ticket_messages WHERE ticket_id = $1 ORDER BY id", [id]);
+  const notes = !v || seesNotes(v);
+  const messages = await q(`SELECT * FROM ticket_messages WHERE ticket_id = $1 ${notes ? "" : "AND direction <> 'note'"} ORDER BY id`, [id]);
   return { ...toTicket(t), messages: messages.map(toMessage) };
 }
 
-/** Everyone who has had a ticket assigned, for the assignee picker. */
+/** The agents, for the assignee picker. */
 export async function assignees(): Promise<string[]> {
-  const rows = await q<{ assignee: string }>("SELECT DISTINCT assignee FROM tickets WHERE assignee <> '' ORDER BY assignee LIMIT 200");
-  return rows.map((r) => r.assignee);
+  const rows = await q<{ email: string }>("SELECT email FROM agents ORDER BY email LIMIT 500");
+  return rows.map((r) => r.email);
 }
 
 /**

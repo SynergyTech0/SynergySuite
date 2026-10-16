@@ -26,7 +26,9 @@ describe.skipIf(!url)("crm", async () => {
 
   beforeAll(async () => {
     await q("SELECT 1");
-    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls CASCADE");
+    await q("TRUNCATE members, accounts, contacts, opportunities, leads, activities, ai_calls, crm_settings, record_shares CASCADE");
+    // These tests cover the organization-wide setting; per-person reads are in search.test.ts.
+    await q("INSERT INTO crm_settings (key, value) VALUES ('rep_read', 'all')");
   });
   afterAll(async () => {
     await db().close();
@@ -140,7 +142,7 @@ describe.skipIf(!url)("crm", async () => {
     await opps.create(admin, { accountId: acct.id, name: "C", amount: "5000", stage: "closed_won" });
     await opps.create(admin, { accountId: acct.id, name: "D", amount: "999", stage: "closed_lost" });
 
-    const s = await opps.summary(admin.email);
+    const s = await opps.summary(admin, admin.email);
     expect(s.openCount).toBe(2);
     expect(s.openAmount).toBe(3000);
     expect(s.weightedOpenAmount).toBe(100 + 1600);
@@ -152,10 +154,10 @@ describe.skipIf(!url)("crm", async () => {
     expect(moved).toMatchObject({ stage: "negotiation", probability: 75 });
     await expect(opps.moveStage(rep, a.id, "proposal")).rejects.toThrow(/owner or a manager/);
     await expect(opps.moveStage(admin, a.id, "won")).rejects.toThrow(/Unknown stage/);
-    expect((await opps.summary(admin.email)).weightedOpenAmount).toBe(100 + 1500);
+    expect((await opps.summary(admin, admin.email)).weightedOpenAmount).toBe(100 + 1500);
 
     // Everyone's pipeline includes the converted deal from earlier.
-    const all = await opps.summary();
+    const all = await opps.summary(admin);
     expect(all.openCount).toBe(3);
     expect(all.byStage.qualification.amount).toBe(48000);
 

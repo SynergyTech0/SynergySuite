@@ -671,6 +671,7 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/people
       HR_ADMIN_EMAILS: ${HR_ADMIN_EMAILS:-${PEOPLE_ADMIN_EMAILS:-}}
       PAYROLL_ADMIN_EMAILS: ${PAYROLL_ADMIN_EMAILS:-}
+      HR_DATA_KEY: ${HR_DATA_KEY:-}
       # Paid pay runs post a journal to Books when the Books service token is set.
       BOOKS_INTERNAL_URL: ${BOOKS_INTERNAL_URL:-http://books:3055}
       BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
