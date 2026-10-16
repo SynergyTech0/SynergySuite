@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, contacts, crm, desk, drive, forms, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, cad, calendar, chat, contacts, crm, desk, drive, flow (with the Activepieces flow engine), forms, mail, meet, notes, office, photo, planner, search, sites, todo, trust, and the people and portal add-ons) plus the Stalwart mail server, the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -43,7 +43,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `forms`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `cad`, `calendar`, `chat`, `contacts`, `crm`, `desk`, `drive`, `flow`, `flow-studio`, `forms`, `mail`, `meet`, `notes`, `office`, `people`, `photo`, `planner`, `portal`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.
@@ -64,7 +64,19 @@ To turn demo mode off, clear `DEMO_MODE` and `up` again: the `demo` service exit
 
 ## Public paths
 
-These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), and Base's data links (`base.<domain>/api/feed/*`, which check the link's token).
+These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and the flow engine's webhook triggers (`flow-studio.<domain>/api/v1/webhooks/*` and `/api/v1/app-events/*`, which only start a flow whose owner published a webhook trigger).
+
+## Flow
+
+`flow.<domain>` is Synergy Flow, the suite's Power Automate. People see their flows there, start from recipes, turn flows on and off and follow their runs. Building a flow happens in the flow designer at `flow-studio.<domain>`, which is the [Activepieces](https://github.com/activepieces/activepieces) Community Edition (MIT) engine and designer, unchanged; Flow's About page credits it.
+
+- **Sign-in.** Activepieces has its own accounts. Flow creates one per suite person (and a service account, created first, which becomes the engine's platform admin), with passwords derived from `FLOW_SECRET` that nobody types. Opening the designer from Flow passes through `flow-studio.<domain>/synergy/sso`, which signs the person in there. The gateway closes the engine's own sign-in, sign-up and invitation pages and requires a suite session for everything except webhook triggers.
+- **Synergy steps.** Flow installs a "Synergy" piece in the engine (`apps/flow/piece`, built into the Flow image) and gives each person a "Synergy" connection. Its actions (send an email, create an event, add a To Do or Planner task, post in Chat, add a contact, save to Drive, open a Desk ticket, add a CRM lead) and polling triggers (new email, new form response) call Flow, which calls the app as the flow's owner, so every app applies its own access rules. Hundreds of outside services (Gmail, Slack, Stripe, HTTP and so on) come from Activepieces' own piece catalog, which the engine downloads.
+- **Isolation.** The engine, its Postgres (`flow-db`) and Redis (`flow-redis`) are on their own `flow` network with only Flow and Caddy, so a flow can't reach the suite's database or call apps directly. Code steps run in V8 isolates (`AP_EXECUTION_MODE=SANDBOX_CODE_ONLY`).
+- **Secrets.** `FLOW_SECRET`, `FLOW_DB_PASSWORD`, `FLOW_ENCRYPTION_KEY` (32 hex characters) and `FLOW_JWT_SECRET`; quickstart fills them in, also in an existing `deploy/.env`. Changing `FLOW_SECRET` revokes every Synergy key and locks people out of their engine accounts: remove those accounts in the designer's platform settings (signed in as `flow-service@<domain>`) and Flow recreates them, but their flows go with them.
+- **Upgrading the engine.** `FLOW_ENGINE_VERSION` pins the Activepieces image (default `0.92.3`, the version Flow is tested with). Its own database migrates on start.
+- Polling triggers check every `FLOW_POLL_MINUTES` (default 5).
+- Known gaps: a person removed from the suite keeps their running flows until an admin turns them off in the designer; flows are not yet covered by Admin center holds and searches.
 
 ## Mail
 

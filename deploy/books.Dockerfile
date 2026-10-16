@@ -13,6 +13,7 @@ COPY apps/books/web/package.json apps/books/web/
 COPY apps/base/package.json apps/base/
 COPY apps/calendar/package.json apps/calendar/
 COPY apps/chat/package.json apps/chat/
+COPY apps/flow/package.json apps/flow/
 COPY apps/forms/package.json apps/forms/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/

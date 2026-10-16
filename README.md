@@ -12,7 +12,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 |---|---|---|---|---|
 | Account (`apps/auth`) | Entra ID | yes | usable | OIDC and SAML identity provider, MFA (TOTP, passkeys), admin console, SCIM; signs in every app |
 | Admin (`apps/admin`) | Microsoft 365 admin center, Purview eDiscovery | yes | early | People and sign-in blocking over SCIM, app health, matters, legal holds, retention rules, keyword search and zip export across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM and Desk, audit log |
-| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites and Base, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
+| Search (`apps/search`) | Microsoft Search, Microsoft 365 Copilot chat | yes | early | One search box (also in every app's header) across Mail, Drive, Chat, Calendar, Notes, Forms, Contacts, To Do, CRM, Desk, Office, Planner, Sites, Base and Flow, showing only what the signed-in person can open, with filters by app; an Ask tab that answers questions from those results with numbered citations, on your own AI model |
 | Mail (`apps/mail`) | Outlook | yes | usable | Folders, search, reading pane, rich-text compose, reply and forward, recipient suggestions from Contacts, outside IMAP accounts; Stalwart mail server included |
 | Contacts (`apps/contacts`) | Outlook People | yes | early | Address book (emails, phones, addresses, birthdays, photos, notes), favorites, groups, A to Z index, search, vCard and Google/Outlook CSV import and export, organization directory with self-edited profiles |
 | CRM (`apps/crm`) | Dynamics 365 Sales | yes | early | Accounts, contacts, leads with conversion, opportunity pipeline board with weighted forecast, activities and My Day, owner-based roles, AI lead scoring on your own model, web-to-lead, CSV export |
@@ -25,6 +25,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Drive (`apps/drive`) | OneDrive | yes | early | Folders, drag-and-drop and folder uploads, previews (images, PDF, video, audio, text), version history, sharing with people, view links, shared libraries, recycle bin, search inside text files, zip downloads, storage quotas, AI summaries |
 | Forms (`apps/forms`) | Forms | yes | early | Form builder, public form links, responses, CSV export |
 | Planner (`apps/planner`) | Planner | yes | usable | Boards, lists, cards, checklists, comments, labels; board, table, calendar and timeline views; Trello and Jira import |
+| Flow (`apps/flow`) | Power Automate | yes | early | Flows between suite apps and hundreds of outside services, designed in the Activepieces flow designer (MIT) and run by its engine; Synergy steps for Mail, Calendar, To Do, Planner, Chat, Forms, Contacts, Drive, Desk and CRM that act as the flow's owner; starter recipes, on/off switches and run history in the suite; suite sign-in carried into the designer |
 | Photo (`apps/photo`) | Designer / Photos | yes | early | The PhotoCraft image editor (layers, masks, PSD files) with a per-user image library |
 | Base (`apps/base`) | Access, Lists | yes | early | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
 | Sites (`apps/sites`) | SharePoint | yes | early | Page builder for team sites, published as public pages |
@@ -82,6 +83,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/todo` | Microsoft To Do | Next.js 16 + Postgres |
 | `apps/crm` | Dynamics 365 Sales | Next.js 16 + Postgres |
 | `apps/desk` | Dynamics 365 Customer Service | Next.js 16 + Postgres |
+| `apps/flow` | Power Automate | Next.js 16, no database; runs on Activepieces Community Edition (its own Postgres and Redis) |
 | `apps/forms` | Forms | Express + React/Vite |
 | `apps/planner` | Planner | Next.js 16 + Drizzle |
 | `apps/photo` | Photo (image editing) | Next.js 16 + PhotoCraft (Rust, WebAssembly) |

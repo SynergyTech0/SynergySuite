@@ -13,6 +13,7 @@
   { "id": "todo",      "name": "To Do",     "m365": "Microsoft To Do",      "port": 3195, "icon": "check",    "dir": "apps/todo",      "core": true },
   { "id": "forms",     "name": "Forms",     "m365": "Forms",                "port": 3110, "icon": "form",     "dir": "apps/forms",     "core": true },
   { "id": "planner",   "name": "Planner",   "m365": "Planner",              "port": 3600, "icon": "board",    "dir": "apps/planner",   "core": true },
+  { "id": "flow",      "name": "Flow",      "m365": "Power Automate",       "port": 3720, "icon": "flow",     "dir": "apps/flow",      "core": true },
   { "id": "photo",     "name": "Photo",     "m365": "Designer / Photos",    "port": 3650, "icon": "image",    "dir": "apps/photo",     "core": true },
   { "id": "cad",       "name": "CAD",       "m365": "(AutoCAD equivalent)", "port": 3660, "icon": "ruler",    "dir": "apps/cad",       "core": true },
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
