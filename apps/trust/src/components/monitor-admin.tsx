@@ -31,6 +31,8 @@ const TEMPLATES: Record<string, unknown> = {
   http_security_headers: { urls: ['https://example.com'] },
   dependency_vulns: { directories: ['/srv/app'], sla_days: { critical: 7, high: 30 } },
   patch_currency: { hosts: ['203.0.113.1'], max_security_updates: 0 },
+  endpoint_compliance: { active_days: 30, min_compliant_pct: 95, max_unencrypted: 0 },
+  endpoint_threats: { active_days: 30, max_open_critical: 0, max_high_age_days: 7, max_critical_vuln_devices: 0 },
 };
 
 export function NewMonitorForm({

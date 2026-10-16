@@ -19,6 +19,14 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   bookings: ["appointment"],
   crm: ["lead", "account", "contact", "opportunity", "activity"],
   desk: ["ticket"],
+  phone: ["call", "voicemail"],
+  diagrams: ["diagram"],
+  projects: ["project", "task", "time", "expense"],
+  devices: ["device", "alert"],
+  ops: ["work_order", "maintenance", "asset"],
+  hr: ["employee", "timeoff", "paycheck"],
+  stream: ["video", "comment", "project"],
+  whiteboard: ["board"],
   loop: ["page", "component"],
 };
 

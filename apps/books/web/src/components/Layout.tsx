@@ -13,7 +13,6 @@ import {
   X,
   ChevronDown,
   Package,
-  DollarSign,
   Briefcase,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -60,14 +59,6 @@ const navigation = [
     icon: Package,
     children: [{ name: 'Bundles & Kits', href: '/inventory/bundles' }],
   },
-  {
-    name: 'Payroll',
-    icon: DollarSign,
-    children: [
-      { name: 'Payroll Runs', href: '/payroll' },
-      { name: 'Tax Filing', href: '/payroll/tax-filing' },
-    ],
-  },
   { name: 'Projects', href: '/projects', icon: Briefcase },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Tax Classification', href: '/tax-classification', icon: Calculator },
@@ -82,7 +73,6 @@ export function Layout() {
     'Payables',
     'Banking',
     'Inventory',
-    'Payroll',
   ]);
 
   const toggleExpanded = (name: string) => {

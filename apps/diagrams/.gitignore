@@ -1,0 +1,3 @@
+# draw.io's web app, put here by engine/build.sh (and by deploy/diagrams.Dockerfile)
+/public/drawio/
+/engine/.drawio/

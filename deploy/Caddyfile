@@ -109,9 +109,14 @@ sites.{$SUITE_DOMAIN} {
 	}
 }
 
-people.{$SUITE_DOMAIN} {
+hr.{$SUITE_DOMAIN} {
 	import signed_in
-	import to_app people:3140
+	import to_app hr:3145
+}
+
+# HR took over from the People add-on; old links land there.
+people.{$SUITE_DOMAIN} {
+	redir https://hr.{$SUITE_DOMAIN}{uri}
 }
 
 portal.{$SUITE_DOMAIN} {
@@ -214,9 +219,30 @@ base.{$SUITE_DOMAIN} {
 	}
 }
 
+builder.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app builder:3745
+}
+
 photo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app photo:3650
+}
+
+stream.{$SUITE_DOMAIN} {
+	# The editor's engine is a large WebAssembly file; compress it (and everything else) on the way out.
+	encode zstd gzip
+	# Video links and the embeddable player open without an account: their pages, API and the
+	# build assets they load. A signed-in viewer is still known; everything else needs a suite sign-in.
+	@shared path /s/* /embed/* /api/shared/* /_next/* /favicon.ico /icon.svg
+	handle @shared {
+		import maybe_signed_in
+		import to_app stream:3725
+	}
+	handle {
+		import signed_in
+		import to_app stream:3725
+	}
 }
 
 contacts.{$SUITE_DOMAIN} {
@@ -265,6 +291,71 @@ desk.{$SUITE_DOMAIN} {
 	}
 }
 
+phone.{$SUITE_DOMAIN} {
+	# The media server's webhooks are signed with its API secret, checked by the app.
+	handle /api/livekit/webhook {
+		import to_app phone:3440
+	}
+	# Meet reaches Phone's machine API on the internal network only.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app phone:3440
+	}
+}
+
+devices.{$SUITE_DOMAIN} {
+	# The osquery agent on each computer has no suite account: it signs in with its enrollment
+	# key and node key, checked in the app. The posture feed for Trust stays on the compose network.
+	handle /api/osquery/* {
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		import to_app devices:3810
+	}
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app devices:3810
+	}
+}
+
+ops.{$SUITE_DOMAIN} {
+	# Demand and purchase-request feeds for other services (bearer OPS_API_TOKEN, checked in the app).
+	@svc path /api/svc/*
+	handle @svc {
+		import maybe_signed_in
+		import to_app ops:3760
+	}
+	handle {
+		import signed_in
+		import to_app ops:3760
+	}
+}
+
+commerce.{$SUITE_DOMAIN} {
+	# The online store, its cart and checkout API, the payment provider's callback (bearer
+	# COMMERCE_CHECKOUT_TOKEN) and the stock API for other apps (bearer COMMERCE_SVC_TOKEN),
+	# both checked in the app, need no suite account.
+	@shared path /store /store/* /api/store/* /api/svc/* /_next/* /favicon.ico /icon.png
+	handle @shared {
+		import maybe_signed_in
+		import to_app commerce:3730
+	}
+	handle {
+		import signed_in
+		import to_app commerce:3730
+	}
+}
+
 todo.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app todo:3195
@@ -273,6 +364,26 @@ todo.{$SUITE_DOMAIN} {
 engage.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app engage:3740
+}
+
+projects.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app projects:3820
+}
+
+whiteboard.{$SUITE_DOMAIN} {
+	# Meet and Chat ask for their boards on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle /collab* {
+		import signed_in
+		import to_app whiteboard-collab:3751
+	}
+	handle {
+		import signed_in
+		import to_app whiteboard:3750
+	}
 }
 
 bookings.{$SUITE_DOMAIN} {
@@ -301,6 +412,11 @@ drive.{$SUITE_DOMAIN} {
 		import signed_in
 		import to_app drive:3180
 	}
+}
+
+diagrams.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app diagrams:3790
 }
 
 cad.{$SUITE_DOMAIN} {

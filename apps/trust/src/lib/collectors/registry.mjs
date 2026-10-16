@@ -34,6 +34,8 @@ import * as dependencyVulns from './dependency-vulns.mjs';
 import * as patchCurrency from './patch-currency.mjs';
 import * as assetInventory from './asset-inventory.mjs';
 import * as restoreDrill from './restore-drill.mjs';
+import * as endpointCompliance from './endpoint-compliance.mjs';
+import * as endpointThreats from './endpoint-threats.mjs';
 
 const ALL = [
   tlsEndpoint,
@@ -47,6 +49,8 @@ const ALL = [
   patchCurrency,
   assetInventory,
   restoreDrill,
+  endpointCompliance,
+  endpointThreats,
 ];
 
 // Fail at import rather than at 3am: a collector missing part of the contract would
