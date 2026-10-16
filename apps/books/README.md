@@ -34,6 +34,11 @@ transaction posts a balanced journal entry, and the reports read those entries.
   (named by `BOOKS_COMPANY_NAME`) as an admin; later people join it as users.
 - One server: NestJS serves the API under `/api` and the built web app at the
   same origin, on the suite port for `books` (3055).
+- Other suite apps reach Books over `/api/svc/*` with `Authorization: Bearer
+  BOOKS_SVC_TOKEN`: the Portal add-on reads a client's invoices
+  (`GET /api/svc/invoices?email=`), and Projects creates draft invoices from
+  approved time and expenses (`POST /api/svc/invoices`). Drafts go to
+  `BOOKS_SVC_ORG_ID`, else the oldest company, and post to the ledger when sent.
 - Background jobs (invoice email, recurring invoices) use Bull, which needs Redis.
   `deploy/compose.yml` runs one.
 

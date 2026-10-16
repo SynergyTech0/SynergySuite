@@ -13,3 +13,6 @@ apps/cad/engine/.cadcraft
 apps/cad/engine/dwg/target
 apps/cad/public/engine3d
 apps/cad/engine/.chili3d
+apps/diagrams/public/drawio
+apps/diagrams/engine/.drawio
+apps/whiteboard/public/fonts

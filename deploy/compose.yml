@@ -267,15 +267,6 @@ services:
       SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
 
   # ---- add-ons ----
-  people:
-    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-people:${SYNERGY_IMAGE_TAG:-latest}
-    <<: *express
-    build: { <<: *express-build, args: { APP: people, APP_DIR: addons/people } }
-    environment:
-      <<: *app-env
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/people
-      ADMIN_EMAILS: ${PEOPLE_ADMIN_EMAILS:-}
-
   portal:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-portal:${SYNERGY_IMAGE_TAG:-latest}
     <<: *express
@@ -309,6 +300,31 @@ services:
       LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      # Hosts call phone numbers into meetings through Phone.
+      PHONE_SVC_TOKEN: ${PHONE_SVC_TOKEN:-}
+
+  # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
+  # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through
+  # LiveKit's SIP service and the SIP trunks set up in Phone admin (see apps/phone/deploy).
+  phone:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-phone:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: phone, APT_PACKAGES: espeak-ng } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/phone
+      NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
+      PHONE_ADMIN_EMAILS: ${PHONE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      PHONE_COUNTRY_CODE: ${PHONE_COUNTRY_CODE:-1}
+      PHONE_SIP_HOST: ${PHONE_SIP_HOST:-sip.${SUITE_DOMAIN}}
+      PHONE_SVC_TOKEN: ${PHONE_SVC_TOKEN:-}
+      PHONE_AI_SPEECH_MODEL: ${PHONE_AI_SPEECH_MODEL:-${AI_SPEECH_MODEL:-}}
+      CONTACTS_INTERNAL_URL: http://contacts:3190
 
   office:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-office:${SYNERGY_IMAGE_TAG:-latest}
@@ -358,7 +374,8 @@ services:
       ENCRYPTION_KEY: ${BOOKS_ENCRYPTION_KEY:-}
       BOOKS_COMPANY_NAME: ${BOOKS_COMPANY_NAME:-}
       EMAIL_FROM: ${BOOKS_EMAIL_FROM:-}
-      # Lets the Portal add-on list a client's invoices (/api/svc/invoices). Empty turns the feed off.
+      # Lets the Portal add-on list a client's invoices (/api/svc/invoices) and Ops send fixed
+      # assets (/api/svc/fixed-assets). Empty turns these off.
       BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
 
   # Job queue for Books (background tax and bank classification).
@@ -397,6 +414,9 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/trust
       # Names the organisation created for the first user who opens Trust (default My Company).
       TRUST_COMPANY_NAME: ${TRUST_COMPANY_NAME:-}
+      # Endpoint compliance and threat evidence from Devices.
+      DEVICES_INTERNAL_URL: http://devices:3810
+      DEVICES_SVC_TOKEN: ${DEVICES_SVC_TOKEN:-}
 
   # Databases and lists (Access and Lists equivalent). Makes its catalog on first use; each
   # database it holds is a schema of its own in this Postgres database.
@@ -407,6 +427,31 @@ services:
     environment:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/base
+
+  # Low-code apps (Power Apps equivalent): screens, galleries and forms with formulas, on Base
+  # tables. Reads and writes Base as the person using the app, so Base's sharing rules apply.
+  builder:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-builder:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: builder } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      builder-db: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/builder
+
+  # Makes the builder database on installs that started before Builder. Runs once per `up`.
+  builder-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'builder'\" | grep -q 1 || psql -c 'CREATE DATABASE builder'"]
 
   # Image editing (Photoshop/Designer equivalent): the PhotoCraft engine compiled to WebAssembly.
   photo:
@@ -421,6 +466,25 @@ services:
     volumes:
       - photo-files:/data/photos
 
+  # Microsoft Stream and Clipchamp equivalent: the organization's video library (upload, record,
+  # captions, chapters, comments, sharing and links) and a video editor, the FilmCraft engine
+  # compiled to WebAssembly. Videos live in the stream-files volume; back it up with Postgres.
+  stream:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-stream:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/stream.Dockerfile
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stream
+      STREAM_DIR: /data/stream
+      STREAM_MAX_UPLOAD_MB: ${STREAM_MAX_UPLOAD_MB:-}
+      STREAM_JOBS: ${STREAM_JOBS:-}
+      AI_SPEECH_MODEL: ${AI_SPEECH_MODEL:-}
+    volumes:
+      - stream-files:/data/stream
+
   # 2D drafting (AutoCAD equivalent): the CADCraft engine compiled to WebAssembly, with DWG and DXF.
   cad:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-cad:${SYNERGY_IMAGE_TAG:-latest}
@@ -433,6 +497,25 @@ services:
       CAD_DIR: /data/drawings
     volumes:
       - cad-files:/data/drawings
+
+  # Visio equivalent: flowcharts, org charts, network and software diagrams in draw.io's editor,
+  # with Visio (.vsdx) import, sharing and version history. Its AI drafting uses the suite's AI
+  # setting unless the DIAGRAMS_AI_* settings point it at another model.
+  diagrams:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-diagrams:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/diagrams.Dockerfile
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/diagrams
+      DIAGRAMS_MAX_MB: ${DIAGRAMS_MAX_MB:-}
+      DIAGRAMS_VERSIONS: ${DIAGRAMS_VERSIONS:-}
+      DIAGRAMS_AI_PROVIDER: ${DIAGRAMS_AI_PROVIDER:-}
+      DIAGRAMS_AI_BASE_URL: ${DIAGRAMS_AI_BASE_URL:-}
+      DIAGRAMS_AI_API_KEY: ${DIAGRAMS_AI_API_KEY:-}
+      DIAGRAMS_AI_MODEL: ${DIAGRAMS_AI_MODEL:-}
 
   # OneDrive equivalent: files, folders, sharing, view links, shared libraries and version history.
   # File contents live in the drive-files volume; back it up together with Postgres.
@@ -473,6 +556,29 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/todo
 
+  # Intune and Defender for Endpoint equivalent: the osquery agent on each computer reports
+  # inventory, compliance and threat detections here. DEVICES_PUBLIC_HOST is the name agents reach
+  # (default devices.SUITE_DOMAIN); DEVICES_TLS_CA (PEM) is installed on them when the server's
+  # certificate comes from a private CA. DEVICES_SVC_TOKEN gives Trust the posture feed. Alert
+  # explanations use the suite's AI_* model (DEVICES_AI_* to give Devices its own).
+  devices:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-devices:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: devices } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/devices
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      DEVICES_ADMIN_EMAILS: ${DEVICES_ADMIN_EMAILS:-}
+      DEVICES_SVC_TOKEN: ${DEVICES_SVC_TOKEN:-}
+      DEVICES_PUBLIC_HOST: ${DEVICES_PUBLIC_HOST:-}
+      DEVICES_TLS_CA: ${DEVICES_TLS_CA:-}
+      DEVICES_OSV_URL: ${DEVICES_OSV_URL:-}
+      DEVICES_AI_PROVIDER: ${DEVICES_AI_PROVIDER:-}
+      DEVICES_AI_BASE_URL: ${DEVICES_AI_BASE_URL:-}
+      DEVICES_AI_API_KEY: ${DEVICES_AI_API_KEY:-}
+      DEVICES_AI_MODEL: ${DEVICES_AI_MODEL:-}
+
   # Viva Engage and Viva Connections equivalent: the company home page (news, quick links, sites,
   # apps), a social feed, communities, praise, polls and Q&A. It reads Sites and Chat as the viewer.
   # ENGAGE_AI_* give its summaries a model of their own instead of the suite's AI_* one.
@@ -489,6 +595,66 @@ services:
       ENGAGE_AI_BASE_URL: ${ENGAGE_AI_BASE_URL:-}
       ENGAGE_AI_API_KEY: ${ENGAGE_AI_API_KEY:-}
       ENGAGE_AI_MODEL: ${ENGAGE_AI_MODEL:-}
+
+  # Microsoft Project and Dynamics 365 Project Operations equivalent: plans with a Gantt chart,
+  # teams and rates, weekly timesheets, expenses with receipts, approvals, and billing that
+  # lands in Books as draft invoices (needs BOOKS_SVC_TOKEN on both). Imports Planner boards.
+  projects:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-projects:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: projects } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/projects
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      BOOKS_INTERNAL_URL: http://books:3055
+      PLANNER_INTERNAL_URL: http://planner:3600
+      PROJECTS_AI_PROVIDER: ${PROJECTS_AI_PROVIDER:-}
+      PROJECTS_AI_BASE_URL: ${PROJECTS_AI_BASE_URL:-}
+      PROJECTS_AI_API_KEY: ${PROJECTS_AI_API_KEY:-}
+      PROJECTS_AI_MODEL: ${PROJECTS_AI_MODEL:-}
+
+  # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
+  # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
+  hr:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-hr:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: hr } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/people
+      HR_ADMIN_EMAILS: ${HR_ADMIN_EMAILS:-${PEOPLE_ADMIN_EMAILS:-}}
+      PAYROLL_ADMIN_EMAILS: ${PAYROLL_ADMIN_EMAILS:-}
+      # Paid pay runs post a journal to Books when the Books service token is set.
+      BOOKS_INTERNAL_URL: ${BOOKS_INTERNAL_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+
+  # Microsoft Whiteboard equivalent: an infinite canvas (Excalidraw) that everyone on a board draws
+  # on at once, with sticky notes, templates, sharing, copies saved to Drive, and a board for each
+  # meeting and chat. Sticky-note ideas use the suite's AI_* model (WHITEBOARD_AI_* to give it its own).
+  whiteboard:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-whiteboard:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: whiteboard } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/whiteboard
+      WHITEBOARD_AI_PROVIDER: ${WHITEBOARD_AI_PROVIDER:-}
+      WHITEBOARD_AI_BASE_URL: ${WHITEBOARD_AI_BASE_URL:-}
+      WHITEBOARD_AI_API_KEY: ${WHITEBOARD_AI_API_KEY:-}
+      WHITEBOARD_AI_MODEL: ${WHITEBOARD_AI_MODEL:-}
+
+  # Live drawing: the Yjs collaboration server for Whiteboard, reached at whiteboard.<domain>/collab.
+  whiteboard-collab:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-whiteboard:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: whiteboard } }
+    command: ["node", "server/collab.mjs"]
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/whiteboard
+      COLLAB_ADDRESS: 0.0.0.0
+      COLLAB_PORT: "3751"
 
   # Microsoft 365 admin center and Purview eDiscovery equivalent: people (through the sign-in
   # service's SCIM API), app health, matters, legal holds, retention and cross-app search and export.
@@ -623,6 +789,43 @@ services:
       DESK_SMTP_PASSWORD: ${DESK_SMTP_PASSWORD:-}
       DESK_SMTP_FROM: ${DESK_SMTP_FROM:-}
 
+  # Dynamics 365 Supply Chain Management equivalent: manufacturing (bills of materials,
+  # routings, work orders, MRP) and assets (register, preventive maintenance, repairs).
+  # Stock is kept in Commerce once COMMERCE_SVC_TOKEN is set (Commerce posts the journals to
+  # Books); with BOOKS_SVC_TOKEN set, assets can be sent to Books' fixed-asset register.
+  ops:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-ops:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: ops } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/ops
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      OPS_BOOKS_URL: ${OPS_BOOKS_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      OPS_COMMERCE_URL: ${OPS_COMMERCE_URL:-http://commerce:3730}
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
+      OPS_WIP_ACCOUNT: ${OPS_WIP_ACCOUNT:-}
+      OPS_MAINTENANCE_ACCOUNT: ${OPS_MAINTENANCE_ACCOUNT:-}
+
+  # Dynamics 365 Commerce and Supply Chain equivalent: products, stock across locations,
+  # purchase orders, a point-of-sale register at /pos and an online store at /store. Sales,
+  # refunds, deliveries and stock changes post to Books as journal entries (BOOKS_SVC_TOKEN).
+  # Online card payment needs a payment provider at COMMERCE_CHECKOUT_URL; without one,
+  # shoppers order and pay at pickup or on delivery.
+  commerce:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-commerce:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: commerce } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/commerce
+      BOOKS_INTERNAL_URL: ${BOOKS_INTERNAL_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      COMMERCE_CHECKOUT_URL: ${COMMERCE_CHECKOUT_URL:-}
+      COMMERCE_CHECKOUT_TOKEN: ${COMMERCE_CHECKOUT_TOKEN:-}
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
+
   # Outlook equivalent: the web mailbox, backed by the Stalwart mail server below.
   mail:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-mail:${SYNERGY_IMAGE_TAG:-latest}
@@ -714,6 +917,7 @@ volumes:
   pgdata: {}
   planner-attachments: {}
   photo-files: {}
+  stream-files: {}
   cad-files: {}
   drive-files: {}
   admin-exports: {}

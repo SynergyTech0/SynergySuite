@@ -1,8 +1,11 @@
-# Builds a Next.js suite app (admin, base, bookings, contacts, crm, desk, drive, engage, insights, mail, meet, office, planner, search, todo, trust). Run from the repository root:
+# Builds a Next.js suite app (admin, base, builder, bookings, commerce, contacts, crm, desk, drive, engage, hr, insights, mail, meet, office, ops, phone, planner, projects, search, todo, trust, whiteboard). Run from the repository root:
 #   docker build -f deploy/next-app.Dockerfile --build-arg APP=office -t synergy/office .
 ARG APP
 
 FROM node:22-slim
+# Extra Debian packages an app needs at run time (Phone: espeak-ng for spoken voicemail greetings).
+ARG APT_PACKAGES=""
+RUN if [ -n "$APT_PACKAGES" ]; then apt-get update && apt-get install -y --no-install-recommends $APT_PACKAGES && rm -rf /var/lib/apt/lists/*; fi
 ENV npm_config_fetch_retries=6 npm_config_fetch_retry_mintimeout=20000 npm_config_fetch_retry_maxtimeout=180000 npm_config_fetch_timeout=900000
 ARG APP
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -14,28 +17,36 @@ COPY apps/books/api/package.json apps/books/api/
 COPY apps/books/web/package.json apps/books/web/
 COPY apps/admin/package.json apps/admin/
 COPY apps/base/package.json apps/base/
+COPY apps/builder/package.json apps/builder/
 COPY apps/bookings/package.json apps/bookings/
 COPY apps/cad/package.json apps/cad/
 COPY apps/calendar/package.json apps/calendar/
 COPY apps/chat/package.json apps/chat/
+COPY apps/commerce/package.json apps/commerce/
 COPY apps/contacts/package.json apps/contacts/
 COPY apps/crm/package.json apps/crm/
 COPY apps/desk/package.json apps/desk/
+COPY apps/diagrams/package.json apps/diagrams/
 COPY apps/drive/package.json apps/drive/
 COPY apps/engage/package.json apps/engage/
 COPY apps/forms/package.json apps/forms/
 COPY apps/insights/package.json apps/insights/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/
+COPY apps/phone/package.json apps/phone/
 COPY apps/notes/package.json apps/notes/
 COPY apps/office/package.json apps/office/
+COPY apps/ops/package.json apps/ops/
 COPY apps/planner/package.json apps/planner/
 COPY apps/photo/package.json apps/photo/
 COPY apps/search/package.json apps/search/
 COPY apps/sites/package.json apps/sites/
+COPY apps/stream/package.json apps/stream/
 COPY apps/todo/package.json apps/todo/
+COPY apps/projects/package.json apps/projects/
 COPY apps/trust/package.json apps/trust/
-COPY addons/people/package.json addons/people/
+COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/${APP} --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages

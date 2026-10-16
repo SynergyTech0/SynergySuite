@@ -1,0 +1,106 @@
+diff --git a/apps/filmcraft-web/src/host.rs b/apps/filmcraft-web/src/host.rs
+new file mode 100644
+index 0000000..eabd51a
+--- /dev/null
++++ b/apps/filmcraft-web/src/host.rs
+@@ -0,0 +1,58 @@
++//! `?host`: FilmCraft inside a host page that keeps the user's media (Synergy Stream's video
++//! editor). Without the flag, or when the page is not in a frame, nothing here runs.
++//!
++//! The host drives the editor through `window.filmcraft` (it must be same-origin to reach it):
++//! `importUrl` brings its videos in, `execute` runs commands. In return this module:
++//!
++//! - tells the host when the editor can take requests: `{type: "filmcraft:ready"}`
++//! - hands it every file the editor writes (saved projects, exports, captions) in place of a
++//!   browser download: `{type: "filmcraft:save", name, path, bytes: ArrayBuffer}`
++//!
++//! Messages go to the parent window only, and only to this page's own origin.
++
++use wasm_bindgen::JsValue;
++
++/// `?host` was given and there is a parent page to talk to.
++pub fn enabled() -> bool {
++    crate::query_flag("host") && parent().is_some()
++}
++
++fn parent() -> Option<web_sys::Window> {
++    let w = web_sys::window()?;
++    let p = w.parent().ok().flatten()?;
++    // A top-level page is its own parent.
++    if js_sys::Object::is(&p, &w) { None } else { Some(p) }
++}
++
++fn post(msg: &js_sys::Object, transfer: Option<&js_sys::Array>) -> Result<(), JsValue> {
++    let p = parent().ok_or("no host page")?;
++    let origin = web_sys::window().ok_or("no window")?.location().origin()?;
++    match transfer {
++        Some(t) => p.post_message_with_transfer(msg, &origin, t),
++        None => p.post_message(msg, &origin),
++    }
++}
++
++fn message(kind: &str) -> js_sys::Object {
++    let m = js_sys::Object::new();
++    let _ = js_sys::Reflect::set(&m, &"type".into(), &kind.into());
++    m
++}
++
++/// The editor is running and `window.filmcraft` answers.
++pub fn ready() {
++    if let Err(e) = post(&message("filmcraft:ready"), None) {
++        log::warn!("host ready: {e:?}");
++    }
++}
++
++/// A file the editor wrote, for the host to keep.
++pub fn save(path: &str, data: &[u8]) -> Result<(), JsValue> {
++    let m = message("filmcraft:save");
++    let name = path.rsplit('/').next().unwrap_or(path);
++    let buf = js_sys::Uint8Array::from(data).buffer();
++    js_sys::Reflect::set(&m, &"name".into(), &name.into())?;
++    js_sys::Reflect::set(&m, &"path".into(), &path.into())?;
++    js_sys::Reflect::set(&m, &"bytes".into(), &buf)?;
++    post(&m, Some(&js_sys::Array::of1(&buf)))
++}
+diff --git a/apps/filmcraft-web/src/lib.rs b/apps/filmcraft-web/src/lib.rs
+index 21512cc..90fc1f0 100644
+--- a/apps/filmcraft-web/src/lib.rs
++++ b/apps/filmcraft-web/src/lib.rs
+@@ -22,6 +22,7 @@ pub mod api;
+ pub mod audio;
+ pub mod download_pacing;
+ pub mod fs;
++pub mod host;
+ pub mod import;
+ pub mod opfs;
+ pub mod recovery;
+@@ -144,7 +145,7 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
+     api::install()?;
+     import::install_drop_handlers()?;
+ 
+-    let demo = !query_flag("empty");
++    let demo = !query_flag("empty") && !query_flag("host");
+     let mut web_options = eframe::WebOptions::default();
+     // `?webgl`: WebGL2 only. The page reloads with it when starting on WebGPU fails (an adapter
+     // whose device can't be created, a driver the browser rejects…); see `index.html`.
+@@ -163,7 +164,9 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
+                 let ctx = cc.egui_ctx.clone();
+                 fs::set_on_data(move || ctx.request_repaint());
+                 fs::set_on_write(|path, data| {
+-                    if let Err(e) = fs::download(path, data) {
++                    // In a host page, written files go to the host instead of the downloads folder.
++                    let sent = if host::enabled() { host::save(path, data) } else { fs::download(path, data) };
++                    if let Err(e) = sent {
+                         log::warn!("download {path}: {e:?}");
+                     }
+                 });
+@@ -191,6 +194,9 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
+                     Some(Box::new(|| web_sys::window().map(|w| w.navigator().languages().iter().filter_map(|v| v.as_string()).collect()).unwrap_or_default()));
+                 let (tx, rx) = std::sync::mpsc::channel();
+                 api::set_sender(tx);
++                if host::enabled() {
++                    host::ready();
++                }
+                 app = app.with_control(rx);
+                 if let Some(t) = toast {
+                     app.status(t);

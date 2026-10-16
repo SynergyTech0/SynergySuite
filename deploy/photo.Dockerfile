@@ -56,13 +56,16 @@ COPY apps/chat/package.json apps/chat/
 COPY apps/forms/package.json apps/forms/
 COPY apps/mail/package.json apps/mail/
 COPY apps/meet/package.json apps/meet/
+COPY apps/phone/package.json apps/phone/
 COPY apps/notes/package.json apps/notes/
 COPY apps/office/package.json apps/office/
 COPY apps/planner/package.json apps/planner/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
+COPY apps/stream/package.json apps/stream/
 COPY apps/trust/package.json apps/trust/
-COPY addons/people/package.json addons/people/
+COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/photo --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
