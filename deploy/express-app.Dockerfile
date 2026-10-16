@@ -38,6 +38,7 @@ COPY apps/office/package.json apps/office/
 COPY apps/planner/package.json apps/planner/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
+COPY apps/stream/package.json apps/stream/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
 COPY addons/people/package.json addons/people/

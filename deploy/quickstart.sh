@@ -103,7 +103,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1"
-  for h in auth sso admin base books bookings calendar chat contacts crm desk drive engage forms insights mail meet notes office people planner portal search sites todo trust whiteboard; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin base books bookings calendar chat contacts crm desk drive engage forms insights mail meet notes office people planner portal search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi

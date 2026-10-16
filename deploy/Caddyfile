@@ -209,6 +209,22 @@ photo.{$SUITE_DOMAIN} {
 	import to_app photo:3650
 }
 
+stream.{$SUITE_DOMAIN} {
+	# The editor's engine is a large WebAssembly file; compress it (and everything else) on the way out.
+	encode zstd gzip
+	# Video links and the embeddable player open without an account: their pages, API and the
+	# build assets they load. A signed-in viewer is still known; everything else needs a suite sign-in.
+	@shared path /s/* /embed/* /api/shared/* /_next/* /favicon.ico /icon.svg
+	handle @shared {
+		import maybe_signed_in
+		import to_app stream:3725
+	}
+	handle {
+		import signed_in
+		import to_app stream:3725
+	}
+}
+
 contacts.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app contacts:3190

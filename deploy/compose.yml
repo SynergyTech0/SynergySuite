@@ -421,6 +421,25 @@ services:
     volumes:
       - photo-files:/data/photos
 
+  # Microsoft Stream and Clipchamp equivalent: the organization's video library (upload, record,
+  # captions, chapters, comments, sharing and links) and a video editor, the FilmCraft engine
+  # compiled to WebAssembly. Videos live in the stream-files volume; back it up with Postgres.
+  stream:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-stream:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/stream.Dockerfile
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/stream
+      STREAM_DIR: /data/stream
+      STREAM_MAX_UPLOAD_MB: ${STREAM_MAX_UPLOAD_MB:-}
+      STREAM_JOBS: ${STREAM_JOBS:-}
+      AI_SPEECH_MODEL: ${AI_SPEECH_MODEL:-}
+    volumes:
+      - stream-files:/data/stream
+
   # 2D drafting (AutoCAD equivalent): the CADCraft engine compiled to WebAssembly, with DWG and DXF.
   cad:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-cad:${SYNERGY_IMAGE_TAG:-latest}
@@ -741,6 +760,7 @@ volumes:
   pgdata: {}
   planner-attachments: {}
   photo-files: {}
+  stream-files: {}
   cad-files: {}
   drive-files: {}
   admin-exports: {}

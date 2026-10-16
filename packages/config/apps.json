@@ -15,6 +15,7 @@
   { "id": "forms",     "name": "Forms",     "m365": "Forms",                "port": 3110, "icon": "form",     "dir": "apps/forms",     "core": true },
   { "id": "planner",   "name": "Planner",   "m365": "Planner",              "port": 3600, "icon": "board",    "dir": "apps/planner",   "core": true },
   { "id": "photo",     "name": "Photo",     "m365": "Designer / Photos",    "port": 3650, "icon": "image",    "dir": "apps/photo",     "core": true },
+  { "id": "stream",    "name": "Stream",    "m365": "Stream, Clipchamp",    "port": 3725, "icon": "play",     "dir": "apps/stream",    "core": true },
   { "id": "cad",       "name": "CAD",       "m365": "(AutoCAD equivalent)", "port": 3660, "icon": "ruler",    "dir": "apps/cad",       "core": true },
   { "id": "trust",     "name": "Trust",     "m365": "Purview Compliance Manager", "port": 3670, "icon": "shield", "dir": "apps/trust",     "core": true },
   { "id": "insights",  "name": "Insights",  "m365": "Power BI",             "port": 3720, "icon": "chart",    "dir": "apps/insights",  "core": true },

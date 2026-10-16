@@ -31,6 +31,7 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Photo (`apps/photo`) | Designer / Photos | yes | early | The PhotoCraft image editor (layers, masks, PSD files) with a per-user image library |
 | Base (`apps/base`) | Access, Lists | yes | usable | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
 | Insights (`apps/insights`) | Power BI | yes | early | Dashboards and reports over Books, CRM, Desk, Base, Planner, Forms and Trust as read-only sources (no password, token or key columns), built in the Metabase report designer with your suite sign-in; dashboards shown inside Insights to the people who can open them; analysts and viewers |
+| Stream (`apps/stream`) | Stream, Clipchamp | yes | early | Video library (upload, screen and camera recording, captions and transcripts, chapters, timed comments, sharing with people, the organization or a link, embeds) and a video editor on the FilmCraft engine; AI captions, summaries and chapters through your own model |
 | Sites (`apps/sites`) | SharePoint | yes | early | Page builder for team sites, published as public pages |
 | Books (`apps/books`) | Dynamics 365 Business Central | yes | early | Double-entry ledger, invoices, estimates, bills, bank reconciliation, payroll, inventory, sales tax, financial reports, customer payments through Stripe or Square; new to the suite sign-in and Docker deploy |
 | CAD (`apps/cad`) | AutoCAD-style drafting, 3D modeling | yes | early | 2D drafting with DWG and DXF (CADCraft), 3D modeling with STEP, IGES and STL (Chili3D), drawings made from 3D models, review links, version history, folders; CADCraft is pre-alpha upstream and drops entities it doesn't model yet when saving |
@@ -95,6 +96,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/forms` | Forms | Express + React/Vite |
 | `apps/planner` | Planner | Next.js 16 + Drizzle |
 | `apps/photo` | Photo (image editing) | Next.js 16 + PhotoCraft (Rust, WebAssembly) |
+| `apps/stream` | Stream (video library and editor) | Next.js 16 + ffmpeg + FilmCraft (Rust, WebAssembly) |
 | `apps/cad` | CAD (2D drafting with DWG/DXF, 3D modeling, drawings from models, review links, version history, folders) | Next.js 16 + CADCraft (Rust, WebAssembly) + Chili3D (Open CASCADE, WebAssembly) |
 | `apps/base` | Access, Lists | Next.js 16 + Postgres (one schema per database) |
 | `apps/insights` | Power BI | Next.js 16 + Metabase (open source edition, AGPL) |
