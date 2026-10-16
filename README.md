@@ -21,16 +21,18 @@ Maturity: **usable** means the main workflows work day to day; **early** means t
 | Calendar (`apps/calendar`) | Outlook Calendar | yes | early | Week view, personal and company calendars, attendees, free/busy API; no recurring events or month view yet |
 | Chat (`apps/chat`) | Teams chat | yes | usable | Channels, direct messages, threads, reactions, mentions, unread counts, search, real-time updates |
 | Meet (`apps/meet`) | Teams meetings | yes | early | Video rooms on LiveKit, scheduling, guest links; the media server is deployed separately and is not part of the local quickstart |
-| Office (`apps/office`) | Word, Excel, PowerPoint | yes | early | Documents with live co-editing, comments and DOCX import; spreadsheets (Univer) and slides are more basic |
-| Drive (`apps/drive`) | OneDrive | yes | early | Folders, drag-and-drop and folder uploads, previews (images, PDF, video, audio, text), version history, sharing with people, view links, shared libraries, recycle bin, search inside text files, zip downloads, storage quotas, AI summaries |
+| Office (`apps/office`) | Word, Excel, PowerPoint | yes | usable | Documents, spreadsheets and slides with live co-editing, comments and sharing; opens and saves .docx, .xlsx and .pptx (with round-trip fidelity scripts over public test files); formulas, pivots, charts and conditional formatting in sheets; themes, transitions, animations and presenter view in slides |
+| Drive (`apps/drive`) | OneDrive | yes | usable | Folders, drag-and-drop and folder uploads, previews (images, PDF, video, audio, text), version history, sharing with people, view links, shared libraries, recycle bin, search inside text files, zip downloads, storage quotas, AI summaries |
 | Forms (`apps/forms`) | Forms | yes | early | Form builder, public form links, responses, CSV export |
 | Planner (`apps/planner`) | Planner | yes | usable | Boards, lists, cards, checklists, comments, labels; board, table, calendar and timeline views; Trello and Jira import |
 | Photo (`apps/photo`) | Designer / Photos | yes | early | The PhotoCraft image editor (layers, masks, PSD files) with a per-user image library |
-| Base (`apps/base`) | Access, Lists | yes | early | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
+| Base (`apps/base`) | Access, Lists | yes | usable | Databases of real Postgres tables: Access data types, datasheet editing, design view, sort, filter, search, lookups (single and multi-value) with enforced relationships, subdatasheets, a relationships diagram, a query designer with totals and criteria, SQL view with AI help (bring your own model), CSV import and export, Access (.accdb/.mdb) import of tables, records and relationships, forms with subforms that can be published as Synergy Forms online forms, reports with groups and totals that print or save as PDF, Lists-style gallery, board and calendar views, comments on records, data links that Sheets refreshes from, and sharing with owners, editors and viewers |
 | Sites (`apps/sites`) | SharePoint | yes | early | Page builder for team sites, published as public pages |
+| Books (`apps/books`) | Dynamics 365 Business Central | yes | early | Double-entry ledger, invoices, estimates, bills, bank reconciliation, payroll, inventory, sales tax, financial reports, customer payments through Stripe or Square; new to the suite sign-in and Docker deploy |
+| CAD (`apps/cad`) | AutoCAD-style drafting, 3D modeling | yes | early | 2D drafting with DWG and DXF (CADCraft), 3D modeling with STEP, IGES and STL (Chili3D), drawings made from 3D models, review links, version history, folders; CADCraft is pre-alpha upstream and drops entities it doesn't model yet when saving |
 | Notes (`apps/notes`) | OneNote | yes | usable | Wiki spaces, page tree, live co-editing, version history, comments, attachments, PDF and Word export |
 | Trust (`apps/trust`) | Purview Compliance Manager | yes | early | SOC 2, ISO 27001, HIPAA and GDPR readiness: control library mapped across frameworks, automated evidence collectors and a collector agent, append-only evidence and audit log, opt-in public trust centre |
-| Home, Groups, Admin, Purview (`prototype/workspace`) | Microsoft 365 home and others | no | prototype | Zero-dependency Node prototype; features are being ported into `apps/` |
+| Home, Groups (`prototype/workspace`) | Microsoft 365 home, Groups | no | prototype | Zero-dependency Node prototype kept as a reference; its Admin, Purview, People and To Do parts now live in `apps/admin`, `apps/contacts` and `apps/todo` |
 | People add-on (`addons/people`) | (HR records) | yes | early | Employee records and PTO requests with approval |
 | Portal add-on (`addons/portal`) | (customer portal) | yes | early | Client records with private share links |
 | Sign add-on (`addons/sign`) | (DocuSign-style) | no | standalone | E-signature with multi-party signing and templates; has its own sign-in |
@@ -91,7 +93,7 @@ To start with sample content instead of an empty suite, run `DEMO_MODE=1 deploy/
 | `apps/books` | Dynamics 365 Business Central (accounting) | NestJS + Prisma + React/Vite |
 | `apps/notes` | OneNote | Express + React/Vite |
 | `apps/trust` | Purview Compliance Manager | Next.js 16 + postgres.js (raw SQL migrations, row-level security) |
-| `prototype/workspace` | 365 home, People, To Do, Groups, Admin, Purview | zero-dependency Node prototype; features to be ported into `apps/` |
+| `prototype/workspace` | 365 home, Groups | zero-dependency Node prototype, kept as a reference; Admin, Purview, People and To Do were ported into `apps/` |
 | `addons/sign` | (DocuSign-style) | Next.js 14 + Prisma |
 | `addons/campaigns` | (Mailchimp-style) | Next.js 15 |
 | `addons/portal` | customer portal | Express + React/Vite |
