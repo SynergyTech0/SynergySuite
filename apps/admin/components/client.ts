@@ -56,8 +56,8 @@ export function hue(seed: string): number {
   return HUES[h % HUES.length];
 }
 
-export type View = "home" | "people" | "apps" | "migrate" | "matters" | "holds" | "search" | "retention" | "audit" | "roles";
-export const VIEWS: View[] = ["home", "people", "apps", "migrate", "matters", "holds", "search", "retention", "audit", "roles"];
+export type View = "home" | "people" | "apps" | "migrate" | "matters" | "holds" | "search" | "retention" | "labels" | "dlp" | "audit" | "roles";
+export const VIEWS: View[] = ["home", "people", "apps", "migrate", "matters", "holds", "search", "retention", "labels", "dlp", "audit", "roles"];
 export type Route = { view: View; id: string | null; tab: string | null };
 
 function parse(hash: string, fallback: View): Route {

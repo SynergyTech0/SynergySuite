@@ -223,10 +223,15 @@ router.post('/channels/:id/messages', wrap(async (req, res) => {
     const p = (await db.q('SELECT channel_id FROM messages WHERE id = $1', [parentId])).rows[0];
     if (!p || Number(p.channel_id) !== chId) return res.status(400).json({ error: 'bad parent' });
   }
+  const dlp = await compliance.checkMessageDlp(req.user, {
+    channelId: chId, text: body, reply: !!parentId, override: (req.body || {}).dlpOverride,
+  });
+  if (dlp.refuse) return res.status(dlp.refuse.status).json(dlp.refuse.body);
   const { rows } = await db.q(
     `INSERT INTO messages (channel_id, user_id, parent_id, body) VALUES ($1,$2,$3,$4) RETURNING id`,
     [chId, req.user.id, parentId, body]);
   const msg = await messageRow(rows[0].id);
+  dlp.report(msg.id);
   // sender has read their own message
   await db.q(
     `UPDATE channel_members SET last_read_msg = GREATEST(last_read_msg, $3)
@@ -263,9 +268,18 @@ router.patch('/messages/:id', wrap(async (req, res) => {
   const id = Number(req.params.id);
   const body = String((req.body || {}).body || '').slice(0, 8000).trim();
   if (!body) return res.status(400).json({ error: 'empty message' });
+  const own = (await db.q(
+    'SELECT channel_id, parent_id FROM messages WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+    [id, req.user.id])).rows[0];
+  if (!own) return res.status(404).json({ error: 'not found' });
+  const dlp = await compliance.checkMessageDlp(req.user, {
+    channelId: Number(own.channel_id), text: body, reply: !!own.parent_id, edit: true, override: (req.body || {}).dlpOverride,
+  });
+  if (dlp.refuse) return res.status(dlp.refuse.status).json(dlp.refuse.body);
   const rows = await compliance.editMessage(req.user, id, body);
   if (!rows.length) return res.status(404).json({ error: 'not found' });
   const msg = await messageRow(id);
+  dlp.report(id);
   hub.broadcastChannel(Number(rows[0].channel_id), { type: 'message.edited', message: msg });
   res.json(msg);
 }));

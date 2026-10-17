@@ -3,6 +3,7 @@ import { ArrowLeft, Building2, Download, Plus, Settings2, Trash2 } from "lucide-
 import { useEffect, useState } from "react";
 import { type Ctx, addDays, api, dayLabel, dollars, formData, money, rangeLabel, today } from "./client";
 import { Modal } from "./Modal";
+import { TaxForms } from "./TaxForms";
 
 type Totals = { grossCents: number; deductionsCents: number; taxesCents: number; netCents: number; employerTaxesCents: number; employerBenefitsCents: number; employees: number; offCycle?: boolean };
 type Run = {
@@ -20,7 +21,6 @@ type Settings = {
   companyName: string; frequency: string; overtimeMultiplier: number; sutaRatePercent: number; sutaWageBaseCents: number;
   accounts: Record<string, string>; booksOrg: string; booksConnected: boolean;
 };
-type Quarter = { quarter: number; runs: number; grossCents: number; federalWagesCents: number; ficaWagesCents: number; federalCents: number; socialSecurityCents: number; medicareCents: number; stateCents: number; futaCents: number; sutaCents: number; netCents: number };
 
 const FREQ: Record<string, { label: string; days: number }> = {
   weekly: { label: "Every week", days: 7 }, biweekly: { label: "Every two weeks", days: 14 }, semimonthly: { label: "Twice a month", days: 15 }, monthly: { label: "Every month", days: 30 },
@@ -37,8 +37,6 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
   const [creating, setCreating] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
   const [editingEmployer, setEditingEmployer] = useState(false);
-  const [summaryYear, setSummaryYear] = useState(new Date().getFullYear());
-  const [summary, setSummary] = useState<Quarter[]>([]);
 
   const load = async () => {
     const [r, s] = await Promise.all([api<Run[]>("/api/payroll/runs"), api<Settings>("/api/payroll/settings")]);
@@ -49,9 +47,6 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
     load().catch((e) => ctx.toast((e as Error).message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => {
-    api<Quarter[]>(`/api/payroll/summary?year=${summaryYear}`).then(setSummary, () => setSummary([]));
-  }, [summaryYear, runs]);
 
   if (open) return <RunView ctx={ctx} id={open} settings={settings} onBack={async () => { setOpen(null); await load(); }} />;
   if (!runs || !settings) return <main className="view pad muted">Loading…</main>;
@@ -69,7 +64,7 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
       <div className="viewbody">
         <div className="banner">
           Payroll works out US federal withholding, Social Security, Medicare and FUTA from the published 2026 figures, and state withholding from each state's
-          published tables. It does not file returns, deposit taxes or move money. Check the results against IRS Publication 15-T before you pay people.
+          published tables. It fills in W-2s, Form 941, Form 940 and direct deposit files, but does not file returns, pay taxes or send money itself. Check the results against IRS Publication 15-T before you pay people.
         </div>
         {!settings.booksConnected && (
           <div className="banner info">Books isn&apos;t connected, so paid runs won&apos;t reach the ledger. Set BOOKS_SVC_TOKEN for HR and Books to the same value.</div>
@@ -98,29 +93,7 @@ export function Payroll({ ctx }: { ctx: Ctx }) {
             </table>
           )}
         </section>
-        <section className="section">
-          <div className="row">
-            <h3 style={{ margin: 0 }}>Tax summary by quarter</h3>
-            <select className="btn small right" value={summaryYear} onChange={(e) => setSummaryYear(Number(e.target.value))} aria-label="Year">
-              {[0, 1, 2].map((d) => <option key={d}>{new Date().getFullYear() - d}</option>)}
-            </select>
-          </div>
-          <p className="small muted">Paid runs only. Social Security and Medicare include the employer share, as on Form 941.</p>
-          <div style={{ overflowX: "auto" }}>
-            <table className="list">
-              <thead><tr><th>Quarter</th><th className="num">Gross wages</th><th className="num">Federal income tax</th><th className="num">Social Security</th><th className="num">Medicare</th><th className="num">State</th><th className="num">FUTA</th><th className="num">SUTA</th></tr></thead>
-              <tbody>
-                {summary.map((q) => (
-                  <tr key={q.quarter}>
-                    <td>Q{q.quarter}</td><td className="num">{money(q.grossCents)}</td><td className="num">{money(q.federalCents)}</td>
-                    <td className="num">{money(q.socialSecurityCents)}</td><td className="num">{money(q.medicareCents)}</td><td className="num">{money(q.stateCents)}</td>
-                    <td className="num">{money(q.futaCents)}</td><td className="num">{money(q.sutaCents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <TaxForms reload={runs} />
       </div>
       {creating && <NewRunDialog settings={settings} last={runs.find((r) => r.status !== "void" && !r.totals.offCycle)} onClose={() => setCreating(false)} onDone={(id) => { setCreating(false); setOpen(id); }} />}
       {editingEmployer && <EmployerDialog onClose={() => setEditingEmployer(false)} onDone={() => { setEditingEmployer(false); ctx.toast("Company and bank details saved"); }} />}

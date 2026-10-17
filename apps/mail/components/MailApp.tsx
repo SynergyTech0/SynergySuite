@@ -7,7 +7,7 @@ import { Compose, type Draft } from "./Compose";
 import { AddAccount } from "./AddAccount";
 import {
   api, postJson, escapeHtml, fullAddress,
-  type AccountSummary, type Folder, type MessageDetail, type MessageSummary,
+  type AccountSummary, type Folder, type Label, type MessageDetail, type MessageSummary,
 } from "@/lib/client";
 
 type Where = { account: string; folder: string };
@@ -37,6 +37,7 @@ export function MailApp({ me }: { me: string }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [labels, setLabels] = useState<{ labels: Label[]; defaultLabelId: string | null }>({ labels: [], defaultLabelId: null });
   const listSeq = useRef(0);
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
@@ -74,6 +75,8 @@ export function MailApp({ me }: { me: string }) {
   }, [loadFolders, me]);
 
   useEffect(() => { loadAccounts().catch((e) => flash(e.message)); }, [loadAccounts]);
+  // Sensitivity labels for the composer; without them it simply offers none.
+  useEffect(() => { api<{ labels: Label[]; defaultLabelId: string | null }>("/api/labels").then(setLabels, () => undefined); }, []);
 
   // Contacts and other apps open /?compose=<addresses> to start a message.
   const composeTo = useRef<string | null>(typeof window === "undefined" ? null : new URL(location.href).searchParams.get("compose"));
@@ -215,6 +218,8 @@ export function MailApp({ me }: { me: string }) {
       bcc: "",
       subject,
       html: `<p><br></p><hr><div>${header}</div><blockquote>${original}</blockquote>`,
+      // Replies and forwards keep the original's label.
+      labelId: detail.label?.id,
       inReplyTo: kind === "forward" ? undefined : detail.messageId ?? undefined,
       references: kind === "forward" ? undefined : [...detail.references, ...(detail.messageId ? [detail.messageId] : [])],
     });
@@ -261,7 +266,7 @@ export function MailApp({ me }: { me: string }) {
         onMore={canMore ? () => { const p = page + 1; setPage(p); if (where) loadMessages(where, search, p); } : null}
       />
       {draft ? (
-        <Compose draft={draft} accounts={accounts} onClose={() => setDraft(null)}
+        <Compose draft={draft} accounts={accounts} labels={labels.labels} defaultLabelId={labels.defaultLabelId} onClose={() => setDraft(null)}
           onSent={() => { setDraft(null); flash("Sent"); if (where) loadFolders(where.account); }} />
       ) : (
         <ReadingPane

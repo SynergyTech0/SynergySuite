@@ -602,6 +602,43 @@ services:
       DEVICES_AI_BASE_URL: ${DEVICES_AI_BASE_URL:-}
       DEVICES_AI_API_KEY: ${DEVICES_AI_API_KEY:-}
       DEVICES_AI_MODEL: ${DEVICES_AI_MODEL:-}
+      DEVICES_MDM_URL: http://devices-mdm:9000
+      DEVICES_MDM_API_KEY: ${DEVICES_MDM_API_KEY:-}
+      DEVICES_MDM_WEBHOOK_KEY: ${DEVICES_MDM_WEBHOOK_KEY:-}
+      DEVICES_SCEP_CHALLENGE: ${DEVICES_SCEP_CHALLENGE:-}
+      DEVICES_ORG_NAME: ${DEVICES_ORG_NAME:-}
+
+  # Apple device management for Devices: NanoMDM speaks the MDM protocol to iPhones, iPads and
+  # Macs, and the SCEP server issues their identity certificates. Both are MIT (MicroMDM project).
+  # They stay idle until DEVICES_MDM_API_KEY, DEVICES_MDM_WEBHOOK_KEY and DEVICES_SCEP_CHALLENGE
+  # are set. The proxy exposes only the device endpoints, never NanoMDM's API.
+  devices-scep:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-apple-mdm:${SYNERGY_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: apple-mdm.Dockerfile
+    command: ["scep"]
+    environment:
+      DEVICES_SCEP_CHALLENGE: ${DEVICES_SCEP_CHALLENGE:-}
+      DEVICES_ORG_NAME: ${DEVICES_ORG_NAME:-}
+    volumes:
+      - devices-scep:/data
+
+  devices-mdm:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-apple-mdm:${SYNERGY_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: apple-mdm.Dockerfile
+    command: ["mdm"]
+    environment:
+      DEVICES_MDM_API_KEY: ${DEVICES_MDM_API_KEY:-}
+      DEVICES_MDM_WEBHOOK_KEY: ${DEVICES_MDM_WEBHOOK_KEY:-}
+    volumes:
+      - devices-mdm:/data
+      - devices-scep:/scep-depot:ro
+    depends_on: [devices-scep]
 
   # Viva Engage and Viva Connections equivalent: the company home page (news, quick links, sites,
   # apps), a social feed, communities, praise, polls and Q&A. It reads Sites and Chat as the viewer.
@@ -637,6 +674,24 @@ services:
       PROJECTS_AI_BASE_URL: ${PROJECTS_AI_BASE_URL:-}
       PROJECTS_AI_API_KEY: ${PROJECTS_AI_API_KEY:-}
       PROJECTS_AI_MODEL: ${PROJECTS_AI_MODEL:-}
+
+  # Contract lifecycle (Dynamics 365 and SharePoint Syntex contract management equivalent): templates and
+  # a clause library, drafting with versions and redlines, ordered approvals, signatures through Sign,
+  # renewals and notice deadlines, obligations, and AI review on the suite's model.
+  contracts:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-contracts:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: contracts } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/contracts
+      CONTRACTS_ADMIN_EMAILS: ${CONTRACTS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      CONTRACTS_SIGN_URL: ${CONTRACTS_SIGN_URL:-}
+      CONTRACTS_SIGN_TOKEN: ${CONTRACTS_SIGN_TOKEN:-}
+      CONTRACTS_AI_PROVIDER: ${CONTRACTS_AI_PROVIDER:-}
+      CONTRACTS_AI_BASE_URL: ${CONTRACTS_AI_BASE_URL:-}
+      CONTRACTS_AI_API_KEY: ${CONTRACTS_AI_API_KEY:-}
+      CONTRACTS_AI_MODEL: ${CONTRACTS_AI_MODEL:-}
 
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
@@ -1019,6 +1074,8 @@ services:
 
 volumes:
   pgdata: {}
+  devices-scep: {}
+  devices-mdm: {}
   planner-attachments: {}
   photo-files: {}
   stream-files: {}

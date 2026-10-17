@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { strToU8, zipSync } from "fflate";
+import { DEFAULT_LABELS, EMPTY_DLP, type ProtectionClient, createPolicyClient, evaluateDlp, msipProperties } from "@synergy/compliance";
 
 // Runs against a real Postgres when TEST_DATABASE_URL is set (CI sets it); skipped otherwise.
 const url = process.env.TEST_DATABASE_URL;
@@ -174,5 +176,65 @@ describe.skipIf(!url)("drive", async () => {
     await drive.deleteForever(alice, [docs.id]);
     expect(await drive.trash(alice)).toEqual([]);
     expect(await q("SELECT 1 FROM items WHERE name = 'c.md' AND trash_root IS NULL")).toHaveLength(1); // the copy survives
+  });
+
+  describe("sensitivity labels and DLP", async () => {
+    const dana = { email: "dana@example.com", name: "Dana" };
+    const [, general, , highly] = DEFAULT_LABELS;
+    const { setPolicy } = await import("../lib/compliance");
+    const incidents: unknown[] = [];
+    const withPolicy = (over: Partial<ProtectionClient>) => {
+      const base = createPolicyClient({ app: "drive", url: "" });
+      setPolicy({ ...base, reportDlp: async (i) => void incidents.push(i), ...over });
+    };
+    afterAll(() => setPolicy(undefined));
+
+    it("labels new uploads with the default and keeps a label across versions", async () => {
+      withPolicy({ labels: async () => ({ labels: DEFAULT_LABELS, defaultLabelId: general.id }) });
+      const f = await drive.upload(dana, {}, "notes.txt", bytes("v1"));
+      expect(f.labelId).toBe(general.id);
+      await drive.setLabel(dana, f.id, highly.id);
+      const v2 = await drive.upload(dana, {}, "notes.txt", bytes("v2"));
+      expect(v2.version).toBe(2);
+      expect(v2.labelId).toBe(highly.id);
+      expect((await drive.activity(dana, f.id)).map((e) => e.action)).toContain("labeled");
+      await expect(drive.setLabel(dana, f.id, "nope")).rejects.toThrow(/labels/);
+      await drive.share(dana, f.id, bob.email, "viewer");
+      await expect(drive.setLabel(bob, f.id, null)).rejects.toThrow(/only view/);
+    });
+
+    it("takes the label an Office file carries", async () => {
+      withPolicy({ labels: async () => ({ labels: DEFAULT_LABELS, defaultLabelId: general.id }) });
+      const xml = `<Properties>${msipProperties(highly).map(([k, v]) => `<property name="${k}"><vt:lpwstr>${v}</vt:lpwstr></property>`).join("")}</Properties>`;
+      const docx = zipSync({ "word/document.xml": strToU8("<w:p><w:t>Hi</w:t></w:p>"), "docProps/custom.xml": strToU8(xml) });
+      const f = await drive.upload(dana, {}, "secret.docx", bytes(Buffer.from(docx)));
+      expect(f.labelId).toBe(highly.id);
+    });
+
+    it("keeps labeled files and folders holding them inside the organization", async () => {
+      withPolicy({});
+      const folder = await drive.createFolder(dana, {}, "Board");
+      const f = await drive.upload(dana, { parent: folder.id }, "minutes.txt", bytes("minutes"));
+      await drive.setLabel(dana, f.id, highly.id);
+      await expect(drive.createLink(dana, f.id)).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/Highly Confidential/) });
+      await expect(drive.createLink(dana, folder.id)).rejects.toThrow(/holds files labeled Highly Confidential/);
+      await expect(drive.share(dana, f.id, "eve@other.org", "viewer")).rejects.toMatchObject({ status: 422 });
+      await drive.share(dana, f.id, carol.email, "viewer");
+      await drive.setLabel(dana, f.id, null);
+      await drive.createLink(dana, folder.id);
+    });
+
+    it("checks DLP rules when sharing, with overrides for warnings", async () => {
+      const dlp = { ...EMPTY_DLP, rules: [{ id: "r", name: "Cards", enabled: true, mode: "enforce" as const, apps: [], types: [{ type: "credit-card", min: 1 }], labels: [], scope: "external" as const, action: "warn" as const }] };
+      withPolicy({ dlpSettings: async () => dlp, checkDlp: async (ctx) => evaluateDlp(dlp, { ...ctx, app: "drive" }) });
+      const f = await drive.upload(dana, {}, "cards.csv", bytes("name,card\nA,4111 1111 1111 1111\n"));
+      incidents.length = 0;
+      const err = await drive.createLink(dana, f.id).catch((e) => e);
+      expect(err).toMatchObject({ status: 409, data: { dlp: { action: "warn" } } });
+      await drive.share(dana, f.id, carol.email, "viewer"); // inside: the rule is for outside only
+      await drive.createLink(dana, f.id, undefined, { justification: "Auditor needs it" });
+      expect(incidents).toMatchObject([{ action: "warn", overridden: false }, { action: "warn", overridden: true, justification: "Auditor needs it" }]);
+      expect((await drive.activity(dana, f.id))[0].detail).toMatch(/Auditor needs it/);
+    });
   });
 });

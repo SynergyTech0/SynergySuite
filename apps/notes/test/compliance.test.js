@@ -12,6 +12,7 @@ const TOKEN = 'test-compliance-token';
 const PORT = 4300 + (process.pid % 500);
 const alice = 'alice@example.com';   // on hold
 const bob = 'bob@example.com';
+const carol = 'carol@example.com';   // only ever comments
 
 const policy = {
   holds: [{ id: 'h1', name: 'Matter', custodians: [alice], apps: ['notes'] }],
@@ -137,6 +138,45 @@ test('notes compliance', { skip: !url && 'TEST_DATABASE_URL not set' }, async t 
     assert.ok(dropFile.id);
   });
 
+  // Comment edits: carol writes a comment on alice's page, then she and bob each reword it.
+  const note = (await api('POST', `/api/pages/${page.id}/comments`, { as: carol, body: { body: 'Budget is 5 million' } })).body;
+  const versionsOf = id => db.q('SELECT count(*)::int AS n FROM comment_versions WHERE comment_id = $1', [id]).then(r => r.rows[0].n);
+
+  await t.test('editing a comment keeps every earlier text, searchable by keyword and custodian', async () => {
+    await api('PATCH', `/api/comments/${note.id}`, { as: carol, body: { body: 'Budget is 6 million' } });
+    const edited = (await api('PATCH', `/api/comments/${note.id}`, { as: bob, body: { body: 'Budget is 7 million' } })).body;
+    assert.equal(edited.body, 'Budget is 7 million');
+    assert.equal(edited.edited_by, bob);
+    // Resolving, or saving the same text, is not an edit.
+    await api('PATCH', `/api/comments/${note.id}`, { as: carol, body: { resolved: true } });
+    await api('PATCH', `/api/comments/${note.id}`, { as: carol, body: { body: 'Budget is 7 million' } });
+    assert.equal(await versionsOf(note.id), 2);
+    assert.equal((await api('GET', `/api/pages/${page.id}/comments`, { as: alice })).body[0].body, 'Budget is 7 million');
+
+    const old = (await search({ query: '"5 million"' })).body;
+    assert.deepEqual(old.hits.map(h => h.id), [`page:${page.id}`]);
+    assert.match(old.hits[0].snippet, /^Budget is 5 million/);
+    const now = (await search({ query: '"7 million"' })).body;
+    assert.deepEqual(now.hits.map(h => h.id), [`page:${page.id}`]);
+    assert.match(now.hits[0].snippet, /Budget is 7 million/);
+    const byCarol = (await search({ custodians: [carol] })).body;
+    assert.deepEqual(byCarol.hits.map(h => h.id), [`page:${page.id}`]);
+    assert.ok(byCarol.hits[0].participants.includes(carol));
+  });
+
+  await t.test("a held delete keeps a comment's history; a real delete removes it", async () => {
+    await api('DELETE', `/api/comments/${note.id}`, { as: carol });   // alice's page: kept
+    assert.equal((await db.q('SELECT count(*)::int AS n FROM comments WHERE id = $1 AND held_deleted_at IS NOT NULL', [note.id])).rows[0].n, 1);
+    assert.equal(await versionsOf(note.id), 2);
+    assert.equal((await search({ query: '"6 million"' })).body.total, 1);
+
+    const scratch = (await api('POST', `/api/pages/${other.id}/comments`, { as: bob, body: { body: 'first draft' } })).body;
+    await api('PATCH', `/api/comments/${scratch.id}`, { as: bob, body: { body: 'second draft' } });
+    assert.equal(await versionsOf(scratch.id), 1);
+    await api('DELETE', `/api/comments/${scratch.id}`, { as: bob });   // nobody on hold: gone
+    assert.equal(await versionsOf(scratch.id), 0);
+  });
+
   await t.test('export has markdown, html, path, revisions, comments and attachments', async () => {
     await api('DELETE', `/api/pages/${page.id}`, { as: alice });   // to the trash
     const r = await api('POST', '/api/compliance/export', { token: TOKEN, body: { ids: [`page:${page.id}`, 'page:99999'] } });
@@ -150,8 +190,19 @@ test('notes compliance', { skip: !url && 'TEST_DATABASE_URL not set' }, async t 
     assert.equal(it.metadata.revisions, 2);   // creating a page is not a version; bob's edits are
     assert.equal(it.metadata.previousVersions.length, 1);
     assert.match(it.metadata.previousVersions[0].body, /closes in June/);
-    assert.equal(it.metadata.comments.length, 1);
-    assert.ok(it.metadata.comments[0].deletedAt);
+    assert.equal(it.metadata.comments.length, 2);
+    assert.ok(it.metadata.comments.every(c => c.deletedAt));
+    const first = it.metadata.comments.find(c => c.id === Number(comment.id));
+    assert.deepEqual([first.edits, first.editedBy, first.editedAt], [[], null, null]);
+    const budget = it.metadata.comments.find(c => c.id === Number(note.id));
+    assert.equal(budget.author, carol);
+    assert.equal(budget.body, 'Budget is 7 million');
+    assert.equal(budget.editedBy, bob);
+    assert.ok(budget.editedAt);
+    assert.deepEqual(budget.edits.map(e => [e.body, e.editedBy]),
+      [['Budget is 5 million', carol], ['Budget is 6 million', carol]]);
+    assert.ok(budget.edits.every(e => e.editedAt));
+    assert.ok(new Date(budget.edits[0].editedAt) <= new Date(budget.edits[1].editedAt));
     const terms = it.attachments.find(a => a.name === 'terms.txt');
     assert.equal(Buffer.from(terms.base64, 'base64').toString(), 'secret terms');
     assert.equal(it.attachments.length, 2);

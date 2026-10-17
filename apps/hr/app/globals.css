@@ -131,6 +131,17 @@ dl.facts dd { margin: 0; overflow-wrap: anywhere; }
 .stub table.list td, .stub table.list th { padding: 5px 8px; }
 .stubgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
 
+/* Form W-2, printed one copy per page. */
+.w2 { border: 1px solid #000; padding: 10px; margin-top: 16px; color: #000; break-after: page; }
+.w2:last-child { break-after: auto; }
+.w2head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.w2grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #000; border-left: 1px solid #000; }
+.w2box { border-right: 1px solid #000; border-bottom: 1px solid #000; padding: 4px 6px; min-height: 44px; }
+.w2box.wide { grid-row: span 2; }
+.w2label { font-size: 11px; }
+.w2value { font-family: ui-monospace, monospace; font-size: 14px; text-align: right; }
+.w2box.wide .w2value { text-align: left; }
+.w2states { margin-top: 8px; }
 @media print {
   body.suite-body { height: auto; overflow: visible; display: block; }
   synergy-app-bar, .noprint { display: none !important; }

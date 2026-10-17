@@ -10,6 +10,7 @@ if (url) {
 
 const staff = "agent@example.com";
 const customer = "pat@example.org";
+const staffV = { email: staff, name: "Agent", role: "agent" as const, scope: "all" as const };
 
 describe.skipIf(!url)("desk", async () => {
   const tickets = await import("../lib/tickets");
@@ -28,7 +29,7 @@ describe.skipIf(!url)("desk", async () => {
 
   beforeAll(async () => {
     await q("SELECT 1");
-    await q("TRUNCATE tickets, ticket_messages, ticket_counters, canned_replies, kb_articles RESTART IDENTITY CASCADE");
+    await q("TRUNCATE tickets, ticket_messages, ticket_counters, canned_replies, kb_articles, agents RESTART IDENTITY CASCADE");
   });
   beforeEach(() => {
     sent = [];
@@ -89,10 +90,10 @@ describe.skipIf(!url)("desk", async () => {
     expect(changed.assignee).toBe(staff);
     expect(changed.solvedAt).toBeNull();
     await expect(tickets.update(id, { status: "done" })).rejects.toThrow(/status/);
-    expect((await tickets.list(staff, { view: "mine" })).map((x) => x.id)).toEqual([id]);
-    expect((await tickets.list(staff, { view: "all", q: "eats" })).map((x) => x.id)).toEqual([id]);
-    expect((await tickets.list(staff, { view: "all", q: "%" })).length).toBe(0);
-    expect((await tickets.counts(staff)).mine).toBe(1);
+    expect((await tickets.list(staffV, { view: "mine" })).map((x) => x.id)).toEqual([id]);
+    expect((await tickets.list(staffV, { view: "all", q: "eats" })).map((x) => x.id)).toEqual([id]);
+    expect((await tickets.list(staffV, { view: "all", q: "%" })).length).toBe(0);
+    expect((await tickets.counts(staffV)).mine).toBe(1);
   });
 
   it("saves a reply that couldn't be emailed", async () => {
@@ -179,5 +180,26 @@ describe.skipIf(!url)("desk", async () => {
     expect((await kb.publishedBySlug(a.slug))?.body).toBe("Go to settings");
     await kb.remove(b.id);
     expect((await kb.list()).length).toBe(1);
+  });
+
+  it("makes the first agent to arrive an admin, and keeps one", async () => {
+    const agents = await import("../lib/agents");
+    await q("TRUNCATE agents");
+    // No agents at all: whoever opens Desk first runs it.
+    expect((await agents.viewer({ email: "First@Example.com", name: "First" })).role).toBe("admin");
+    await q("TRUNCATE agents");
+    // Existing staff but no admin: a stranger stays a requester; the first agent becomes admin.
+    await q("INSERT INTO agents (email) VALUES ($1)", [staff]);
+    expect((await agents.viewer({ email: "stranger@example.org", name: "" })).role).toBeNull();
+    const boss = await agents.viewer({ email: staff, name: "Agent" });
+    expect(boss).toMatchObject({ role: "admin", scope: "all" });
+    expect((await agents.viewer({ email: customer, name: "" })).role).toBeNull();
+    await expect(agents.save(boss, { email: staff, role: "agent" })).rejects.toThrow(/at least one admin/);
+    await expect(agents.remove(boss, staff)).rejects.toThrow(/at least one admin/);
+    const rae = await agents.save(boss, { email: "Rae@Example.com", scope: "assigned" });
+    expect(rae).toMatchObject({ email: "rae@example.com", role: "agent", scope: "assigned" });
+    await expect(agents.save({ ...rae, name: "" }, { email: customer })).rejects.toThrow(/Only a Desk admin/);
+    await agents.remove(boss, rae.email);
+    expect((await agents.list()).map((a) => a.email)).toEqual([staff]);
   });
 });

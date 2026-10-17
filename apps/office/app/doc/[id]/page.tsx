@@ -20,6 +20,7 @@ export default async function DocPage({ params }: { params: Promise<{ id: string
       initialScope={a.doc.scope as "private" | "company"}
       role={a.role}
       initialStarred={a.doc.starred}
+      initialLabelId={a.doc.label_id}
     />
   );
 }

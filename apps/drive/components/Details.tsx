@@ -2,15 +2,16 @@
 import { History, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FileIcon } from "./FileIcon";
-import { type Item, type Role, api, contentUrl, formatSize, formatWhen, person } from "./client";
+import { LabelChip, LabelSelect } from "./Labels";
+import { type Item, type Label, type Role, api, contentUrl, formatSize, formatWhen, person } from "./client";
 
 type Detail = Item & { role: Role; summary: string | null; hasText: boolean };
 type Version = { n: number; size: number; createdBy: string; createdAt: string; current: boolean };
 type Event = { actor: string; action: string; detail: string; at: string };
 
-/** Side panel: properties, version history, activity and an AI summary. */
-export function Details({ id, me, ai, onClose, onChanged, onShare }: {
-  id: string; me: string; ai: boolean; onClose: () => void; onChanged: () => void; onShare: () => void;
+/** Side panel: properties, sensitivity label, version history, activity and an AI summary. */
+export function Details({ id, me, ai, labels, onClose, onChanged, onShare }: {
+  id: string; me: string; ai: boolean; labels: Label[]; onClose: () => void; onChanged: () => void; onShare: () => void;
 }) {
   const [d, setD] = useState<Detail | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -39,6 +40,7 @@ export function Details({ id, me, ai, onClose, onChanged, onShare }: {
       <div className="detailshead">
         <FileIcon kind={d.kind} name={d.name} size={28} />
         <h2 className="grow">{d.name}</h2>
+        <LabelChip id={d.labelId} labels={labels} />
         <button className="iconbtn" aria-label="Close details" onClick={onClose}>
           <X size={18} />
         </button>
@@ -72,6 +74,37 @@ export function Details({ id, me, ai, onClose, onChanged, onShare }: {
             )}
             <dt>Your access</dt>
             <dd>{d.role === "owner" ? "Owner" : d.role === "editor" ? "Can edit" : "Can view"}</dd>
+            {(labels.length > 0 || d.labelId) && (
+              <>
+                <dt>Sensitivity</dt>
+                <dd>
+                  {canEdit ? (
+                    <LabelSelect
+                      value={d.labelId}
+                      labels={labels}
+                      disabled={busy}
+                      onChange={async (labelId) => {
+                        setBusy(true);
+                        setError("");
+                        try {
+                          await api(`/api/items/${id}`, { method: "PATCH", json: { labelId } });
+                          setTick((t) => t + 1);
+                          onChanged();
+                        } catch (e) {
+                          setError((e as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    />
+                  ) : d.labelId ? (
+                    <LabelChip id={d.labelId} labels={labels} />
+                  ) : (
+                    "No label"
+                  )}
+                </dd>
+              </>
+            )}
           </dl>
         </section>
         {d.hasText && (

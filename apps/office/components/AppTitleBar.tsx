@@ -24,6 +24,7 @@ export default function AppTitleBar({
   peers = 1,
   onTitle,
   rightExtra,
+  badge,
   shareOpen,
   onShareOpen,
 }: {
@@ -40,6 +41,8 @@ export default function AppTitleBar({
   peers?: number;
   onTitle?: (t: string) => void;
   rightExtra?: React.ReactNode;
+  /** Shown after the title and star, e.g. the sensitivity label. */
+  badge?: React.ReactNode;
   shareOpen: boolean;
   onShareOpen: (v: boolean) => void;
 }) {
@@ -82,6 +85,7 @@ export default function AppTitleBar({
           <button onClick={toggleStar} title={starred ? "Starred" : "Star"} className="text-slate-400 hover:text-amber-500 leading-none">
             {starred ? "★" : "☆"}
           </button>
+          {badge}
           {status && (
             <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 ml-1">
               <span className={`w-1.5 h-1.5 rounded-full ${status === "connected" ? "bg-emerald-500" : status === "connecting" ? "bg-amber-400" : "bg-slate-300"}`} />

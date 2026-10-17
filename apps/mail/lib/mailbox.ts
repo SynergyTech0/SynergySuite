@@ -2,6 +2,7 @@ import { ImapFlow, type ListResponse, type FetchMessageObject } from "imapflow";
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { simpleParser, type AddressObject, type ParsedMail } from "mailparser";
+import { parseMsipHeader } from "@synergy/compliance";
 import { type Account, type Endpoint, UserError, vetEndpoint } from "./accounts";
 import { cleanHtml } from "./sanitize";
 import { policy } from "./policy";
@@ -164,6 +165,8 @@ export type MessageDetail = MessageSummary & {
   attachments: Attachment[];
   messageId: string | null;
   references: string[];
+  /** The sensitivity label named in the msip_labels header, as written (see parseMsipHeader). */
+  msipLabel: { id: string; name?: string } | null;
 };
 
 const people = (a?: AddressObject | AddressObject[]) =>
@@ -209,11 +212,20 @@ export async function getMessage(
         attachments: attachments.filter((a) => !(a.cid && cleaned?.usedCids.has(a.cid))),
         messageId: parsed.messageId ?? null,
         references: ([] as string[]).concat(parsed.references ?? []),
+        msipLabel: msipLabelOf(parsed),
       };
     } finally {
       lock.release();
     }
   });
+}
+
+/** The sensitivity label a message's msip_labels header names (Outlook and Mail write it). */
+export function msipLabelOf(parsed: ParsedMail): { id: string; name?: string } | null {
+  const v = parsed.headers.get("msip_labels");
+  if (typeof v === "string") return parseMsipHeader(v);
+  const line = parsed.headerLines.find((h) => h.key === "msip_labels")?.line;
+  return line ? parseMsipHeader(line.slice(line.indexOf(":") + 1).replace(/\r?\n[ \t]+/g, " ")) : null;
 }
 
 export async function getAttachment(acct: Account, folder: string, uid: number, index: number) {
@@ -262,9 +274,10 @@ export async function changeMessages(acct: Account, folder: string, uids: number
           // Like Outlook: delete moves to Deleted Items; deleting from there removes for good.
           const trash = await folderByRole(c, "\\Trash");
           const forGood = !trash || trash === folder;
-          // Legal hold: keep a copy first (the server may also empty Deleted Items on its own).
-          // The hold sweep copies everything anyway; this covers mail newer than its last pass.
-          if (acct.id === "suite" && (await policy().onHold(acct.address))) await preserveUids(c, acct.address, folder, uids, forGood);
+          // Legal hold: keep a copy first (the server may also empty Deleted Items on its own),
+          // in the suite mailbox and in outside accounts alike. The hold sweep copies everything
+          // anyway; this covers mail newer than its last pass.
+          if (await policy().onHold(acct.owner)) await preserveUids(c, acct, folder, uids, forGood);
           if (trash && !forGood) await c.messageMove(range, trash, { uid: true });
           else await c.messageDelete(range, { uid: true });
           break;
@@ -301,6 +314,8 @@ export type Outgoing = {
   inReplyTo?: string;
   references?: string[];
   attachments?: { filename: string; contentType?: string; content: Buffer }[];
+  /** Extra headers, e.g. msip_labels for the sensitivity label. */
+  headers?: Record<string, string>;
 };
 
 /** Providers that file a copy in Sent themselves; for everyone else we append it. */
@@ -314,6 +329,7 @@ export async function sendMessage(acct: Account, m: Outgoing): Promise<{ message
     html: m.html, text: m.text,
     inReplyTo: m.inReplyTo, references: m.references,
     attachments: m.attachments,
+    headers: m.headers,
   };
   const e = await endpoint(acct, acct.smtp);
   const transport = nodemailer.createTransport({

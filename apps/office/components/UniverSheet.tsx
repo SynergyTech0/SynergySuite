@@ -55,7 +55,7 @@ import { CUSTOM_VIEWS_RESOURCE, foldCustomViews, SET_CUSTOM_VIEWS_MUTATION, type
 import { applyCustomView, currentView, CustomViewsDialog } from "./SheetCustomViews";
 import { registerDocProps, registerStructureGuard, saveDocProps, type DocPropsStore } from "@/lib/sheet-doc-props";
 import type { SensitivityLabel } from "@/lib/sensitivity";
-import { labelColor, SensitivityDialog } from "./SheetSensitivity";
+import { LabelChip, orgLabelOf, putDocLabel, SensitivityDialog, useLabelList } from "./SheetSensitivity";
 import { AccessibilityPanel } from "./SheetAccessibility";
 import { QuickAnalysisDialog, type QuickAction } from "./SheetQuickAnalysis";
 import { hasHeader, totalCells } from "@/lib/quick-analysis";
@@ -106,6 +106,7 @@ export default function UniverSheet({
   meEmail = "",
   meName = "",
   collabUrl = "",
+  initialLabelId = null,
 }: {
   docId?: string;
   title?: string;
@@ -116,6 +117,8 @@ export default function UniverSheet({
   meEmail?: string;
   meName?: string;
   collabUrl?: string;
+  /** The document's sensitivity label (documents.label_id). */
+  initialLabelId?: string | null;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -1649,11 +1652,39 @@ export default function UniverSheet({
     showNotice("The workbook's structure is no longer protected.");
     return null;
   };
+  // The label lives in the workbook (written into .xlsx) and on the document (label_id, for the
+  // list and search): the organization's label behind the file's, or none for another company's.
+  const labelList = useLabelList();
+  const [labelId, setLabelId] = useState<string | null>(initialLabelId);
+  const storeLabelId = async (label: SensitivityLabel | null) => {
+    if (!docId || !canEdit) return;
+    setLabelId(await putDocLabel(docId, label ? { fromFile: { id: label.id, name: label.name }, clearIfUnknown: true } : { labelId: null }));
+  };
   const storeLabel = async (label: SensitivityLabel | null) => {
     if (!unitIdNow) return;
+    await storeLabelId(label);
     await saveDocProps(apiRef.current, unitIdNow, { ...docPropsNow, label });
     scheduleSave();
   };
+  const docLabel = labelId ? labelList?.labels.find((l) => l.id.toLowerCase() === labelId.toLowerCase()) : undefined;
+  const shownLabel: SensitivityLabel | null = docPropsNow.label || (docLabel ? { id: docLabel.id, name: docLabel.name, color: docLabel.color } : null);
+  const fileLabelId = docPropsNow.label?.id ?? null;
+  const labelSynced = useRef(false);
+  useEffect(() => {
+    if (!docId || !canEdit || !unitIdNow || !labelList) return;
+    const first = !labelSynced.current;
+    labelSynced.current = true;
+    const file = docPropsNow.label;
+    if (file) {
+      // A label the workbook brought (an opened .xlsx, a co-editor's change) reaches the document.
+      const want = orgLabelOf(file, labelList)?.id ?? null;
+      if (want !== labelId) void storeLabelId(file).catch(() => {});
+    } else if (docLabel && first) {
+      // A workbook opened without a label takes the document's (a new one: the organization's default).
+      void saveDocProps(apiRef.current, unitIdNow, { ...docPropsNow, label: { id: docLabel.id, name: docLabel.name, method: "Standard", setDate: new Date().toISOString().replace(/\.\d+Z$/, "Z") } }).then(scheduleSave);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId, canEdit, unitIdNow, labelList, fileLabelId, labelId]);
   // ---- Form controls ----
   /** The sheet a floating drawing is on. */
   const drawingSheet = (drawingId: string) => {
@@ -2299,12 +2330,7 @@ export default function UniverSheet({
                   {status === "connected" && peers > 1 ? `${peers} online` : status === "offline" ? "Offline" : "Live"}
                 </span>
               )}
-              {docPropsNow.label && (
-                <button type="button" onClick={() => setSensitivityOpen(true)} className="flex items-center gap-1 rounded border border-slate-300 px-1.5 py-0.5 text-slate-700" title="Sensitivity label" data-testid="sensitivity-label">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: labelColor(docPropsNow.label) }} />
-                  {docPropsNow.label.name}
-                </button>
-              )}
+              {shownLabel && <LabelChip label={shownLabel} list={labelList} onClick={() => setSensitivityOpen(true)} />}
               {sheetLockedForMe && canEdit && (
                 <button type="button" onClick={() => openProtect()} className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-amber-800" title="Only the owner and the people they chose can change this sheet">
                   Protected sheet
@@ -2554,7 +2580,7 @@ export default function UniverSheet({
             onClose={() => setWorkbookLock(null)}
           />
         )}
-        {sensitivityOpen && <SensitivityDialog current={docPropsNow.label} canEdit={canEdit} onSave={storeLabel} onClose={() => setSensitivityOpen(false)} />}
+        {sensitivityOpen && <SensitivityDialog current={shownLabel} canEdit={canEdit} onSave={storeLabel} onClose={() => setSensitivityOpen(false)} />}
         {customViewsOpen && (
           <CustomViewsDialog
             views={customViewsNow}

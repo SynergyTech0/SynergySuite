@@ -3,6 +3,7 @@
 import { CheckCircle2, CircleHelp, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
 import { ago, api, formatDateTime, formatSize, plural, useData } from "./client";
+import { type Management, ManageActions, ManagementTab } from "./Manage";
 import { Modal } from "./Modal";
 import { RULE_LABEL } from "./Policies";
 import { type AppCtx, ComplianceBadge, Empty, Facts, OnOff, PLATFORM, Severity, StatusBadge } from "./shared";
@@ -15,10 +16,12 @@ type Detail = {
   enrolled_with: string | null; software_count: number; vuln_counts: Record<string, number>;
 };
 
-const TABS = [["", "Overview"], ["software", "Software"], ["vulnerabilities", "Vulnerabilities"], ["alerts", "Alerts"]] as const;
+const TABS = [["", "Overview"], ["management", "Management"], ["software", "Software"], ["vulnerabilities", "Vulnerabilities"], ["alerts", "Alerts"]] as const;
 
 export function DeviceView({ app, id, tab }: { app: AppCtx; id: string; tab: string | null }) {
   const [d, reload] = useData<Detail>(`/api/devices/${id}`, app.say);
+  const [mdm, reloadMdm] = useData<{ management: Management | null }>(`/api/devices/${id}/mdm`, app.say);
+  const m = mdm?.management ?? null;
   const [retiring, setRetiring] = useState(false);
   const [editing, setEditing] = useState(false);
   const admin = app.me.role === "admin";
@@ -33,34 +36,37 @@ export function DeviceView({ app, id, tab }: { app: AppCtx; id: string; tab: str
       <div className="pagehead">
         <div>
           <h1>{d.hostname || "(unnamed)"}</h1>
-          <p className="muted">{PLATFORM[d.platform] ?? d.platform} {d.os_version} · {d.hardware_vendor} {d.hardware_model} · seen {ago(d.last_seen)}</p>
+          <p className="muted">{d.platform === "ios" ? d.os_name : PLATFORM[d.platform] ?? d.platform} {d.os_version} · {d.hardware_vendor} {d.hardware_model} · seen {ago(d.last_seen)}</p>
         </div>
         <div className="toolbar">
           <ComplianceBadge state={d.compliance} />
           <button className="btn" onClick={() => api(`/api/devices/${id}/refresh`, { method: "POST" }).then(() => app.say("Asked the device for a fresh report. It answers within a minute when it is online.")).catch((e) => app.say(e.message))}>
             <RefreshCw size={15} /> Refresh
           </button>
+          {m ? <ManageActions app={app} id={id} hostname={d.hostname} m={m} onDone={reloadMdm} /> : null}
           {admin ? <button className="btn" onClick={() => setEditing(true)}>Edit</button> : null}
           <button className="btn" onClick={() => setRetiring(true)}>Retire</button>
         </div>
       </div>
       <nav className="tabs">
-        {TABS.map(([t, label]) => (
+        {TABS.filter(([t]) => t !== "management" || m).map(([t, label]) => (
           <a key={t} href={`#/devices/${id}${t ? `/${t}` : ""}`} className={current === t ? "on" : ""}>
             {label}
             {t === "software" ? <span className="count">{d.software_count}</span> : t === "vulnerabilities" && vulns ? <span className="count">{vulns}</span> : null}
           </a>
         ))}
       </nav>
-      {current === "software" ? <Software id={id} app={app} />
+      {current === "management" && m ? <ManagementTab m={m} />
+        : current === "software" ? <Software id={id} app={app} />
         : current === "vulnerabilities" ? <DeviceVulns id={id} app={app} checked={d.vulns_checked_at} platform={d.platform} />
         : current === "alerts" ? <DeviceAlerts id={id} app={app} />
         : <DeviceOverview d={d} />}
       {retiring ? (
         <Modal title={`Retire ${d.hostname}?`} onClose={() => setRetiring(false)}>
           <div className="form">
-            <p>The device stops reporting and leaves every list. Its alerts and history are kept. To manage it again, run an enrollment script on it.</p>
-            <p className="muted small">Retiring doesn&apos;t remove osquery from the computer; uninstall it there if it is no longer needed.</p>
+            <p>The device stops reporting and leaves every list. Its alerts and history are kept. To manage it again, enroll it again.</p>
+            {m?.status === "enrolled" ? <p className="small">It is also told to remove its management profile, which takes away the settings and apps Devices installed. Its own data stays.</p> : null}
+            {d.host_identifier.startsWith("mdm:") ? null : <p className="muted small">Retiring doesn&apos;t remove osquery from the computer; uninstall it there if it is no longer needed.</p>}
             <div className="actions">
               <button className="btn" onClick={() => setRetiring(false)}>Cancel</button>
               <button className="btn danger" onClick={() => api(`/api/devices/${id}/retire`, { method: "POST" }).then(() => { app.say(`${d.hostname} retired`); app.go({ view: back }); }).catch((e) => app.say(e.message))}>Retire</button>

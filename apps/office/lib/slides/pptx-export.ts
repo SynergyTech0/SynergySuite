@@ -27,6 +27,7 @@ import { am3dFraming, glbBounds, type Bounds } from "./model3d";
 import { INK_CT, INK_REL, inkContentXml, inkmlXml, strokePoints } from "./pptx-ink";
 import { narrationForPowerPoint, playsInPowerPoint } from "./narration";
 import { colorsDefXml, dataModelXml, diagramFrameXml, drawingXml, layoutDefXml, modelId, patchDataTexts, sameShape, styleDefXml } from "./pptx-smartart";
+import { withFileLabel, type FileLabel } from "../labels";
 
 type PptxRun = { text: string; options: Record<string, unknown> };
 
@@ -187,6 +188,8 @@ export type DeckInfo = {
   fitScales?: Record<string, Record<string, number>>;
   /** pictures of the slides zooms point at (zoom element id -> PNG/JPEG data URL), drawn before export */
   zoomThumbs?: Record<string, string>;
+  /** the sensitivity label, written as MSIP custom properties so PowerPoint shows it */
+  label?: FileLabel | null;
 };
 
 /** A light grey picture for a zoom whose slide could not be drawn. */
@@ -376,7 +379,7 @@ export async function buildPptx(slides: Slide[], deck: DeckInfo): Promise<ArrayB
   const models = await loadModels(slides);
   const raw = (await pptx.write({ outputType: "arraybuffer" })) as ArrayBuffer;
   const ms = mastersProp(deck.masters);
-  return finishPackage(raw, slides, {
+  return finishPackage(raw, slides, withFileLabel({
     SynergyTheme: theme.id,
     // 2: a slide part has a background only when the slide sets its own
     SynergyVersion: "2",
@@ -387,7 +390,7 @@ export async function buildPptx(slides: Slide[], deck: DeckInfo): Promise<ArrayB
     ...(ms ? { SynergyMasters: ms } : {}),
     ...(zoomsProp(slides) ? { SynergyZooms: zoomsProp(slides)! } : {}),
     ...(models.size ? { SynergyModels: modelsProp(slides, models) } : {}),
-  }, theme, deck.comments || [], deck.masters || {}, { show: deck.show || {}, shows: deck.shows || [] }, deck.fitScales || {}, models);
+  }, deck.label ?? null), theme, deck.comments || [], deck.masters || {}, { show: deck.show || {}, shows: deck.shows || [] }, deck.fitScales || {}, models);
 }
 
 type PSlide = PptxGenJS.Slide;
@@ -898,8 +901,8 @@ function runParagraphs(runs: PptxRun[]): number {
 
 /**
  * Post-process the PptxGenJS package: transitions and animations (which it
- * cannot write) go into each slide part, and our deck settings go into
- * custom document properties (docProps/custom.xml).
+ * cannot write) go into each slide part, and our deck settings and the
+ * sensitivity label go into custom document properties (docProps/custom.xml).
  */
 async function finishPackage(buf: ArrayBuffer, slides: Slide[], props: Record<string, string>, theme: Theme, comments: PptxComment[], masters: Masters = {}, showInfo: { show: ShowSettings; shows: CustomShow[] } = { show: {}, shows: [] }, fit: Record<string, Record<string, number>> = {}, models: Map<string, ModelPart> = new Map()): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(buf);

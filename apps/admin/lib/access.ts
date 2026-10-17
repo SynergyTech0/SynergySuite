@@ -49,7 +49,7 @@ export async function access(email: string, env: AccessEnv = accessEnv()): Promi
 }
 
 /** What each role may do. */
-export function can(role: Role, what: "people" | "apps" | "roles" | "audit" | "retention.edit" | "matters.all" | "compliance" | "migrate"): boolean {
+export function can(role: Role, what: "people" | "apps" | "roles" | "audit" | "retention.edit" | "protection" | "matters.all" | "compliance" | "migrate"): boolean {
   if (role === "admin") return true;
   return what === "compliance";
 }

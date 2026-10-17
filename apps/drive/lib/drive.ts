@@ -1,9 +1,12 @@
 import { randomBytes } from "node:crypto";
+import { MAX_SCAN_CHARS, type SensitivityLabel, labelById, matchLabel } from "@synergy/compliance";
 import { q, tx } from "./db";
 import * as blobs from "./blobs";
 import type { Me } from "./api";
-import { holdChecker, policy } from "./compliance";
+import { APP, holdChecker, policy } from "./compliance";
 import { type Role, UserError, atLeast, cleanEmail, cleanName, isRole, isTextMime, maxRole, mimeFor, splitPath, uniqueName } from "./names";
+import { OFFICE_MAX_BYTES, isOfficeName, officeLabel, officeText } from "./office";
+import { type DlpOverride, type ShareKind, decideShare, incidentFor, internalDomainsFor, outsiders } from "./protection";
 
 /** Rows as the API returns them. */
 export type Item = {
@@ -23,6 +26,8 @@ export type Item = {
   trashedBy: string | null;
   starred: boolean;
   shared: boolean;
+  /** Sensitivity label id from the Admin center's list, or null. */
+  labelId: string | null;
   /** Where it lives, for search, recent and starred results ("My files", a library, a person). */
   location?: string;
 };
@@ -50,6 +55,7 @@ type Row = {
   trashed_by: string | null;
   trash_root: string | null;
   held_deleted_at: Date | null;
+  label_id: string | null;
 };
 
 /** Where new items go: a folder, or the top of someone's files or of a library. */
@@ -168,11 +174,11 @@ async function place(me: Me, target: Target, need: Role = "editor"): Promise<Pla
 /* ----------------------------------------------------------------- listing */
 
 const COLS = `i.id, i.name, i.kind, i.mime, i.size, i.version, i.owner, i.library_id, i.parent_id, i.modified_at,
-  i.modified_by, i.created_at, i.trashed_at, i.trashed_by,
+  i.modified_by, i.created_at, i.trashed_at, i.trashed_by, i.label_id,
   EXISTS (SELECT 1 FROM stars st WHERE st.item_id = i.id AND st.email = $1) AS starred,
   (EXISTS (SELECT 1 FROM shares sh WHERE sh.item_id = i.id) OR EXISTS (SELECT 1 FROM links ln WHERE ln.item_id = i.id)) AS shared`;
 
-type ListRow = Pick<Row, "id" | "name" | "kind" | "mime" | "size" | "version" | "owner" | "library_id" | "parent_id" | "modified_at" | "modified_by" | "created_at" | "trashed_at" | "trashed_by"> & {
+type ListRow = Pick<Row, "id" | "name" | "kind" | "mime" | "size" | "version" | "owner" | "library_id" | "parent_id" | "modified_at" | "modified_by" | "created_at" | "trashed_at" | "trashed_by" | "label_id"> & {
   starred: boolean;
   shared: boolean;
   location?: string;
@@ -196,6 +202,7 @@ function toItem(r: ListRow): Item {
     trashedBy: r.trashed_by,
     starred: r.starred,
     shared: r.shared,
+    labelId: r.label_id,
     ...(r.location !== undefined ? { location: r.location } : {}),
   };
 }
@@ -612,18 +619,24 @@ export async function upload(
   const stored = await blobs.put(body, room);
   const mime = mimeFor(name);
   const text = isTextMime(mime) ? stored.head.toString("utf8").replace(/\u0000/g, "").slice(0, 200_000) : null;
+  // An Office file labeled elsewhere (Purview, another Synergy app) keeps its label here.
+  const labels = await policy().labels();
+  const embedded = isOfficeName(name) && stored.size <= OFFICE_MAX_BYTES ? officeLabel(await readBytes(stored.sha256, OFFICE_MAX_BYTES)) : null;
+  const carried = matchLabel(labels, embedded?.id, embedded?.name);
+  const initial = carried ?? labelById(labels, labels.defaultLabelId);
 
   const out = await tx(async (tq) => {
     const [made] = await tq<{ id: string }>(
-      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, created_at, modified_at)
-       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, COALESCE($11, now()), COALESCE($11, now()))
+      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id, created_at, modified_at)
+       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, $11, COALESCE($12, now()), COALESCE($12, now()))
        ON CONFLICT (space, COALESCE(parent_id, '${NIL}'::uuid), lower(name)) WHERE trash_root IS NULL DO NOTHING
        RETURNING id`,
-      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, when],
+      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, initial?.id.toLowerCase() ?? null, when],
     );
     if (made) {
       await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, 1, $2, $3, $4, COALESCE($5, now()))", [made.id, stored.size, stored.sha256, me.email, when]);
       await log(made.id, me, "uploaded", "", tq);
+      if (initial) await log(made.id, me, "labeled", `${initial.name}${carried ? " (from the file)" : " (default)"}`, tq);
       return { id: made.id, pruned: [] as string[] };
     }
     const [cur] = await tq<Row>(
@@ -635,11 +648,14 @@ export async function upload(
     if (cur.sha256 === stored.sha256) return { id: cur.id, pruned: [] }; // same bytes: nothing new to keep
     const n = cur.version + 1;
     await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()))", [cur.id, n, stored.size, stored.sha256, me.email, when]);
+    // The label stays with the file; one the new version carries only fills in a missing one.
     await tq(
-      "UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = COALESCE($8, now()) WHERE id = $1",
-      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, when],
+      `UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = COALESCE($9, now()),
+         label_id = COALESCE(label_id, $8) WHERE id = $1`,
+      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, carried?.id.toLowerCase() ?? null, when],
     );
     await log(cur.id, me, "uploaded", `version ${n}`, tq);
+    if (!cur.label_id && carried) await log(cur.id, me, "labeled", `${carried.name} (from the file)`, tq);
     return { id: cur.id, pruned: await pruneVersions(tq, cur) };
   });
   await blobs.collect([stored.sha256, ...out.pruned], shaInUse);
@@ -741,9 +757,9 @@ export async function copy(me: Me, ids: string[], target: Target): Promise<void>
         const parent = r.id === row.id ? at.parentId : fresh.get(r.parent_id!)!;
         const name = r.id === row.id ? uniqueName(r.name, await siblingNames(tq, at.space, at.parentId), r.kind === "folder") : r.name;
         const [made] = await tq<{ id: string }>(
-          `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12) RETURNING id`,
-          [at.space, at.libraryId, at.owner, parent, r.kind, name, r.mime, r.size, r.sha256, r.kind === "file" ? 1 : 0, r.text, me.email],
+          `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13) RETURNING id`,
+          [at.space, at.libraryId, at.owner, parent, r.kind, name, r.mime, r.size, r.sha256, r.kind === "file" ? 1 : 0, r.text, me.email, r.label_id],
         );
         fresh.set(r.id, made.id);
         if (r.kind === "file") {
@@ -760,6 +776,21 @@ export async function setStar(me: Me, itemId: string, on: boolean): Promise<void
   const { row } = await access(me, itemId, "viewer");
   if (on) await q("INSERT INTO stars (email, item_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [me.email, row.id]);
   else await q("DELETE FROM stars WHERE email = $1 AND item_id = $2", [me.email, row.id]);
+}
+
+/** Sets or clears an item's sensitivity label; anyone who can edit it may. */
+export async function setLabel(me: Me, itemId: string, rawLabel: unknown): Promise<Item> {
+  const { row } = await access(me, itemId, "editor");
+  const settings = await policy().labels();
+  const next = rawLabel === null || rawLabel === "" ? null : labelById(settings, typeof rawLabel === "string" ? rawLabel : "");
+  if (rawLabel !== null && rawLabel !== "" && !next) throw new UserError("Pick one of the organization's labels");
+  const id = next?.id.toLowerCase() ?? null;
+  if (id === row.label_id) return (await listOne(me, row.id))!;
+  const before = labelById(settings, row.label_id)?.name;
+  await q("UPDATE items SET label_id = $2 WHERE id = $1", [row.id, id]);
+  if (next) await log(row.id, me, "labeled", `${next.name}${before ? ` (was ${before})` : ""}`);
+  else await log(row.id, me, "removed the label", before ?? "");
+  return (await listOne(me, row.id))!;
 }
 
 /* ---------------------------------------------------------------- versions */
@@ -798,13 +829,18 @@ export async function restoreVersion(me: Me, itemId: string, n: number): Promise
 }
 
 async function textOf(sha: string): Promise<string> {
+  return (await readBytes(sha, 1024 * 1024)).toString("utf8").replace(/\u0000/g, "").slice(0, 200_000);
+}
+
+/** Up to the first `max` bytes of a blob. */
+async function readBytes(sha: string, max: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let len = 0;
-  for await (const c of blobs.read(sha, { start: 0, end: 1024 * 1024 - 1 })) {
+  for await (const c of blobs.read(sha, { start: 0, end: max - 1 })) {
     chunks.push(c as Buffer);
     len += (c as Buffer).length;
   }
-  return Buffer.concat(chunks, len).toString("utf8").replace(/\u0000/g, "").slice(0, 200_000);
+  return Buffer.concat(chunks, len);
 }
 
 /** The bytes of a file (or of one of its versions) that `me` may view. */
@@ -887,17 +923,69 @@ export async function sharing(me: Me, itemId: string): Promise<Sharing> {
   };
 }
 
-export async function share(me: Me, itemId: string, rawEmail: unknown, rawRole: unknown): Promise<void> {
+/** Largest text read from a file for a DLP check. */
+const DLP_READ_BYTES = 2 * 1024 * 1024;
+
+/** What a DLP check reads of a file: text files as they are, Office files' text; nothing for the rest. */
+async function shareText(row: Row): Promise<string | undefined> {
+  if (row.kind !== "file" || !row.sha256) return undefined;
+  if (isTextMime(row.mime)) return (await readBytes(row.sha256, DLP_READ_BYTES)).toString("utf8").replace(/\u0000/g, "").slice(0, MAX_SCAN_CHARS);
+  if (isOfficeName(row.name) && Number(row.size) <= OFFICE_MAX_BYTES) return officeText(await readBytes(row.sha256, OFFICE_MAX_BYTES)) ?? undefined;
+  return undefined;
+}
+
+/**
+ * Checks a share before it happens: a label that keeps content inside the organization (on the
+ * item, or on anything inside a folder), then the Admin center's DLP rules. Every rule match is
+ * reported. Throws 422 when refused, 409 for a warning the person hasn't overridden with a reason.
+ */
+async function guardShare(me: Me, row: Row, kind: ShareKind, recipients: string[], override: DlpOverride): Promise<{ overridden: boolean; justification?: string }> {
+  const [labels, dlp] = await Promise.all([policy().labels(), policy().dlpSettings()]);
+  const outside = outsiders(recipients, internalDomainsFor(dlp.internalDomains, me.email));
+  const external = kind === "link" || outside.length > 0;
+  let blockedBy: SensitivityLabel | null = null;
+  let own = true;
+  if (external) {
+    const keepIn = labels.labels.filter((l) => l.protection.blockExternal).map((l) => l.id.toLowerCase());
+    blockedBy = keepIn.includes(row.label_id ?? "") ? labelById(labels, row.label_id) : null;
+    if (!blockedBy && row.kind === "folder" && keepIn.length) {
+      const [inside] = await q<{ label_id: string }>(
+        `WITH RECURSIVE down AS (
+           SELECT id, label_id FROM items WHERE parent_id = $1 AND trash_root IS NULL
+           UNION ALL
+           SELECT c.id, c.label_id FROM items c JOIN down d ON c.parent_id = d.id WHERE c.trash_root IS NULL
+         ) SELECT label_id FROM down WHERE label_id = ANY($2) LIMIT 1`,
+        [row.id, keepIn],
+      );
+      if (inside) [blockedBy, own] = [labelById(labels, inside.label_id), false];
+    }
+  }
+  const applies = dlp.rules.some((r) => r.enabled && (r.apps.length === 0 || r.apps.includes(APP)) && (r.scope === "anyone" || external));
+  const blockedByLabel = external && !!blockedBy?.protection.blockExternal;
+  const decision = applies && !blockedByLabel
+    ? await policy().checkDlp({ text: await shareText(row), labelId: row.label_id, recipients, external })
+    : null;
+  const outcome = decideShare({ name: row.name, kind, external, outside, blockedBy, own, decision, override });
+  const incident = incidentFor({ actor: me.email, name: row.name, itemId: row.id, labelId: row.label_id, recipients, decision, outcome });
+  if (incident) await policy().reportDlp(incident);
+  if (!outcome.allow) throw new UserError(outcome.error, outcome.status, outcome.dlp ? { dlp: outcome.dlp } : undefined);
+  return outcome;
+}
+
+const overrideNote = (g: { overridden: boolean; justification?: string }) => (g.overridden ? `; went ahead past a policy tip: ${g.justification}` : "");
+
+export async function share(me: Me, itemId: string, rawEmail: unknown, rawRole: unknown, override?: DlpOverride): Promise<void> {
   const { row } = await access(me, itemId, "editor");
   const email = cleanEmail(rawEmail);
   const role = rawRole === "editor" ? "editor" : "viewer";
   if (email === row.owner) throw new UserError("They already own it");
+  const g = await guardShare(me, row, "people", [email], override);
   await q(
     `INSERT INTO shares (item_id, email, role, shared_by) VALUES ($1, $2, $3, $4)
      ON CONFLICT (item_id, email) DO UPDATE SET role = EXCLUDED.role`,
     [row.id, email, role, me.email],
   );
-  await log(row.id, me, "shared", `with ${email} (${role === "editor" ? "can edit" : "can view"})`);
+  await log(row.id, me, "shared", `with ${email} (${role === "editor" ? "can edit" : "can view"})${overrideNote(g)}`);
 }
 
 export async function unshare(me: Me, itemId: string, rawEmail: unknown): Promise<void> {
@@ -908,8 +996,9 @@ export async function unshare(me: Me, itemId: string, rawEmail: unknown): Promis
   await log(row.id, me, "stopped sharing", `with ${email}`);
 }
 
-export async function createLink(me: Me, itemId: string, expiresDays?: number): Promise<string> {
+export async function createLink(me: Me, itemId: string, expiresDays?: number, override?: DlpOverride): Promise<string> {
   const { row } = await access(me, itemId, "editor");
+  const g = await guardShare(me, row, "link", [], override);
   const token = randomBytes(18).toString("base64url");
   const days = Number(expiresDays);
   await q("INSERT INTO links (token, item_id, created_by, expires_at) VALUES ($1, $2, $3, $4)", [
@@ -918,7 +1007,7 @@ export async function createLink(me: Me, itemId: string, expiresDays?: number): 
     me.email,
     Number.isFinite(days) && days > 0 ? new Date(Date.now() + Math.min(days, 3650) * 86_400_000) : null,
   ]);
-  await log(row.id, me, "created a view link");
+  await log(row.id, me, "created a view link", overrideNote(g).replace(/^; /, ""));
   return token;
 }
 

@@ -2,15 +2,17 @@
 // The Admin center: navigation on the left, the chosen section on the right. Where you are lives
 // in the address (#/matters/<id>/holds) so reloading and the back button work.
 import {
-  Activity, AppWindow, Briefcase, ExternalLink, Gavel, History, House, Import, KeyRound, Search, Timer, Users,
+  Activity, AppWindow, Briefcase, ExternalLink, Gavel, History, House, Import, KeyRound, Search, ShieldAlert, Tag, Timer, Users,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { Me } from "@/lib/types";
 import { Apps } from "./Apps";
 import { Audit } from "./Audit";
 import { useRoute, type View } from "./client";
+import { Dlp } from "./Dlp";
 import { Holds } from "./Holds";
 import { Home } from "./Home";
+import { Labels } from "./Labels";
 import { MatterView, Matters } from "./Matters";
 import { Migrate } from "./Migrate";
 import { People } from "./People";
@@ -33,6 +35,10 @@ const COMPLIANCE: Item[] = [
   { view: "search", text: "Content search", icon: <Search size={18} /> },
   { view: "retention", text: "Retention", icon: <Timer size={18} /> },
 ];
+const PROTECTION: Item[] = [
+  { view: "labels", text: "Sensitivity labels", icon: <Tag size={18} />, admin: true },
+  { view: "dlp", text: "Data loss prevention", icon: <ShieldAlert size={18} />, admin: true },
+];
 const SETTINGS: Item[] = [
   { view: "audit", text: "Audit log", icon: <History size={18} />, admin: true },
   { view: "roles", text: "Roles", icon: <KeyRound size={18} />, admin: true },
@@ -50,7 +56,7 @@ export function AdminApp({ me, roleLabel, authConsole, apps }: { me: Me; roleLab
 
   const app: AppCtx = useMemo(() => ({ me, apps, authConsole, go, say }), [me, apps, authConsole, go, say]);
   const allowed = (items: Item[]) => items.filter((i) => admin || !i.admin);
-  const view = !admin && [...GENERAL, ...SETTINGS].some((i) => i.view === route.view) ? "matters" : route.view;
+  const view = !admin && [...GENERAL, ...PROTECTION, ...SETTINGS].some((i) => i.view === route.view) ? "matters" : route.view;
 
   const link = (n: Item) => (
     <a key={n.view} href={`#/${n.view}`} className={`navitem${view === n.view ? " active" : ""}`} aria-current={view === n.view ? "page" : undefined}>
@@ -64,6 +70,8 @@ export function AdminApp({ me, roleLabel, authConsole, apps }: { me: Me; roleLab
         {allowed(GENERAL).map(link)}
         <div className="navsection">Compliance</div>
         {COMPLIANCE.map(link)}
+        {admin ? <div className="navsection">Information protection</div> : null}
+        {allowed(PROTECTION).map(link)}
         {admin ? <div className="navsection">Settings</div> : null}
         {allowed(SETTINGS).map(link)}
         {admin ? (
@@ -86,6 +94,8 @@ export function AdminApp({ me, roleLabel, authConsole, apps }: { me: Me; roleLab
           : view === "holds" ? <Holds app={app} />
           : view === "search" ? <SearchView key={route.id ?? "new"} app={app} savedId={route.id} />
           : view === "retention" ? <Retention app={app} />
+          : view === "labels" ? <Labels app={app} />
+          : view === "dlp" ? <Dlp app={app} tab={route.id} />
           : view === "audit" ? <Audit app={app} />
           : <Roles app={app} />}
       </main>

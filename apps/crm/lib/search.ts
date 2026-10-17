@@ -1,8 +1,9 @@
-// Suite-wide search (packages/search) for the signed-in person. Every CRM member can read every
-// record (lib/permissions.ts: reads are open to the whole organization, roles only govern
-// writes), so this searches all live records. Records kept by a legal hold after deletion live
-// in held_records and are for eDiscovery only, so they are never searched here.
+// Suite-wide search (packages/search) for the signed-in person: the live records they can see in
+// the CRM itself, by the same rule every list and record view uses (lib/access.ts). Records kept
+// by a legal hold after deletion live in held_records and are for eDiscovery only, so they are
+// never searched here.
 import { queryToSql, readSearchQuery, snippet, clipText, type SearchResult, type SearchResults } from "@synergy/search";
+import { visible } from "./access";
 import { q } from "./db";
 import { APP } from "./compliance";
 import { KINDS, OWNER, SOURCE, TEXT_KEYS, type Kind } from "./ediscovery";
@@ -16,7 +17,9 @@ const TEXT = caseOf((k) => `concat_ws(' ', ${TEXT_KEYS[k].map((f) => `x.r->>'${f
 const TITLE = caseOf((k) => (k === "activity" ? "x.r->>'subject'" : "x.r->>'name'"));
 const WHO = caseOf((k) => `x.r->>'${OWNER(k)}'`);
 const DATE = `(x.r->>'updated_at')::timestamptz`;
-const LIVE = `(${KINDS.map((k) => `SELECT '${k}'::text AS kind, s.r FROM (${SOURCE[k]}) s`).join(" UNION ALL ")})`;
+/** Every live record this person can see, as (kind, r). */
+const live = (ctx: Ctx, params: unknown[]) =>
+  `(${KINDS.map((k) => `SELECT '${k}'::text AS kind, s.r FROM (${SOURCE[k]} WHERE ${visible(ctx, k, "t", params)}) s`).join(" UNION ALL ")})`;
 
 type Row = { kind: Kind; r: Record<string, unknown>; title: string; who: string; who_name: string | null; date: Date; text: string };
 
@@ -28,17 +31,18 @@ function url(r: Row): string {
   return `/#/${VIEW[r.kind]}/${r.r.id}`;
 }
 
-export async function searchFor(_ctx: Ctx, body: unknown): Promise<SearchResults> {
+export async function searchFor(ctx: Ctx, body: unknown): Promise<SearchResults> {
   const s = readSearchQuery(body);
   const kinds = s.kinds.length ? KINDS.filter((k) => s.kinds.includes(k)) : [...KINDS];
   if (!kinds.length) return { app: APP, results: [] };
   const params: unknown[] = [kinds, s.limit];
+  const from = live(ctx, params);
   const words = queryToSql(s.parsed, [TEXT], params.length + 1);
   params.push(...words.params);
   const rows = await q<Row>(
     `SELECT x.kind, x.r, ${TITLE} AS title, ${WHO} AS who, ${DATE} AS date, ${TEXT} AS text,
             (SELECT nullif(m.name, '') FROM members m WHERE m.email = ${WHO}) AS who_name
-     FROM ${LIVE} x
+     FROM ${from} x
      WHERE x.kind = ANY($1::text[]) AND ${words.sql}
      ORDER BY ${DATE} DESC, x.r->>'id'
      LIMIT $2`,

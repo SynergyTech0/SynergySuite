@@ -24,6 +24,8 @@ import { FontSize, Indent, CommentMark } from "./tiptap-ext";
 import { Subscript, Superscript } from "./slides/text-ext";
 import { type Menu } from "./MenuBar";
 import AppTitleBar from "./AppTitleBar";
+import { LabelChip, SensitivityDialog, useDocLabel } from "./SheetSensitivity";
+import { fileLabelOf, isLabelProperty } from "@/lib/labels";
 import { WordParagraph, WordImage, WordTableCell, WordTableHeader, PageBreak, SectionBreak, PageField, TableOfContents } from "./docs/word-ext";
 import { Pagination, paginationKey, pageLabelAt, headingPages } from "./docs/pagination";
 import PrintLayer, { type HFKind, type HFType } from "./docs/PrintLayer";
@@ -188,6 +190,7 @@ export default function DocEditor({
   initialScope = "private",
   role = "owner",
   initialStarred = false,
+  initialLabelId = null,
 }: {
   docId: string;
   initialTitle: string;
@@ -196,6 +199,8 @@ export default function DocEditor({
   initialScope?: "private" | "company";
   role?: "viewer" | "commenter" | "editor" | "owner";
   initialStarred?: boolean;
+  /** The document's sensitivity label (documents.label_id). */
+  initialLabelId?: string | null;
 }) {
   const isOwner = role === "owner";
   const canEdit = role === "editor" || role === "owner";
@@ -316,6 +321,16 @@ export default function DocEditor({
   setupRef.current = { body, settings };
   const setBody = (s: Section) => wordLayout.set("body", JSON.stringify(s));
   const setSettings = (s: DocSettings) => wordLayout.set("settings", JSON.stringify(s));
+  // File › Sensitivity: the organization's label on the document, else the label an opened Word
+  // file brought from another organization (kept in its custom properties).
+  const docLabel = useDocLabel(docId, initialLabelId, fileLabelOf(settings.customProperties));
+  const [labelOpen, setLabelOpen] = useState(false);
+  const chooseLabel = async (l: Parameters<typeof docLabel.choose>[0]) => {
+    await docLabel.choose(l);
+    // the file's own label gives way to the one chosen here (or to none)
+    const custom = settings.customProperties || {};
+    if (Object.keys(custom).some(isLabelProperty)) setSettings({ ...settings, customProperties: Object.fromEntries(Object.entries(custom).filter(([k]) => !isLabelProperty(k))) });
+  };
   const putStyle = (s: DocStyle) => wordStyles.set(s.id, JSON.stringify(s));
 
   const hfExtensions = useMemo(() => headerFooterExtensions(), []);
@@ -461,6 +476,7 @@ export default function DocEditor({
       indexPages: indexEntriesOf(editor.state.doc).map((e) => pageLabelAt(editor.state, e.pos) ?? "1"),
       comments: threads.map((t) => ({ id: t.id, resolved: t.resolved, messages: t.messages.map((m) => ({ author: m.author_name, body: m.body, date: Number(m.created_ms) || undefined })) })),
       rasterize: rasterizeSvg,
+      label: docLabel.exportLabel,
       loadImage: async (src) => {
         try {
           const r = await fetch(src);
@@ -534,6 +550,9 @@ export default function DocEditor({
       wordLayout.set("body", JSON.stringify(r.body));
       wordLayout.set("settings", JSON.stringify(r.settings));
     });
+    // a labeled file labels the document: with the organization's matching label, or its own
+    const fileLabel = fileLabelOf(r.settings.customProperties);
+    if (fileLabel && canEdit) void docLabel.fromFile(fileLabel, true).catch(() => {});
     editor
       .chain()
       .command(({ tr }) => {
@@ -1392,6 +1411,7 @@ export default function DocEditor({
             { divider: true },
             { label: "Page setup…", onClick: () => setPageSetupOpen(true), disabled: !editing },
             { label: "Properties…", onClick: () => setPropsOpen(true), disabled: !editing },
+            { label: "Sensitivity…", onClick: () => setLabelOpen(true) },
             { label: "Version history", onClick: () => setPanel("history"), shortcut: "" },
             { label: "Rename", onClick: () => (document.querySelector('input[placeholder="Untitled"]') as HTMLInputElement | null)?.select(), disabled: !canEdit },
             { label: "Move to trash", onClick: () => remove(), disabled: !isOwner },
@@ -1741,6 +1761,7 @@ export default function DocEditor({
           onTitle={setTitle}
           shareOpen={shareOpen}
           onShareOpen={setShareOpen}
+          badge={docLabel.current && <LabelChip label={docLabel.current} list={docLabel.list} onClick={() => setLabelOpen(true)} />}
           rightExtra={
             <button
               onClick={() => setPanel((p) => (p === "comments" ? null : "comments"))}
@@ -2167,6 +2188,7 @@ export default function DocEditor({
         );
       })()}
       {ccPick !== null && editor && <ControlPicker editor={editor} pos={ccPick} onClose={() => setCcPick(null)} />}
+      {labelOpen && <SensitivityDialog app="Word" current={docLabel.current} canEdit={canEdit} onSave={chooseLabel} onClose={() => setLabelOpen(false)} />}
       {propsOpen && editor && (
         <PropertiesDialog
           properties={settings.properties || {}}
