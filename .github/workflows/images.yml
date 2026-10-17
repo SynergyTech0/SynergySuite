@@ -52,6 +52,7 @@ jobs:
             {"name":"notes","file":"deploy/express-app.Dockerfile","context":".","args":"APP=notes","paths":["apps/notes/"]},
             {"name":"sites","file":"deploy/express-app.Dockerfile","context":".","args":"APP=sites","paths":["apps/sites/"]},
             {"name":"campaigns","file":"deploy/next-app.Dockerfile","context":".","args":"APP=campaigns\nAPP_DIR=addons/campaigns","paths":["addons/campaigns/"]},
+            {"name":"law","file":"deploy/next-app.Dockerfile","context":".","args":"APP=law\nAPP_DIR=addons/law","paths":["addons/law/"]},
             {"name":"portal","file":"deploy/express-app.Dockerfile","context":".","args":"APP=portal\nAPP_DIR=addons/portal","paths":["addons/portal/"]},
             {"name":"sign","file":"deploy/sign.Dockerfile","context":".","args":"","paths":["addons/sign/"]},
             {"name":"admin","file":"deploy/next-app.Dockerfile","context":".","args":"APP=admin","paths":["apps/admin/"]},

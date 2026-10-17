@@ -33,6 +33,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   loop: ["page", "component"],
   sign: ["document"],
   campaigns: ["campaign", "template"],
+  law: ["matter", "client", "document", "time", "trust", "conflict_check"],
   sites: ["page"],
 };
 

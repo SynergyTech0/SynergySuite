@@ -521,6 +521,11 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+law.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app law:3870
+}
+
 projects.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app projects:3820

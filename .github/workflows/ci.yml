@@ -84,6 +84,7 @@ jobs:
           npx tsc --noEmit -p apps/loop
           npx tsc --noEmit -p apps/crm
           npx tsc --noEmit -p addons/campaigns
+          npx tsc --noEmit -p addons/law
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/diagrams
           npx tsc --noEmit -p apps/devices
@@ -226,6 +227,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
           npm test --workspace apps/contracts
+      - name: Law tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/law_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE law_test"
+          npm test --workspace addons/law
       - name: Ops tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ops_test
