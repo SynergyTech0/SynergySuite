@@ -171,6 +171,10 @@ deploy/hub-import/run.sh auth root@your-hub-server
 
 It reads the hub's database over your own SSH access (container `saauth-db`, or set `HUB_DB_CONTAINER`). People keep their passwords. Anyone who already has an account here keeps it unchanged unless you add `--overwrite-passwords`. Two-step sign-in has to be set up again, because the hub encrypted those secrets with its own key. Hub apps the suite now covers (Boards, Docs, Cal, Books and so on; the list is `COVERED` in `apps/auth/scripts/import-hub.mjs`) are replaced by their suite apps. Every other hub app becomes a linked app at its old address, with its grants. Running it again only adds what is missing.
 
+Then the hub's other apps, one part at a time (`ls deploy/hub-import/*.sql`), each with `--dry-run` first:
+
+- `bookings` (Booking by Synergy, container `scadence-db`): each team becomes a booking page at its team address with its members as staff, and each person with event types of their own gets a page at their user name with their weekly availability as its hours. Event types become services with the same address, length, buffers, location, price, questions and email reminders; round-robin types are booked with anyone available. Hidden and inactive types arrive switched off. Bookings, calendar connections and webhooks stay behind, and booking links move to `bookings.<domain>/book/<page>/<service>`, so update the links on your sites.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.
