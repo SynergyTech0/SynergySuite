@@ -74,5 +74,8 @@ export type Params<K extends string> = { params: Promise<Record<K, string>> };
 export function filters(req: Request) {
   const u = new URL(req.url);
   const s = (k: string) => (u.searchParams.get(k) ?? "").trim().slice(0, 200);
-  return { q: s("q"), type: s("type"), status: s("status"), source: s("source"), stage: s("stage"), accountId: s("accountId"), mine: s("mine") === "1" };
+  return {
+    q: s("q"), type: s("type"), status: s("status"), source: s("source"), stage: s("stage"), accountId: s("accountId"),
+    partnerId: s("partnerId"), mine: s("mine") === "1", unpaid: s("unpaid") === "1",
+  };
 }

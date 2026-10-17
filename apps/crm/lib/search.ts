@@ -10,7 +10,9 @@ import { KINDS, OWNER, SOURCE, TEXT_KEYS, type Kind } from "./ediscovery";
 import type { Ctx } from "./types";
 
 /** The view each kind opens in (#/<view>/<id>). */
-const VIEW: Record<Exclude<Kind, "activity">, string> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities" };
+const VIEW: Record<Exclude<Kind, "activity">, string> = {
+  account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "partners",
+};
 
 const caseOf = (pick: (k: Kind) => string) => `CASE x.kind ${KINDS.map((k) => `WHEN '${k}' THEN ${pick(k)}`).join(" ")} END`;
 const TEXT = caseOf((k) => `concat_ws(' ', ${TEXT_KEYS[k].map((f) => `x.r->>'${f}'`).join(", ")})`);

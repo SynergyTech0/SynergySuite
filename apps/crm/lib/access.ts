@@ -3,13 +3,15 @@
  * organization setting an admin picks (rep_read in crm_settings):
  *
  *   own  (the default)  records they own, records shared with them, and what hangs off those:
- *                       an account's contacts and deals, any record's activities. They also see
- *                       an account they own a contact or deal on, so they can work the deal.
+ *                       an account's contacts and deals, a partner's referrals, any record's
+ *                       activities. They also see an account they own a contact or deal on, and
+ *                       a partner that referred a lead or deal they can see, so they can work it.
  *   all                 every record, as before per-person access existed
  *
  * Sharing gives read access to one record (record_shares); changing it still needs the owner or
  * a manager (permissions.ts). A share's principal is an email, group:<uuid> for a suite group,
  * or * for everyone. Activities are seen by whoever they are assigned to or logged by, too.
+ * A referral is seen with its lead or deal, or by whoever owns its partner or has it shared.
  *
  * Every read in the app and in suite search goes through visible(), so the two always agree.
  */
@@ -21,9 +23,11 @@ import { UserError, isUuid, oneOf } from "./util";
 export const READ_SCOPES = ["own", "all"] as const;
 export type ReadScope = (typeof READ_SCOPES)[number];
 
-export type Kind = RecordType | "activity";
+export type Kind = RecordType | "activity" | "referral";
 
-const TABLE: Record<RecordType, string> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities" };
+const TABLE: Record<RecordType, string> = {
+  account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "referral_partners",
+};
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GROUP = /^group:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -51,10 +55,18 @@ export function visible(ctx: Ctx, kind: Kind, alias: string, params: unknown[]):
   // Contacts and deals come with the account they are on, when that account is the rep's own or shared.
   const child = (k: "contact" | "opportunity", a: string) =>
     `(${mine(k, a)} OR EXISTS (SELECT 1 FROM accounts va WHERE va.id = ${a}.account_id AND ${mine("account", "va")}))`;
+  // A referral through the lead or deal it is on (not through its partner, which would open all of a partner's referrals).
+  const referredHere = (r: string) =>
+    `(EXISTS (SELECT 1 FROM leads vl WHERE vl.id = ${r}.lead_id AND ${mine("lead", "vl")})
+      OR EXISTS (SELECT 1 FROM opportunities vd WHERE vd.id = ${r}.opportunity_id AND ${child("opportunity", "vd")}))`;
+  const partner = (a: string) =>
+    `(${mine("partner", a)} OR EXISTS (SELECT 1 FROM referrals vf WHERE vf.partner_id = ${a}.id AND ${referredHere("vf")}))`;
   const of = (k: RecordType, a: string) =>
-    k === "account" ? account(a) : k === "lead" ? mine("lead", a) : child(k, a);
+    k === "account" ? account(a) : k === "lead" ? mine("lead", a) : k === "partner" ? partner(a) : child(k, a);
   const rule =
-    kind === "activity"
+    kind === "referral"
+      ? `(${referredHere(alias)} OR EXISTS (SELECT 1 FROM referral_partners vp WHERE vp.id = ${alias}.partner_id AND ${mine("partner", "vp")}))`
+      : kind === "activity"
       ? `(${alias}.assignee = ${me} OR ${alias}.created_by = ${me} OR CASE ${alias}.related_type ${RECORD_TYPES.map(
           (k) => `WHEN '${k}' THEN EXISTS (SELECT 1 FROM ${TABLE[k]} vr WHERE vr.id = ${alias}.related_id AND ${of(k, "vr")})`,
         ).join(" ")} ELSE false END)`

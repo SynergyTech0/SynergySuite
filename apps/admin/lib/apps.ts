@@ -17,7 +17,7 @@ export const CONTENT_KINDS: Record<string, string[]> = {
   todo: ["task"],
   engage: ["post", "comment"],
   bookings: ["appointment"],
-  crm: ["lead", "account", "contact", "opportunity", "activity"],
+  crm: ["lead", "account", "contact", "opportunity", "partner", "activity"],
   desk: ["ticket"],
   phone: ["call", "voicemail"],
   diagrams: ["diagram"],

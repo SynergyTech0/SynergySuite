@@ -8,6 +8,7 @@ import { q, tx } from "./db";
 import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
 import { OWNER_NAME, audit, iso, merged, ownerFor, type AuditRow } from "./records";
+import * as referrals from "./referrals";
 import {
   ACCOUNT_TYPES, LEAD_SOURCES, LEAD_STATUSES, STAGES,
   type ConvertResult, type Ctx, type Lead, type LeadSource, type LeadStatus,
@@ -20,10 +21,12 @@ type Row = AuditRow & {
   utm_source: string; utm_medium: string; utm_campaign: string; landing_path: string;
   converted_at: Date | null; converted_account_id: string | null; converted_contact_id: string | null;
   converted_opportunity_id: string | null; converted_account_name: string | null;
+  referral_id: string | null; referral_partner_id: string | null; referral_partner_name: string | null;
 };
 
-const SELECT = `SELECT l.*, ${OWNER_NAME("l")}, (SELECT a.name FROM accounts a WHERE a.id = l.converted_account_id) AS converted_account_name
-  FROM leads l`;
+const SELECT = `SELECT l.*, ${OWNER_NAME("l")}, (SELECT a.name FROM accounts a WHERE a.id = l.converted_account_id) AS converted_account_name,
+    rf.id AS referral_id, rf.partner_id AS referral_partner_id, rp.name AS referral_partner_name
+  FROM leads l LEFT JOIN referrals rf ON rf.lead_id = l.id LEFT JOIN referral_partners rp ON rp.id = rf.partner_id`;
 
 function leadRow(ctx: Ctx, r: Row): Lead {
   return {
@@ -33,6 +36,7 @@ function leadRow(ctx: Ctx, r: Row): Lead {
     utmSource: r.utm_source, utmMedium: r.utm_medium, utmCampaign: r.utm_campaign, landingPath: r.landing_path,
     convertedAt: iso(r.converted_at), convertedAccountId: r.converted_account_id, convertedContactId: r.converted_contact_id,
     convertedOpportunityId: r.converted_opportunity_id, convertedAccountName: r.converted_account_name ?? "",
+    referralId: r.referral_id, referralPartnerId: r.referral_partner_id, referralPartnerName: r.referral_partner_name ?? "",
     ...audit(ctx, r),
   };
 }
@@ -97,12 +101,16 @@ export async function raw(ctx: Ctx, id: string) {
 export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Lead> {
   const v = fields(b);
   const owner = await ownerFor(ctx, b.owner, null);
-  const [row] = await q<{ id: string }>(
-    `INSERT INTO leads (name, company, email, phone, status, source, owner, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
-    [v.name, v.company, v.email, v.phone, v.status, v.source, owner, ctx.email],
-  );
-  return get(ctx, row.id);
+  const id = await tx(async (tq) => {
+    const [row] = await tq<{ id: string }>(
+      `INSERT INTO leads (name, company, email, phone, status, source, owner, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
+      [v.name, v.company, v.email, v.phone, v.status, v.source, owner, ctx.email],
+    );
+    if (b.referralPartnerId) await referrals.attribute(ctx, tq, "lead", row.id, b.referralPartnerId);
+    return row.id;
+  });
+  return get(ctx, id);
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Lead> {
@@ -111,10 +119,13 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
   if (cur.status === "converted") throw new ForbiddenError("Converted leads are read-only");
   const v = fields(merged({ name: cur.name, company: cur.company, email: cur.email, phone: cur.phone, status: cur.status, source: cur.source }, b));
   const owner = await ownerFor(ctx, b.owner, cur.owner);
-  await q(
-    `UPDATE leads SET name=$2, company=$3, email=$4, phone=$5, status=$6, source=$7, owner=$8, updated_by=$9, updated_at=now() WHERE id = $1`,
-    [id, v.name, v.company, v.email, v.phone, v.status, v.source, owner, ctx.email],
-  );
+  await tx(async (tq) => {
+    await tq(
+      `UPDATE leads SET name=$2, company=$3, email=$4, phone=$5, status=$6, source=$7, owner=$8, updated_by=$9, updated_at=now() WHERE id = $1`,
+      [id, v.name, v.company, v.email, v.phone, v.status, v.source, owner, ctx.email],
+    );
+    if (b.referralPartnerId !== undefined) await referrals.attribute(ctx, tq, "lead", id, b.referralPartnerId);
+  });
   return get(ctx, id);
 }
 
@@ -124,6 +135,7 @@ export async function remove(ctx: Ctx, id: string): Promise<void> {
     await keepHeld(tq, ctx.email, "activity", "t.related_type = 'lead' AND t.related_id = $1", [id]);
     await keepHeld(tq, ctx.email, "lead", "t.id = $1", [id]);
     await tq("DELETE FROM activities WHERE related_type = 'lead' AND related_id = $1", [id]);
+    await referrals.dropWith(tq, "lead", "$1::uuid", [id]);
     await tq("DELETE FROM leads WHERE id = $1", [id]);
   });
 }
@@ -174,6 +186,7 @@ export async function convert(ctx: Ctx, id: string, b: Record<string, unknown>):
         [account.id, opp.name, opp.amount, opp.stage, opp.closeDate, owner, ctx.email],
       );
       opportunityId = row.id;
+      await referrals.carryToDeal(tq, id, row.id);
     }
     await tq(
       `UPDATE leads SET status='converted', converted_at=now(), converted_account_id=$2, converted_contact_id=$3,
@@ -219,6 +232,8 @@ export async function saveAiScore(id: string, score: number, rationale: string, 
 export type IntakeInput = {
   name: string; email: string; company: string; phone: string; message: string;
   utmSource: string; utmMedium: string; utmCampaign: string; landingPath: string;
+  /** A referral partner's code; attributes the lead when it names an active partner. */
+  partnerCode: string;
 };
 
 /** Reads a web form post: camelCase or utm_* names, everything untrusted and cut to size. */
@@ -234,19 +249,24 @@ export function intakeFields(b: Record<string, unknown>): IntakeInput {
     utmMedium: text(pick("utmMedium", "utm_medium"), 120),
     utmCampaign: text(pick("utmCampaign", "utm_campaign"), 120),
     landingPath: text(pick("landingPath", "landing_path"), 255),
+    partnerCode: text(pick("partnerCode", "partner_code", "ref"), 40),
   };
   if (!v.email && !v.phone) throw new UserError("An email address or phone number is required");
   return v;
 }
 
-/** A lead from the website. The message, if any, is kept as a note on the lead. */
-export async function intake(owner: string, v: IntakeInput): Promise<string> {
+/**
+ * A lead from the website. The message, if any, is kept as a note on the lead. With `partnerId`
+ * (from a partner code) it is a referral from that partner.
+ */
+export async function intake(owner: string, v: IntakeInput, partnerId: string | null = null): Promise<string> {
   return tx(async (tq) => {
     const [row] = await tq<{ id: string }>(
       `INSERT INTO leads (name, company, email, phone, status, source, owner, utm_source, utm_medium, utm_campaign, landing_path, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,'new','web',$5,$6,$7,$8,$9,'web form','web form') RETURNING id`,
-      [v.name, v.company, v.email, v.phone, owner, v.utmSource, v.utmMedium, v.utmCampaign, v.landingPath],
+       VALUES ($1,$2,$3,$4,'new',$10,$5,$6,$7,$8,$9,'web form','web form') RETURNING id`,
+      [v.name, v.company, v.email, v.phone, owner, v.utmSource, v.utmMedium, v.utmCampaign, v.landingPath, partnerId ? "referral" : "web"],
     );
+    if (partnerId) await referrals.fromWebForm(tq, partnerId, row.id);
     if (v.message) {
       await tq(
         `INSERT INTO activities (type, subject, body, status, assignee, related_type, related_id, created_by, updated_by)

@@ -63,8 +63,8 @@ export function hue(seed: string): number {
   return HUES[h % HUES.length];
 }
 
-export type View = "dashboard" | "myday" | "leads" | "accounts" | "contacts" | "opportunities" | "pipeline" | "team";
-export const VIEWS: View[] = ["dashboard", "myday", "leads", "accounts", "contacts", "opportunities", "pipeline", "team"];
+export type View = "dashboard" | "myday" | "leads" | "accounts" | "contacts" | "opportunities" | "pipeline" | "partners" | "referrals" | "team";
+export const VIEWS: View[] = ["dashboard", "myday", "leads", "accounts", "contacts", "opportunities", "pipeline", "partners", "referrals", "team"];
 export type Route = { view: View; id: string | null };
 
 function parse(hash: string): Route {
