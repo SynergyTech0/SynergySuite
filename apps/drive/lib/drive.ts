@@ -1119,25 +1119,26 @@ async function refuseManaged(lib: string): Promise<void> {
 
 async function unmanagedLibrary(me: Me, libraryId: string): Promise<string> {
   const lib = await libraryOwner(me, libraryId);
-  if (patch.name !== undefined) await notTeam(lib, "A team's library is renamed in Groups");
   await refuseManaged(lib);
   return lib;
 }
 
 export async function updateLibrary(me: Me, libraryId: string, patch: { name?: string; description?: string }): Promise<void> {
   const lib = await unmanagedLibrary(me, libraryId);
+  if (patch.name !== undefined) await notTeam(lib, "A team's library is renamed in Groups");
   if (patch.name !== undefined) await q("UPDATE libraries SET name = $2 WHERE id = $1", [lib, cleanName(patch.name)]);
   if (patch.description !== undefined) await q("UPDATE libraries SET description = $2 WHERE id = $1", [lib, String(patch.description).slice(0, 500)]);
 }
 
 /** Only an empty library can be deleted, so nobody loses files by accident. */
 export async function deleteLibrary(me: Me, libraryId: string): Promise<void> {
-  await removeLibrary(await unmanagedLibrary(me, libraryId));
+  const lib = await unmanagedLibrary(me, libraryId);
+  await notTeam(lib, "A team's library goes when the team is deleted in Groups");
+  await removeLibrary(lib);
 }
 
 /** Deletes an empty library (409 while it holds files); one with held files loses its members and stays. */
 export async function removeLibrary(lib: string): Promise<void> {
-  await notTeam(lib, "A team's library goes when the team is deleted in Groups");
   const [live] = await q("SELECT 1 FROM items WHERE library_id = $1 AND trash_root IS NULL LIMIT 1", [lib]);
   if (live) throw new UserError("Move or delete everything in the library first", 409);
   const ids = (await q<{ id: string }>("SELECT id FROM items WHERE library_id = $1 AND parent_id IS NULL", [lib])).map((r) => r.id);
