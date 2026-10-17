@@ -5,7 +5,7 @@ import { type ExportItem, type SearchHit, type SearchResponse, queryToSql } from
 import { q, type Tq } from "./db";
 import { APP, type Search, holdChecker, nextCursor, snippet } from "./compliance";
 
-export const KINDS = ["account", "contact", "lead", "opportunity", "activity"] as const;
+export const KINDS = ["account", "contact", "lead", "opportunity", "partner", "activity"] as const;
 export type Kind = (typeof KINDS)[number];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,18 +15,26 @@ export const RELATED_NAME = `CASE t.related_type
     WHEN 'contact' THEN (SELECT name FROM contacts WHERE id = t.related_id)
     WHEN 'lead' THEN (SELECT name FROM leads WHERE id = t.related_id)
     WHEN 'opportunity' THEN (SELECT name FROM opportunities WHERE id = t.related_id)
+    WHEN 'partner' THEN (SELECT name FROM referral_partners WHERE id = t.related_id)
   END`;
+
+/** The partner that referred a lead or deal, by name. */
+export const REFERRED_BY = (col: "lead_id" | "opportunity_id") =>
+  `(SELECT p.name FROM referrals rf JOIN referral_partners p ON p.id = rf.partner_id WHERE rf.${col} = t.id)`;
 
 /** Each kind's rows as JSON (`r`), with the names a reader needs alongside. */
 export const SOURCE: Record<Kind, string> = {
   account: `SELECT to_jsonb(t) - 'search_text' AS r FROM accounts t`,
   contact: `SELECT to_jsonb(t) - 'search_text' || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id)) AS r FROM contacts t`,
-  opportunity: `SELECT to_jsonb(t) || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id)) AS r FROM opportunities t`,
-  lead: `SELECT to_jsonb(t) AS r FROM leads t`,
+  opportunity: `SELECT to_jsonb(t) || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id), 'referred_by', ${REFERRED_BY("opportunity_id")}) AS r FROM opportunities t`,
+  lead: `SELECT to_jsonb(t) || jsonb_build_object('referred_by', ${REFERRED_BY("lead_id")}) AS r FROM leads t`,
+  partner: `SELECT to_jsonb(t) AS r FROM referral_partners t`,
   activity: `SELECT to_jsonb(t) || jsonb_build_object('related_name', ${RELATED_NAME}) AS r FROM activities t`,
 };
 
-const TABLE: Record<Kind, string> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", activity: "activities" };
+const TABLE: Record<Kind, string> = {
+  account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "referral_partners", activity: "activities",
+};
 
 /** Who a record belongs to: its owner, or for an activity whoever it is assigned to. */
 export const OWNER = (kind: Kind) => (kind === "activity" ? "assignee" : "owner");
@@ -35,8 +43,9 @@ export const OWNER = (kind: Kind) => (kind === "activity" ? "assignee" : "owner"
 export const TEXT_KEYS: Record<Kind, string[]> = {
   account: ["name", "industry", "website", "phone", "address", "city", "state", "postal_code", "type"],
   contact: ["name", "email", "phone", "title", "account_name"],
-  opportunity: ["name", "stage", "amount", "close_date", "account_name"],
-  lead: ["name", "company", "email", "phone", "status", "source", "score_rationale"],
+  opportunity: ["name", "stage", "amount", "close_date", "account_name", "referred_by"],
+  lead: ["name", "company", "email", "phone", "status", "source", "score_rationale", "referred_by"],
+  partner: ["name", "company", "email", "phone", "code", "status", "notes"],
   activity: ["subject", "body", "type", "status", "related_name"],
 };
 
@@ -112,7 +121,7 @@ export async function search(s: Search): Promise<SearchResponse> {
   return { app: APP, hits: rows.map((r) => hit(r, s)), total, nextCursor: nextCursor(s, s.offset + rows.length < total) };
 }
 
-/** Each record in full, and for accounts, contacts, leads and deals their activity timeline. */
+/** Each record in full, and for accounts, contacts, leads, deals and partners their activity timeline. */
 export async function exportItems(ids: string[]): Promise<{ items: ExportItem[] }> {
   const wanted = ids.filter((i) => UUID.test(i));
   if (!wanted.length) return { items: [] };

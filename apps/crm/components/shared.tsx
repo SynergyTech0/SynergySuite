@@ -23,6 +23,7 @@ const TONE: Record<string, string> = {
   prospect: "blue", customer: "green", partner: "purple", competitor: "red", other: "",
   prospecting: "", qualification: "blue", proposal: "purple", negotiation: "amber", closed_won: "green", closed_lost: "red",
   admin: "purple", manager: "blue", rep: "",
+  active: "green", inactive: "", won: "green", lost: "red",
 };
 
 export function Badge({ value }: { value: string }) {

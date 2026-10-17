@@ -21,8 +21,21 @@ export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 export const ACTIVITY_STATUSES = ["open", "completed", "canceled"] as const;
 export type ActivityStatus = (typeof ACTIVITY_STATUSES)[number];
 
-export const RECORD_TYPES = ["account", "contact", "lead", "opportunity"] as const;
+export const RECORD_TYPES = ["account", "contact", "lead", "opportunity", "partner"] as const;
 export type RecordType = (typeof RECORD_TYPES)[number];
+
+export const PARTNER_KINDS = ["person", "company"] as const;
+export type PartnerKind = (typeof PARTNER_KINDS)[number];
+
+export const PARTNER_STATUSES = ["active", "inactive"] as const;
+export type PartnerStatus = (typeof PARTNER_STATUSES)[number];
+
+export const REWARD_TYPES = ["percent", "fixed"] as const;
+export type RewardType = (typeof REWARD_TYPES)[number];
+
+/** Where a referral stands, from its lead or deal (lib/rewards.ts). */
+export const REFERRAL_STAGES = ["new", "qualified", "won", "lost"] as const;
+export type ReferralStage = (typeof REFERRAL_STAGES)[number];
 
 export const LABELS: Record<string, string> = {
   admin: "Admin", manager: "Manager", rep: "Rep",
@@ -34,6 +47,8 @@ export const LABELS: Record<string, string> = {
   task: "Task", call: "Call", note: "Note",
   open: "Open", completed: "Completed", canceled: "Canceled",
   account: "Account", contact: "Contact", lead: "Lead", opportunity: "Opportunity",
+  person: "Person", company: "Company", active: "Active", inactive: "Inactive",
+  percent: "Percent of won deal", fixed: "Fixed amount", won: "Won", lost: "Lost",
 };
 
 export function label(v: string): string {
@@ -96,7 +111,7 @@ export type Lead = Audit & {
   convertedContactId: string | null;
   convertedOpportunityId: string | null;
   convertedAccountName: string;
-};
+} & ReferredBy;
 
 export type Opportunity = Audit & {
   id: string;
@@ -108,6 +123,58 @@ export type Opportunity = Audit & {
   stage: Stage;
   closeDate: string | null; // YYYY-MM-DD
   probability: number | null;
+} & ReferredBy;
+
+/** Who sent a lead or deal, when a partner did. */
+export type ReferredBy = { referralId: string | null; referralPartnerId: string | null; referralPartnerName: string };
+
+export type Partner = Audit & {
+  id: string;
+  name: string;
+  kind: PartnerKind;
+  company: string;
+  email: string;
+  phone: string;
+  notes: string;
+  status: PartnerStatus;
+  /** What a web form sends as partnerCode to attribute a lead; null when none. */
+  code: string | null;
+  rewardType: RewardType;
+  /** A percentage or an amount, as numeric(14,2) text. */
+  rewardValue: string;
+  contactId: string | null;
+  contactName: string;
+  accountId: string | null;
+  accountName: string;
+};
+
+/** Money as numeric(14,2) text throughout, so cents never pass through a float. */
+export type ReferralTotals = { sent: number; won: number; earned: string; paid: string; outstanding: string };
+
+export type Referral = {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  leadId: string | null;
+  opportunityId: string | null;
+  /** The deal's name, else the lead's; "" when both were deleted. */
+  name: string;
+  company: string;
+  stage: ReferralStage;
+  dealValue: string | null;
+  rewardType: RewardType;
+  rewardValue: string;
+  /** What the partner earns once won; null until then. */
+  reward: string | null;
+  /** Won and not yet paid. */
+  owed: string;
+  paidOn: string | null;
+  paidAmount: string | null;
+  paidNote: string;
+  paidBy: string | null;
+  createdAt: string;
+  /** Whether this person can mark the reward paid: the partner's owner or a manager. */
+  payable: boolean;
 };
 
 export type Activity = {

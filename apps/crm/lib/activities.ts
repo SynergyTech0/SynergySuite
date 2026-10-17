@@ -14,7 +14,9 @@ type Row = {
   created_by: string | null; created_at: Date;
 };
 
-const TABLE: Record<RecordType, string> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities" };
+const TABLE: Record<RecordType, string> = {
+  account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "referral_partners",
+};
 
 const SELECT = `SELECT t.*,
   coalesce(nullif((SELECT m.name FROM members m WHERE m.email = t.assignee), ''), t.assignee) AS assignee_name,
@@ -23,6 +25,7 @@ const SELECT = `SELECT t.*,
     WHEN 'contact' THEN (SELECT name FROM contacts WHERE id = t.related_id)
     WHEN 'lead' THEN (SELECT name FROM leads WHERE id = t.related_id)
     WHEN 'opportunity' THEN (SELECT name FROM opportunities WHERE id = t.related_id)
+    WHEN 'partner' THEN (SELECT name FROM referral_partners WHERE id = t.related_id)
   END AS related_name
   FROM activities t`;
 

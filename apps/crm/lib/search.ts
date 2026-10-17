@@ -9,12 +9,14 @@ import { visible } from "./access";
 import { q } from "./db";
 import { APP } from "./compliance";
 import { CONTACT_MATCH } from "./contacts";
-import { KINDS, OWNER, RELATED_NAME, SOURCE, TEXT_KEYS, type Kind } from "./ediscovery";
+import { KINDS, OWNER, REFERRED_BY, RELATED_NAME, SOURCE, TEXT_KEYS, type Kind } from "./ediscovery";
 import type { Ctx } from "./types";
 import { likeTerm } from "./util";
 
 /** The view each kind opens in (#/<view>/<id>). */
-const VIEW: Record<Exclude<Kind, "activity">, string> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities" };
+const VIEW: Record<Exclude<Kind, "activity">, string> = {
+  account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "partners",
+};
 
 const caseOf = (pick: (k: Kind) => string) => `CASE x.kind ${KINDS.map((k) => `WHEN '${k}' THEN ${pick(k)}`).join(" ")} END`;
 const TEXT = caseOf((k) => `concat_ws(' ', ${TEXT_KEYS[k].map((f) => `x.r->>'${f}'`).join(", ")})`);
@@ -43,7 +45,10 @@ function matches(k: Kind, p: ParsedQuery, params: unknown[]): string {
     return parts.join(" AND ") || "TRUE";
   }
   const column = (f: string) =>
-    f === "account_name" ? "(SELECT name FROM accounts WHERE id = t.account_id)" : f === "related_name" ? `(${RELATED_NAME})` : `t.${f}`;
+    f === "account_name" ? "(SELECT name FROM accounts WHERE id = t.account_id)"
+    : f === "related_name" ? `(${RELATED_NAME})`
+    : f === "referred_by" ? REFERRED_BY(k === "lead" ? "lead_id" : "opportunity_id")
+    : `t.${f}`;
   const words = queryToSql(p, TEXT_KEYS[k].map(column), params.length + 1);
   params.push(...words.params);
   return words.sql;

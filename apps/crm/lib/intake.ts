@@ -1,11 +1,14 @@
 /**
  * Web-to-lead: a website's form (or its server) posts here with `Authorization: Bearer
  * <CRM_API_TOKEN>`. No suite sign-in is involved, so this path bypasses the gateway; with the
- * token unset the endpoint doesn't exist. No tracking pixels or ad-network callbacks.
+ * token unset the endpoint doesn't exist. No tracking pixels or ad-network callbacks. A partner
+ * code (partnerCode, partner_code or ref) makes the lead a referral from that partner; a code that
+ * names no active partner is ignored, so the answer never tells a caller which codes exist.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { intake, intakeFields } from "./leads";
 import { intakeOwner } from "./members";
+import { byCode } from "./partners";
 import { UserError } from "./util";
 
 export const MAX_INTAKE_BYTES = 16 * 1024;
@@ -39,5 +42,5 @@ export async function receiveLead(b: Record<string, unknown>): Promise<string> {
   const v = intakeFields(b);
   const owner = await intakeOwner();
   if (!owner) throw new UserError("The CRM has no admin yet to receive leads", 503);
-  return intake(owner, v);
+  return intake(owner, v, await byCode(v.partnerCode));
 }

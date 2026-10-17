@@ -8,7 +8,7 @@ import { api, formatDateTime, type View } from "./client";
 import type { AppCtx } from "./shared";
 import { TYPE_ICON } from "./Timeline";
 
-const VIEW_OF: Record<RecordType, View> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities" };
+const VIEW_OF: Record<RecordType, View> = { account: "accounts", contact: "contacts", lead: "leads", opportunity: "opportunities", partner: "partners" };
 const SECTIONS = [["overdue", "Overdue"], ["today", "Today"], ["upcoming", "Upcoming"], ["noDate", "No date"]] as const;
 
 export function MyDay({ app }: { app: AppCtx }) {

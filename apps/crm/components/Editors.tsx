@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { STAGE_PROBABILITY } from "@/lib/pipeline";
 import {
-  ACCOUNT_TYPES, LEAD_SOURCES, LEAD_STATUSES, STAGES, label,
-  type Account, type Contact, type ConvertResult, type Lead, type Opportunity, type Stage,
+  ACCOUNT_TYPES, LEAD_SOURCES, LEAD_STATUSES, PARTNER_KINDS, PARTNER_STATUSES, REWARD_TYPES, STAGES, label,
+  type Account, type Contact, type ConvertResult, type Lead, type Opportunity, type Partner, type RewardType, type Stage,
 } from "@/lib/types";
 import { api } from "./client";
 import { Modal } from "./Modal";
@@ -102,6 +102,76 @@ function AccountField({ value }: { value: string }) {
   );
 }
 
+/** Who referred a lead or deal: an active partner, or none. A partner since set inactive stays listed. */
+function ReferredByField({ value, name }: { value: string | null; name: string }) {
+  const [partners, setPartners] = useState<Partner[] | null>(null);
+  useEffect(() => {
+    void api<Partner[]>("/api/partners?status=active").then(setPartners).catch(() => setPartners([]));
+  }, []);
+  if (!partners) return <label><span>Referred by</span><select disabled><option>Loading…</option></select></label>;
+  const current = value && !partners.some((p) => p.id === value) ? [{ id: value, name }] : [];
+  return (
+    <label>
+      <span>Referred by</span>
+      <select key="loaded" name="referralPartnerId" aria-label="Referred by" defaultValue={value ?? ""}>
+        <option value="">No referral partner</option>
+        {[...current, ...partners].map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/** An optional link to a contact or account already in the CRM. */
+function LinkField({ path, name, text, value }: { path: string; name: string; text: string; value: string | null }) {
+  const [rows, setRows] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => {
+    void api<{ id: string; name: string }[]>(path).then(setRows).catch(() => setRows([]));
+  }, [path]);
+  if (!rows) return <label><span>{text}</span><select disabled><option>Loading…</option></select></label>;
+  return (
+    <label>
+      <span>{text}</span>
+      <select key="loaded" name={name} aria-label={text} defaultValue={value ?? ""}>
+        <option value="">None</option>
+        {rows.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+export function PartnerEditor({ app, record, onClose, onSaved }: EditorProps<Partner>) {
+  const r = record;
+  const [rewardType, setRewardType] = useState<RewardType>(r?.rewardType ?? "percent");
+  return (
+    <EditorForm<Partner> title={r ? "Edit referral partner" : "New referral partner"} path={r ? `/api/partners/${r.id}` : "/api/partners"} method={r ? "PATCH" : "POST"} onClose={onClose} onSaved={onSaved}>
+      <Text name="name" text="Name" value={r?.name} required autoFocus />
+      <div className="grid2">
+        <Choice name="kind" text="A person or a company" value={r?.kind ?? "person"} options={PARTNER_KINDS} />
+        <Choice name="status" text="Status" value={r?.status ?? "active"} options={PARTNER_STATUSES} />
+        <Text name="company" text="Company" value={r?.company} />
+        <Text name="email" text="Email" value={r?.email} type="email" />
+        <Text name="phone" text="Phone" value={r?.phone} type="tel" />
+        <Text name="code" text="Partner code (for web forms)" value={r?.code} placeholder="ACME10" />
+        <label>
+          <span>Default reward</span>
+          <select name="rewardType" aria-label="Default reward" value={rewardType} onChange={(e) => setRewardType(e.target.value as RewardType)}>
+            {REWARD_TYPES.map((t) => <option key={t} value={t}>{label(t)}</option>)}
+          </select>
+        </label>
+        <Text name="rewardValue" text={rewardType === "percent" ? "Percent of the won deal" : "Amount (USD)"} value={r?.rewardValue} placeholder={rewardType === "percent" ? "10" : "250"} />
+        <LinkField path="/api/contacts" name="contactId" text="Same person as contact" value={r?.contactId ?? null} />
+        <LinkField path="/api/accounts" name="accountId" text="Same company as account" value={r?.accountId ?? null} />
+      </div>
+      <label>
+        <span>Notes</span>
+        <textarea name="notes" rows={2} defaultValue={r?.notes ?? ""} />
+      </label>
+      <p className="muted small">Each new referral takes the default reward at the time it is made; changing it later leaves earlier referrals as they were.</p>
+      <OwnerField app={app} value={r?.owner ?? app.me.email} />
+    </EditorForm>
+  );
+}
+
 export function AccountEditor({ app, record, onClose, onSaved }: EditorProps<Account>) {
   const r = record;
   return (
@@ -154,6 +224,7 @@ export function LeadEditor({ app, record, onClose, onSaved }: EditorProps<Lead>)
         <Text name="phone" text="Phone" value={r?.phone} type="tel" />
         <Choice name="source" text="Source" value={r?.source ?? "other"} options={LEAD_SOURCES} />
         <Choice name="status" text="Status" value={r?.status ?? "new"} options={LEAD_STATUSES.filter((s) => s !== "converted")} />
+        <ReferredByField value={r?.referralPartnerId ?? null} name={r?.referralPartnerName ?? ""} />
       </div>
       <OwnerField app={app} value={r?.owner ?? app.me.email} />
     </EditorForm>
@@ -180,6 +251,7 @@ export function OpportunityEditor({ app, record, preset, onClose, onSaved }: Edi
           <span>Probability (%)</span>
           <input name="probability" type="number" min={0} max={100} defaultValue={r?.probability ?? ""} placeholder={`${STAGE_PROBABILITY[stage]} (stage default)`} />
         </label>
+        <ReferredByField value={r?.referralPartnerId ?? null} name={r?.referralPartnerName ?? ""} />
       </div>
       <OwnerField app={app} value={r?.owner ?? app.me.email} />
     </EditorForm>

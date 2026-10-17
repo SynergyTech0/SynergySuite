@@ -4,6 +4,8 @@ import * as contacts from "@/lib/contacts";
 import { toCsv } from "@/lib/csv";
 import * as leads from "@/lib/leads";
 import * as opps from "@/lib/opportunities";
+import * as partners from "@/lib/partners";
+import * as referrals from "@/lib/referrals";
 import { label } from "@/lib/types";
 import { UserError } from "@/lib/util";
 
@@ -47,6 +49,20 @@ export const GET = route(async (ctx, req, { params }: Params<"kind">) => {
       ["Name", (r) => r.name], ["Account", (r) => r.accountName], ["Amount", (r) => r.amount ?? ""], ["Stage", (r) => label(r.stage)],
       ["Probability", (r) => r.probability ?? ""], ["Close date", (r) => r.closeDate ?? ""], ["Owner", (r) => r.owner],
     ]), "opportunities.csv");
+  }
+  if (kind === "partners") {
+    return download(toCsv(await partners.list(ctx, f), [
+      ["Name", (r) => r.name], ["Kind", (r) => label(r.kind)], ["Company", (r) => r.company], ["Email", (r) => r.email], ["Phone", (r) => r.phone],
+      ["Status", (r) => label(r.status)], ["Code", (r) => r.code ?? ""], ["Reward type", (r) => label(r.rewardType)], ["Reward", (r) => r.rewardValue],
+      ["Owner", (r) => r.owner], ["Updated", (r) => r.updatedAt],
+    ]), "partners.csv");
+  }
+  if (kind === "referrals") {
+    return download(toCsv(await referrals.list(ctx, f), [
+      ["Referral", (r) => r.name], ["Company", (r) => r.company], ["Partner", (r) => r.partnerName], ["Stage", (r) => label(r.stage)],
+      ["Deal value", (r) => r.dealValue ?? ""], ["Reward", (r) => r.reward ?? ""], ["Owed", (r) => r.owed], ["Paid on", (r) => r.paidOn ?? ""],
+      ["Paid", (r) => r.paidAmount ?? ""], ["Payment note", (r) => r.paidNote], ["Referred", (r) => r.createdAt],
+    ]), "referrals.csv");
   }
   throw new UserError("Not found", 404);
 });
