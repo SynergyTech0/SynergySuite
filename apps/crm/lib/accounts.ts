@@ -5,17 +5,23 @@ import { assertCanEdit } from "./permissions";
 import { OWNER_NAME, audit, merged, ownerFor, type AuditRow } from "./records";
 import { contactRow, type ContactRow } from "./contacts";
 import { keepHeld } from "./ediscovery";
+import { pageSize } from "./paging";
 import { oppRow, OPP_SELECT, type OppRow } from "./opportunities";
 import { ACCOUNT_TYPES, type Account, type Contact, type Ctx, type Opportunity } from "./types";
 import { UserError, likeTerm, oneOf, optionalUrl, required, text } from "./util";
 
-type Row = AuditRow & { id: string; name: string; industry: string; website: string; phone: string; address: string; type: Account["type"] };
+type Row = AuditRow & {
+  id: string; name: string; industry: string; website: string; phone: string; address: string; type: Account["type"];
+  city: string; state: string; postal_code: string; lat: number | null; lng: number | null; details: Record<string, unknown> | null;
+};
 
 const SELECT = `SELECT a.*, ${OWNER_NAME("a")} FROM accounts a`;
 
 export function accountRow(ctx: Ctx, r: Row): Account {
   return {
     id: r.id, name: r.name, industry: r.industry, website: r.website, phone: r.phone, address: r.address, type: r.type,
+    city: r.city ?? "", state: r.state ?? "", postalCode: r.postal_code ?? "", lat: r.lat ?? null, lng: r.lng ?? null,
+    details: Object.fromEntries(Object.entries(r.details ?? {}).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)])),
     ...audit(ctx, r),
   };
 }
@@ -27,29 +33,61 @@ function fields(b: Record<string, unknown>) {
     website: optionalUrl(b.website),
     phone: text(b.phone, 40),
     address: text(b.address, 500),
+    city: text(b.city, 120),
+    state: text(b.state, 60),
+    postalCode: text(b.postalCode, 20),
     type: oneOf(b.type, ACCOUNT_TYPES, "prospect", "account type"),
   };
 }
 
-export type ListAccounts = { q?: string; type?: string; mine?: boolean };
+export type ListAccounts = { q?: string; type?: string; industry?: string; state?: string; mine?: boolean; offset?: number; limit?: number };
 
 export async function list(ctx: Ctx, f: ListAccounts = {}): Promise<Account[]> {
   const params: unknown[] = [];
   const where: string[] = [visible(ctx, "account", "a", params)];
   if (f.q) {
     params.push(likeTerm(f.q));
-    where.push(`(a.name ILIKE $${params.length} OR a.industry ILIKE $${params.length} OR a.website ILIKE $${params.length} OR a.phone ILIKE $${params.length})`);
+    // name, industry, website, phone, address, city, state, ZIP and type, trigram-indexed (lib/db.ts)
+    where.push(`a.search_text ILIKE $${params.length}`);
   }
   if (f.type) {
     params.push(f.type);
     where.push(`a.type = $${params.length}`);
   }
+  if (f.industry) {
+    params.push(f.industry);
+    where.push(`a.industry = $${params.length}`);
+  }
+  if (f.state) {
+    params.push(f.state);
+    where.push(`a.state = $${params.length}`);
+  }
   if (f.mine) {
     params.push(ctx.email);
     where.push(`a.owner = $${params.length}`);
   }
-  const rows = await q<Row>(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(a.name) LIMIT 1000`, params);
+  params.push(pageSize(f.limit), Math.max(0, Math.floor(Number(f.offset) || 0)));
+  const rows = await q<Row>(
+    `${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(a.name), a.id LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
   return rows.map((r) => accountRow(ctx, r));
+}
+
+export type Facets = { industries: { value: string; count: number }[]; states: { value: string; count: number }[] };
+
+/** The industries and states the visible accounts have, with counts, for the list's filters. */
+export async function facets(ctx: Ctx): Promise<Facets> {
+  const params: unknown[] = [];
+  const seen = visible(ctx, "account", "a", params);
+  const of = (col: string) =>
+    q<{ value: string; count: number }>(
+      `SELECT a.${col} AS value, count(*)::int AS count FROM accounts a WHERE a.${col} <> '' AND ${seen}
+       GROUP BY a.${col} ORDER BY a.${col} LIMIT 300`,
+      params,
+    );
+  const [industries, states] = await Promise.all([of("industry"), of("state")]);
+  return { industries, states };
 }
 
 async function load(ctx: Ctx, id: string): Promise<Row> {
@@ -79,9 +117,9 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Acco
   const v = fields(b);
   const owner = await ownerFor(ctx, b.owner, null);
   const [row] = await q<{ id: string }>(
-    `INSERT INTO accounts (name, industry, website, phone, address, type, owner, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
-    [v.name, v.industry, v.website, v.phone, v.address, v.type, owner, ctx.email],
+    `INSERT INTO accounts (name, industry, website, phone, address, city, state, postal_code, type, owner, created_by, updated_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11) RETURNING id`,
+    [v.name, v.industry, v.website, v.phone, v.address, v.city, v.state, v.postalCode, v.type, owner, ctx.email],
   );
   return accountRow(ctx, await load(ctx, row.id));
 }
@@ -89,12 +127,16 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Acco
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Account> {
   const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
-  const v = fields(merged({ name: cur.name, industry: cur.industry, website: cur.website, phone: cur.phone, address: cur.address, type: cur.type }, b));
+  const v = fields(merged({
+    name: cur.name, industry: cur.industry, website: cur.website, phone: cur.phone, address: cur.address,
+    city: cur.city, state: cur.state, postalCode: cur.postal_code, type: cur.type,
+  }, b));
   const owner = await ownerFor(ctx, b.owner, cur.owner);
   await q(
-    `UPDATE accounts SET name=$2, industry=$3, website=$4, phone=$5, address=$6, type=$7, owner=$8, updated_by=$9, updated_at=now()
+    `UPDATE accounts SET name=$2, industry=$3, website=$4, phone=$5, address=$6, city=$7, state=$8, postal_code=$9, type=$10, owner=$11,
+            updated_by=$12, updated_at=now()
      WHERE id = $1`,
-    [id, v.name, v.industry, v.website, v.phone, v.address, v.type, owner, ctx.email],
+    [id, v.name, v.industry, v.website, v.phone, v.address, v.city, v.state, v.postalCode, v.type, owner, ctx.email],
   );
   return accountRow(ctx, await load(ctx, id));
 }

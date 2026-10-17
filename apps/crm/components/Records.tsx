@@ -47,7 +47,7 @@ function Row({ kind, r }: { kind: Kind; r: AnyRecord }) {
         <Avatar name={a.name} square />
         <div className="grow">
           <span className="rname">{a.name}</span>
-          <span className="rsub">{[a.industry, a.ownerName].filter(Boolean).join(" · ")}</span>
+          <span className="rsub">{[a.industry, [a.city, a.state].filter(Boolean).join(", "), a.ownerName].filter(Boolean).join(" · ")}</span>
         </div>
         <div className="rside"><Badge value={a.type} /></div>
       </>
@@ -78,8 +78,16 @@ function Row({ kind, r }: { kind: Kind; r: AnyRecord }) {
   );
 }
 
+/** Accounts and contacts come a page at a time (lib/paging.ts); the others come whole. */
+const PAGED: Kind[] = ["accounts", "contacts"];
+const PAGE = 1000;
+
+type Facets = { industries: { value: string; count: number }[]; states: { value: string; count: number }[] };
+
 export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: string | null }) {
   const [rows, setRows] = useState<AnyRecord[] | null>(null);
+  const [more, setMore] = useState(false);
+  const [facets, setFacets] = useState<Facets | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Record<string, string>>({});
   const [mine, setMine] = useState(false);
@@ -94,8 +102,30 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
   }, [query, filter, mine]);
 
   const load = useCallback(async () => {
-    setRows(await api<AnyRecord[]>(`/api/${kind}?${params()}`));
+    const page = await api<AnyRecord[]>(`/api/${kind}?${params()}`);
+    setRows(page);
+    setMore(PAGED.includes(kind) && page.length >= PAGE);
   }, [kind, params]);
+
+  const loadMore = async () => {
+    try {
+      const page = await api<AnyRecord[]>(`/api/${kind}?${params()}&offset=${rows?.length ?? 0}`);
+      setRows((r) => [...(r ?? []), ...page]);
+      setMore(page.length >= PAGE);
+    } catch (e) {
+      app.say((e as Error).message);
+    }
+  };
+
+  // The account list also filters by the industries and states the accounts have.
+  useEffect(() => {
+    if (kind !== "accounts") return;
+    void api<Facets>("/api/accounts/facets").then(setFacets).catch(() => setFacets(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- app.version refreshes after changes elsewhere
+  }, [kind, app.version]);
+  const facetFilters: [string, string, Facets["states"]][] = kind === "accounts" && facets
+    ? ([["industry", "Any industry", facets.industries], ["state", "Any state", facets.states]] as [string, string, Facets["states"]][]).filter(([, , o]) => o.length > 0)
+    : [];
 
   useEffect(() => {
     const t = window.setTimeout(() => void load().catch((e) => app.say(e.message)), query ? 200 : 0);
@@ -109,6 +139,7 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
     setFilter({});
     setMine(false);
     setRows(null);
+    setMore(false);
   }, [kind]);
 
   const saved = (r: AnyRecord) => {
@@ -144,10 +175,16 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
                 {options.map((o) => <option key={o} value={o}>{o === "open" ? "Open" : label(o)}</option>)}
               </select>
             ))}
+            {facetFilters.map(([key, any, options]) => (
+              <select key={key} aria-label={any} value={filter[key] ?? ""} onChange={(e) => setFilter((f) => ({ ...f, [key]: e.target.value }))}>
+                <option value="">{any}</option>
+                {options.map((o) => <option key={o.value} value={o.value}>{o.value} ({o.count.toLocaleString()})</option>)}
+              </select>
+            ))}
             <label className="toggle">
               <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Mine only
             </label>
-            {rows ? <span className="muted small" style={{ marginLeft: "auto" }}>{rows.length} shown</span> : null}
+            {rows ? <span className="muted small" style={{ marginLeft: "auto" }}>{rows.length.toLocaleString()}{more ? "+" : ""} shown</span> : null}
           </div>
         </div>
         <div className="rlist">
@@ -161,6 +198,7 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
               <Row kind={kind} r={r} />
             </button>
           ))}
+          {rows && more ? <button className="btn small" style={{ margin: 12 }} onClick={() => void loadMore()}>Show more</button> : null}
         </div>
       </section>
       <section className="detail" aria-label={`${SINGULAR[kind]} details`}>

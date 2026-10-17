@@ -68,21 +68,37 @@ function Text({ name, text, value, type = "text", required, autoFocus, placehold
   );
 }
 
-/** Account choice for contacts and deals. */
+/**
+ * Account choice for contacts and deals. There can be a great many accounts (an import brings
+ * 160,000), so it shows the first 50 by name and narrows as you type.
+ */
 function AccountField({ value }: { value: string }) {
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState(value);
   const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [current, setCurrent] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
-    void api<Account[]>("/api/accounts").then(setAccounts).catch(() => setAccounts([]));
-  }, []);
-  if (!accounts) return <label><span>Account</span><select disabled><option>Loading…</option></select></label>;
+    if (value) void api<Account>(`/api/accounts/${value}`).then((a) => setCurrent({ id: a.id, name: a.name })).catch(() => {});
+  }, [value]);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const q = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+      void api<Account[]>(`/api/accounts?limit=50${q}`).then(setAccounts).catch(() => setAccounts([]));
+    }, query ? 200 : 0);
+    return () => window.clearTimeout(t);
+  }, [query]);
+  const options = [...(current && !accounts?.some((a) => a.id === current.id) ? [current] : []), ...(accounts ?? [])];
   return (
-    <label>
-      <span>Account</span>
-      <select key="loaded" name="accountId" aria-label="Account" defaultValue={value} required>
-        <option value="">Choose an account…</option>
-        {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+    <div className="accountpick">
+      <label>
+        <span>Account</span>
+        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Type to find an account" aria-label="Find an account" />
+      </label>
+      <select name="accountId" aria-label="Account" value={picked} onChange={(e) => setPicked(e.target.value)} required disabled={!accounts}>
+        <option value="">{accounts ? (accounts.length ? "Choose an account…" : "No accounts match") : "Loading…"}</option>
+        {options.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
       </select>
-    </label>
+    </div>
   );
 }
 
@@ -101,6 +117,11 @@ export function AccountEditor({ app, record, onClose, onSaved }: EditorProps<Acc
         <span>Address</span>
         <textarea name="address" rows={2} defaultValue={r?.address ?? ""} />
       </label>
+      <div className="grid3">
+        <Text name="city" text="City" value={r?.city} />
+        <Text name="state" text="State" value={r?.state} />
+        <Text name="postalCode" text="ZIP / postal code" value={r?.postalCode} />
+      </div>
       <OwnerField app={app} value={r?.owner ?? app.me.email} />
     </EditorForm>
   );
