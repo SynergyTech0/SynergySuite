@@ -11,6 +11,11 @@ test('reads oauth2-proxy headers from a plain object or a Headers instance', () 
   assert.deepStrictEqual(identify(h, {}), { email: 'a@b.co', name: 'Al', subject: 'sub-123' });
 });
 
+test('never shows the account id as the name', () => {
+  assert.deepStrictEqual(identify({ 'x-auth-request-email': 'shane@example.com', 'x-auth-request-user': '3' }, {}),
+    { email: 'shane@example.com', name: 'Shane', subject: '3' });
+});
+
 test('returns null with no identity and no dev user', () => {
   assert.strictEqual(identify({}, {}), null);
   assert.strictEqual(identify({ 'x-auth-request-email': 'not-an-email' }, {}), null);

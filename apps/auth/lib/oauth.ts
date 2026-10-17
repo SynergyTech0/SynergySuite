@@ -185,6 +185,8 @@ export function userClaims(user: User, scope: string): Record<string, unknown> {
   }
   if (scopes.includes('profile')) {
     claims.name = user.name ?? user.email;
+    // The gateway passes only preferred_username on to the apps, so it carries the display name.
+    claims.preferred_username = user.name ?? user.email;
     claims.role = user.role;
   }
   return claims;
