@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=SYNERGY_SERVER");
     // Declaring the app's own commands puts them behind the capability files, so only the
     // bundled launcher page can call them. Suite pages loaded from the server get no IPC.
     tauri_build::try_build(
