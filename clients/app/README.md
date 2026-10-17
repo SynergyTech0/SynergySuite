@@ -66,7 +66,8 @@ file manager. It also builds the iOS app for the simulator to prove it compiles;
 later is supported. Store builds come from an `app-v*` tag, as described above.
 
 The Android and Xcode projects are not checked in. `tauri android init` and `tauri ios init`
-generate them under `src-tauri/gen/` from `tauri.conf.json`, and `npm run icons` fills in
+generate them under `src-tauri/gen/` from `tauri.conf.json` (`npm run android:init` also puts in
+`src-tauri/android/MainActivity.kt`, which handles the back button), and `npm run icons` fills in
 their icons.
 
 ## Building it yourself
@@ -86,7 +87,7 @@ For Android, also install Android Studio with an NDK and set `ANDROID_HOME` and 
 for iOS, Xcode on a Mac. Then:
 
 ```sh
-npx tauri android init && npm run icons
+npm run android:init && npm run icons
 npx tauri android dev            # on a connected phone or emulator
 npx tauri android build --apk    # release APK, to sign with your own key
 

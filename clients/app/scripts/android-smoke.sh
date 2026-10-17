@@ -36,16 +36,16 @@ check() {
   fi
 }
 
-# The center of the first element whose text starts with $2 in dump $1.
+# The center of the first element whose text ends with $2 in dump $1 (tiles read "M Mail").
 center() {
-  grep -o "text=\"$2[^\"]*\"[^>]*bounds=\"[^\"]*\"" "$out/$1.xml" | head -1 |
+  grep -o "text=\"[^\"]*$2\"[^>]*bounds=\"[^\"]*\"" "$out/$1.xml" | head -1 |
     sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/' |
     awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }'
 }
 
 # A tap and a short wait give Android the input it needs to notice a frozen app.
 poke() {
-  adb shell input swipe 540 1400 540 1000 200
+  adb shell input swipe 160 420 160 260 200
   sleep 10
 }
 
@@ -54,6 +54,7 @@ sleep 25
 shot 1-launch
 poke
 check "launch"
+pid=$(adb shell pidof "$pkg")
 
 xy=$(center 1-launch Mail)
 if [ -n "$xy" ]; then
@@ -84,11 +85,15 @@ sleep 20
 shot 4-reopen
 poke
 check "going back and reopening"
+if [ "$(adb shell pidof "$pkg")" != "$pid" ]; then
+  echo "::error::Synergy restarted: it closed or crashed while in the background"
+  fail=1
+fi
 
 adb logcat -d > "$out/logcat.txt"
 echo "== Problems in the log"
-grep -E "FATAL EXCEPTION|panicked|ANR in|RustStdoutStderr" "$out/logcat.txt" | head -60
-if grep -qE "FATAL EXCEPTION|panicked at" "$out/logcat.txt"; then
+grep -E "FATAL EXCEPTION|panicked|ANR in|FORTIFY|Fatal signal" "$out/logcat.txt" | head -60
+if grep -E "FATAL EXCEPTION|panicked at|FORTIFY|Fatal signal" "$out/logcat.txt" | grep -qv UiAutomation; then
   echo "::error::Synergy crashed; see logcat.txt in the synergy-android-smoke artifact"
   fail=1
 fi

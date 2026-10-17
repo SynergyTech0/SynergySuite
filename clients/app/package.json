@@ -10,6 +10,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:web": "tsc --noEmit && vite build",
+    "android:init": "tauri android init --ci && cp src-tauri/android/MainActivity.kt src-tauri/gen/android/app/src/main/java/cloud/synergytech/suite/MainActivity.kt",
     "icons": "tauri icon ../../packages/shell/assets/synergy-mark.png",
     "typecheck": "tsc --noEmit"
   },
