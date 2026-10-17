@@ -22,7 +22,7 @@ const OVERWRITE = args.has('--overwrite-passwords');
 
 /** Hub app slug -> the suite app that replaces it. */
 const COVERED = {
-  crm: 'crm', chat: 'chat', portal: 'portal', insights: 'insights', cal: 'calendar', sites: 'sites',
+  crm: 'crm', chat: 'chat', portal: 'portal', cal: 'calendar', sites: 'sites',
   boards: 'planner', clm: 'contracts', cadence: 'bookings', drive: 'drive',
   docs: 'office', sheets: 'office', slides: 'office', forms: 'forms', notes: 'notes', meet: 'meet',
   desk: 'desk', time: 'projects', stock: 'commerce', sign: 'sign', people: 'hr', synergytrust: 'trust',
@@ -87,12 +87,17 @@ async function main() {
     hubAppSlug.set(String(a.id), a.slug);
     if (COVERED[a.slug]) { covered++; log(`${a.name}: now ${COVERED[a.slug]} in the suite`); continue; }
     if (num(a.disabled) && !a.url) continue;
-    const found = await db(`SELECT id FROM sa_apps WHERE slug = $1::text`, [a.slug]);
+    // A hub app that kept its job but shares a name with a suite app (the old Insights
+    // web analytics vs the suite's reporting app) is linked under a hub- name.
+    const suiteNamed = await db(`SELECT id FROM sa_apps WHERE slug = $1::text AND suite = 1::bigint`, [a.slug]);
+    const slug = suiteNamed.length ? `hub-${a.slug}` : a.slug;
+    hubAppSlug.set(String(a.id), slug);
+    const found = await db(`SELECT id FROM sa_apps WHERE slug = $1::text`, [slug]);
     if (found.length) { present++; continue; }
     if (!DRY) await db(
       `INSERT INTO sa_apps (slug, name, description, url, icon, color, category, sort, open_to_all, disabled, suite, created_ms)
        VALUES ($1::text, $2::text, $3::text, $4::text, $5::text, $6::text, $7::text, $8::bigint, $9::bigint, $10::bigint, 0::bigint, $11::bigint)`,
-      [a.slug, a.name, a.description, a.url, a.icon, a.color, a.category, 500 + num(a.sort), num(a.open_to_all), num(a.disabled), now]);
+      [slug, a.name, a.description, a.url, a.icon, a.color, a.category, 500 + num(a.sort), num(a.open_to_all), num(a.disabled), now]);
     linked++; log(`linked ${a.name} -> ${a.url}${num(a.open_to_all) ? '' : ' (restricted)'}`);
   }
 
