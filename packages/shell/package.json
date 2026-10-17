@@ -13,7 +13,8 @@
     "@synergy/config": "*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --format=esm --minify --target=es2020 --outfile=dist/app-bar.js"
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --format=esm --minify --target=es2020 --outfile=dist/app-bar.js",
+    "test": "node --test test/*.test.js"
   },
   "exports": {
     ".": {
@@ -23,6 +24,7 @@
     "./app-bar.js": "./dist/app-bar.js"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "jsdom": "^29.1.1"
   }
 }

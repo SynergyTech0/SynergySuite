@@ -4,7 +4,8 @@
  * PKCE code flow, tokens, userinfo, refresh rotation + reuse detection,
  * introspection, revocation, client_credentials, logout, app passwords (set
  * PROXY_SHARED_SECRET for the server and this test to check them end to end), and the suite's
- * AI model setting: write-only key, encrypted at rest, served only to the internal network.
+ * AI model setting: write-only key, encrypted at rest, served only to the internal network, and the
+ * suite header's launcher list (/api/launcher: who sees which app, CORS for SUITE_DOMAIN's apps only).
  * With E2E_DEVICES_PORT set (the server started with DEVICES_INTERNAL_URL=http://localhost:<port>
  * and DEVICES_SVC_TOKEN=$E2E_DEVICES_TOKEN), it also plays Devices to check device compliance.
  */
@@ -723,6 +724,54 @@ async function main() {
   ok('cleared', (await r.json()).ai_model === null);
   if (secret) ok('apps are told nothing is saved', (await (await internalAi(secret)).json()).settings === null);
   fakeAi.close();
+
+  console.log('== Suite header launcher ==');
+  // The password reset above ended that person's sessions.
+  await req('POST', '/api/auth/login', { body: { email: apEmail, password: userPw, return_to: '/account' }, cookies: apJar });
+  const launcher = (cookies, origin) => req('GET', '/api/launcher', { cookies, headers: origin ? { origin } : {} });
+  const appsPost = (o) => req('POST', '/api/admin/apps', { body: JSON.stringify(o), cookies: adminJar, headers: { 'content-type': 'application/json' } });
+  const cat = `E2E ${suffix}`;
+  const made = {};
+  for (const [slug, extra] of [['open', {}], ['later', {}], ['restricted', { open_to_all: '0' }], ['hidden', {}]]) {
+    r = await appsPost({ action: 'create', slug: `e2e-${slug}-${suffix}`, name: `E2E ${slug}`, url: `https://${slug}.e2e.test/`, category: cat, ...extra });
+    made[slug] = (await r.json()).id;
+  }
+  await appsPost({ action: 'update', id: made.open, sort: '900' });
+  await appsPost({ action: 'update', id: made.later, sort: '901' });
+  await appsPost({ action: 'update', id: made.hidden, disabled: '1' });
+  const launcherList = async (cookies) => {
+    const body = await (await launcher(cookies)).json();
+    return { groups: body.groups ?? [], mine: (body.groups ?? []).find((g) => g.category === cat)?.apps.map((a) => a.name) ?? [] };
+  };
+  r = await launcher();
+  ok('signed out gets no list', r.status === 401 && !(await r.json()).groups);
+  let seen = await launcherList(apJar);
+  ok('the launcher groups apps by category', seen.groups.every((g) => typeof g.category === 'string' && g.apps.length) && new Set(seen.groups.map((g) => g.category)).size === seen.groups.length);
+  ok('suite apps are marked as suite apps', seen.groups.some((g) => g.apps.some((a) => a.slug === 'mail' && a.suite === true)));
+  ok('open apps in the admin\'s order; restricted and hidden ones left out', JSON.stringify(seen.mine) === JSON.stringify(['E2E open', 'E2E later']), JSON.stringify(seen.mine));
+  ok('an admin isn\'t shown a restricted app they weren\'t granted', !(await launcherList(adminJar)).mine.includes('E2E restricted'));
+  await appsPost({ action: 'grant', id: made.restricted, email: apEmail });
+  seen = await launcherList(apJar);
+  ok('a granted restricted app shows for that person', seen.mine.includes('E2E restricted') && !seen.mine.includes('E2E hidden'));
+  ok('linked apps keep their address', seen.groups.flatMap((g) => g.apps).find((a) => a.name === 'E2E open')?.url === 'https://open.e2e.test/');
+  r = await launcher(apJar, 'https://evil.example.net');
+  ok('no CORS for another site', r.status === 200 && !r.headers.get('access-control-allow-origin'));
+  r = await launcher(apJar, 'http://localhost:3080');
+  ok('CORS with credentials for a local app in development', r.headers.get('access-control-allow-origin') === 'http://localhost:3080' && r.headers.get('access-control-allow-credentials') === 'true');
+  const domain = process.env.SUITE_DOMAIN;
+  if (domain) {
+    r = await launcher(apJar, `https://chat.${domain}`);
+    ok('CORS with credentials for a suite app', r.headers.get('access-control-allow-origin') === `https://chat.${domain}` && r.headers.get('access-control-allow-credentials') === 'true');
+    r = await launcher(undefined, `https://chat.${domain}`);
+    ok('a suite app can read that you are signed out', r.status === 401 && r.headers.get('access-control-allow-origin') === `https://chat.${domain}`);
+    ok('no CORS for plain http under the suite domain', !(await launcher(apJar, `http://chat.${domain}`)).headers.get('access-control-allow-origin'));
+    ok('no CORS for a look-alike domain', !(await launcher(apJar, `https://chat.${domain}.evil.test`)).headers.get('access-control-allow-origin'));
+    r = await req('OPTIONS', '/api/launcher', { headers: { origin: `https://mail.${domain}`, 'access-control-request-method': 'GET' } });
+    ok('preflight answered for a suite app', r.status === 204 && r.headers.get('access-control-allow-origin') === `https://mail.${domain}`);
+  } else {
+    console.log('  SKIP  CORS for suite origins (set SUITE_DOMAIN for the server and this test)');
+  }
+  for (const id of Object.values(made)) await appsPost({ action: 'delete', id });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

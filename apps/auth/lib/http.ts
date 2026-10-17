@@ -34,3 +34,25 @@ export function sameOrigin(req: Request): boolean {
     return false;
   }
 }
+
+/*
+ * CORS for what the suite header (<synergy-app-bar>, on every app's own subdomain) reads from here
+ * with the sign-in cookie. Only https origins under SUITE_DOMAIN, plus localhost ports outside
+ * production; anyone else gets no CORS headers, so their browser keeps the answer from them.
+ * The answer differs by Origin, so it goes out with json()'s no-store (Next replaces Vary).
+ */
+export function suiteCors(req: Request, env: Record<string, string | undefined> = process.env): Record<string, string> {
+  const origin = req.headers.get('origin');
+  if (!origin) return {};
+  const allow = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true' };
+  try {
+    const u = new URL(origin);
+    const domain = (env.SUITE_DOMAIN ?? '').toLowerCase();
+    if (domain && u.protocol === 'https:' && (u.hostname === domain || u.hostname.endsWith(`.${domain}`))) return allow;
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (env.NODE_ENV !== 'production' && local && (u.protocol === 'http:' || u.protocol === 'https:')) return allow;
+  } catch {
+    /* not a URL */
+  }
+  return {};
+}

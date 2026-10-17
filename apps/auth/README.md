@@ -67,6 +67,12 @@ patterns, running on Next.js with SynergyDB storage.
   last 4); Test makes one small real request; changes are audited without the
   key. Apps read it from `GET /api/internal/ai-settings` with
   `PROXY_SHARED_SECRET` (`@synergy/ai`), falling back to their `AI_*` settings.
+- **Hub and app launcher**: `/hub` lists the apps each person may open (suite
+  apps plus linked apps from `/admin` → Apps, minus hidden ones and restricted
+  ones they weren't granted), grouped by category in the admin's order. The
+  launcher in every app's header (`<synergy-app-bar>`) shows the same list from
+  `GET /api/launcher`, which it reads with the sign-in cookie; CORS allows only
+  https origins under `SUITE_DOMAIN` (and localhost outside production).
 - **Hosted pages**: `/login`, `/login/mfa`, `/consent`, `/forgot`, `/reset`,
   `/account` (MFA, passkeys, password, sessions), `/admin` (users, clients,
   audit, settings).
@@ -99,7 +105,8 @@ With `E2E_DEVICES_PORT` and `E2E_DEVICES_TOKEN` set (and the server started with
 `DEVICES_INTERNAL_URL=http://localhost:<port>` and `DEVICES_SVC_TOKEN=<token>`),
 the test also plays Devices and checks device compliance at sign-in. It also
 checks the AI model setting (start the server and the test with the same
-`PROXY_SHARED_SECRET` to include the internal endpoint's answer).
+`PROXY_SHARED_SECRET` to include the internal endpoint's answer) and the
+launcher list (start both with the same `SUITE_DOMAIN` to include its CORS checks).
 
 ## Wire up an app (any OIDC client library)
 
