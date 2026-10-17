@@ -16,12 +16,19 @@
  *     (secret) and inactive types come across switched off. A daily cap has no equivalent.
  *   - Past and upcoming bookings, calendar connections and webhooks don't come across.
  *
+ * Staff are matched to suite accounts by email; --map-email old@example.com=new@example.com
+ * puts someone who signs in here with another address on their pages instead.
+ *
  * Safe to run again: a page is matched by its address and an admin on it, staff by email and
  * services by address, and whatever is already here is left as it is. --dry-run prints the plan.
  */
 import { createDb } from '@synergy/db';
 
-const DRY = process.argv.includes('--dry-run');
+const argv = process.argv.slice(2);
+const DRY = argv.includes('--dry-run');
+/** --map-email old@x=new@y (repeatable): someone who signs in to the suite with another address. */
+const MAP = new Map(argv.flatMap((a, i) => (a === '--map-email' ? [argv[i + 1]] : a.startsWith('--map-email=') ? [a.slice(12)] : []))
+  .map((v) => String(v ?? '').toLowerCase().split('=').map((x) => x.trim())).filter(([a, b]) => a && b));
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/;
 
 async function readStdin() {
@@ -39,7 +46,10 @@ function slugify(v) {
 }
 const slugOf = (v, fallback) => (SLUG.test(String(v ?? '')) ? String(v) : slugify(v) || slugify(fallback) || 'bookings');
 const text = (v, max) => String(v ?? '').trim().slice(0, max);
-const email = (v) => String(v ?? '').trim().toLowerCase();
+const email = (v) => {
+  const e = String(v ?? '').trim().toLowerCase();
+  return MAP.get(e) ?? e;
+};
 
 function isTimeZone(tz) {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return Boolean(tz); } catch { return false; }

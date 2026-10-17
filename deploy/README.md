@@ -173,7 +173,7 @@ It reads the hub's database over your own SSH access (container `saauth-db`, or 
 
 Then the hub's other apps, one part at a time (`ls deploy/hub-import/*.sql`), each with `--dry-run` first:
 
-- `bookings` (Booking by Synergy, container `scadence-db`): each team becomes a booking page at its team address with its members as staff, and each person with event types of their own gets a page at their user name with their weekly availability as its hours. Event types become services with the same address, length, buffers, location, price, questions and email reminders; round-robin types are booked with anyone available. Hidden and inactive types arrive switched off. Bookings, calendar connections and webhooks stay behind, and booking links move to `bookings.<domain>/book/<page>/<service>`, so update the links on your sites.
+- `bookings` (Booking by Synergy, container `scadence-db`): each team becomes a booking page at its team address with its members as staff, and each person with event types of their own gets a page at their user name with their weekly availability as its hours. Event types become services with the same address, length, buffers, location, price, questions and email reminders; round-robin types are booked with anyone available. Hidden and inactive types arrive switched off. Staff are matched to suite accounts by email; if someone signs in here with another address, add `--map-email old@example.com=new@example.com` so the pages are theirs. Bookings, calendar connections and webhooks stay behind, and booking links move to `bookings.<domain>/book/<page>/<service>`, so update the links on your sites.
 
 ## Moving from Microsoft 365
 
