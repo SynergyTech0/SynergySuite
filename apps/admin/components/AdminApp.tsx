@@ -2,7 +2,7 @@
 // The Admin center: navigation on the left, the chosen section on the right. Where you are lives
 // in the address (#/matters/<id>/holds) so reloading and the back button work.
 import {
-  Activity, AppWindow, Briefcase, ExternalLink, Gavel, History, House, KeyRound, Search, ShieldAlert, Tag, Timer, Users,
+  Activity, AppWindow, Briefcase, ExternalLink, Gavel, History, House, Import, KeyRound, Search, ShieldAlert, Tag, Timer, Users,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import type { Me } from "@/lib/types";
@@ -14,6 +14,7 @@ import { Holds } from "./Holds";
 import { Home } from "./Home";
 import { Labels } from "./Labels";
 import { MatterView, Matters } from "./Matters";
+import { Migrate } from "./Migrate";
 import { People } from "./People";
 import { Retention } from "./Retention";
 import { Roles } from "./Roles";
@@ -26,6 +27,7 @@ const GENERAL: Item[] = [
   { view: "home", text: "Home", icon: <House size={18} />, admin: true },
   { view: "people", text: "People", icon: <Users size={18} />, admin: true },
   { view: "apps", text: "Apps", icon: <AppWindow size={18} />, admin: true },
+  { view: "migrate", text: "Move from Microsoft 365", icon: <Import size={18} />, admin: true },
 ];
 const COMPLIANCE: Item[] = [
   { view: "matters", text: "Matters", icon: <Briefcase size={18} /> },
@@ -87,6 +89,7 @@ export function AdminApp({ me, roleLabel, authConsole, apps }: { me: Me; roleLab
         {view === "home" ? <Home app={app} />
           : view === "people" ? <People app={app} />
           : view === "apps" ? <Apps app={app} />
+          : view === "migrate" ? <Migrate app={app} id={route.id} tab={route.tab} />
           : view === "matters" ? (route.id ? <MatterView key={route.id} app={app} id={route.id} tab={route.tab} /> : <Matters app={app} />)
           : view === "holds" ? <Holds app={app} />
           : view === "search" ? <SearchView key={route.id ?? "new"} app={app} savedId={route.id} />

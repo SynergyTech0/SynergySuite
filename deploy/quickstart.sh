@@ -66,6 +66,7 @@ else
   setvar HTTP_PUBLISH 127.0.0.1:80
   setvar HTTPS_PUBLISH 127.0.0.1:443
   setvar MAIL_ENCRYPTION_KEY "$(openssl rand -base64 32)"
+  setvar MIGRATION_ENCRYPTION_KEY "$(openssl rand -base64 32)"
   setvar BOOKS_ENCRYPTION_KEY "$(hex 32)"
   setvar INSIGHTS_SECRET "$(hex 32)"
   setvar STALWART_ADMIN_PASSWORD "$(hex 24)"

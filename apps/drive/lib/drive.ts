@@ -605,7 +605,11 @@ async function roomFor(at: Pick<Place, "libraryId" | "owner">): Promise<number> 
  * Stores an upload at `path` (a name, or "folder/sub/name" for folder uploads) under `target`.
  * A file that is already there gets a new version, like saving over it.
  */
-export async function upload(me: Me, target: Target, path: string, body: ReadableStream<Uint8Array> | null, declaredSize?: number): Promise<Item> {
+export async function upload(
+  me: Me, target: Target, path: string, body: ReadableStream<Uint8Array> | null, declaredSize?: number, opts: { modifiedAt?: Date | null } = {},
+): Promise<Item> {
+  // A migration keeps the file's original date (never one in the future).
+  const when = opts.modifiedAt && !Number.isNaN(opts.modifiedAt.getTime()) && opts.modifiedAt.getTime() <= Date.now() ? opts.modifiedAt : null;
   const parts = splitPath(path);
   const name = parts.pop()!;
   let at = await place(me, target);
@@ -623,14 +627,14 @@ export async function upload(me: Me, target: Target, path: string, body: Readabl
 
   const out = await tx(async (tq) => {
     const [made] = await tq<{ id: string }>(
-      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id)
-       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, $11)
+      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id, created_at, modified_at)
+       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, $11, COALESCE($12, now()), COALESCE($12, now()))
        ON CONFLICT (space, COALESCE(parent_id, '${NIL}'::uuid), lower(name)) WHERE trash_root IS NULL DO NOTHING
        RETURNING id`,
-      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, initial?.id.toLowerCase() ?? null],
+      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, initial?.id.toLowerCase() ?? null, when],
     );
     if (made) {
-      await tq("INSERT INTO versions (item_id, n, size, sha256, created_by) VALUES ($1, 1, $2, $3, $4)", [made.id, stored.size, stored.sha256, me.email]);
+      await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, 1, $2, $3, $4, COALESCE($5, now()))", [made.id, stored.size, stored.sha256, me.email, when]);
       await log(made.id, me, "uploaded", "", tq);
       if (initial) await log(made.id, me, "labeled", `${initial.name}${carried ? " (from the file)" : " (default)"}`, tq);
       return { id: made.id, pruned: [] as string[] };
@@ -643,12 +647,12 @@ export async function upload(me: Me, target: Target, path: string, body: Readabl
     if (cur.kind === "folder") throw new UserError(`A folder named "${cur.name}" is already here`, 409);
     if (cur.sha256 === stored.sha256) return { id: cur.id, pruned: [] }; // same bytes: nothing new to keep
     const n = cur.version + 1;
-    await tq("INSERT INTO versions (item_id, n, size, sha256, created_by) VALUES ($1, $2, $3, $4, $5)", [cur.id, n, stored.size, stored.sha256, me.email]);
+    await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()))", [cur.id, n, stored.size, stored.sha256, me.email, when]);
     // The label stays with the file; one the new version carries only fills in a missing one.
     await tq(
-      `UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = now(),
+      `UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = COALESCE($9, now()),
          label_id = COALESCE(label_id, $8) WHERE id = $1`,
-      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, carried?.id.toLowerCase() ?? null],
+      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, carried?.id.toLowerCase() ?? null, when],
     );
     await log(cur.id, me, "uploaded", `version ${n}`, tq);
     if (!cur.label_id && carried) await log(cur.id, me, "labeled", `${carried.name} (from the file)`, tq);

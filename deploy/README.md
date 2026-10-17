@@ -127,6 +127,63 @@ browser ─────────────── 7882/udp or 7881/tcp ─�
 - `/api/svc/*` on groups, chat, drive and mail is answered only on the compose network (with `PROXY_SHARED_SECRET`); the gateway returns 404 for it.
 - `GROUPS_ADMIN_EMAILS` may manage and restore every group; `GROUPS_CREATE=admins` keeps creating groups to them.
 
+## Moving from Microsoft 365
+
+The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.
+
+Before the first source, set `MIGRATION_ENCRYPTION_KEY` in `deploy/.env` (`openssl rand -base64 32`; quickstart does it) and restart `admin`. The tenant's client secret and any IMAP passwords are stored encrypted with it and never shown again or logged. Changing the key means entering the secrets again. The Admin center also needs `ADMIN_SCIM_TOKEN` to create the accounts people move into (see People), and the apps need `PROXY_SHARED_SECRET` as usual: the Admin center writes into Mail, Drive, Calendar, Contacts and To Do through their normal APIs as each person, so quotas, legal holds and audit apply as if they had done it themselves.
+
+### Register the app in Microsoft Entra
+
+The customer's Global Administrator does this once, in about five minutes:
+
+1. Sign in to [entra.microsoft.com](https://entra.microsoft.com), open **Applications > App registrations > New registration**. Name it "Synergy migration", keep **Accounts in this organizational directory only**, leave the redirect URI empty, and register.
+2. On the overview page copy the **Application (client) ID** and the **Directory (tenant) ID**.
+3. **API permissions > Add a permission > Microsoft Graph > Application permissions**, add (all read-only):
+
+   | Permission | Why |
+   | --- | --- |
+   | `User.Read.All` | list the tenant's people |
+   | `Mail.Read` | read every mailbox, as raw messages |
+   | `Calendars.Read` | read calendars |
+   | `Contacts.Read` | read contacts |
+   | `Files.Read.All` | read OneDrive files |
+   | `Sites.Read.All` | read SharePoint sites and their document libraries |
+   | `Tasks.Read.All` | read To Do lists and tasks |
+   | `GroupMember.Read.All` | optional: bring a group site's owners and members across as library members |
+   | `Reports.Read.All` | optional: mailbox sizes in discovery (also turn off "Display concealed user, group, and site names in all reports" under Settings > Org settings > Reports in the Microsoft 365 admin center, or the sizes can't be matched to people) |
+
+4. Choose **Grant admin consent for &lt;organization&gt;** and confirm; each permission shows a green tick.
+5. **Certificates & secrets > New client secret**, with an expiry that covers the project. Copy its **Value** (not the Secret ID); it is shown once.
+6. In the Admin center: **Move from Microsoft 365 > Connect Microsoft 365**, paste the tenant ID, client ID and secret. They are tested before they are saved.
+
+Only plain HTTPS to `login.microsoftonline.com` and `graph.microsoft.com` is used (client-credentials token, Graph v1.0); no Microsoft code or SDK. `M365_LOGIN_URL` and `M365_GRAPH_URL` point it at a national cloud. Delete the app registration when the move is finished.
+
+### Discover, map, copy
+
+- **Discover** lists the tenant's people (guests left out) with mailbox and OneDrive sizes, and its SharePoint sites with their size and, for group sites, owners and members.
+- **Map** each person to a suite account: type it in, or fill a domain and choose **Map unmapped** to give everyone `name@that-domain`. **Create missing accounts** creates the accounts in the sign-in service (people set their password with "Forgot password") and their mailboxes.
+- **Copy** queues one background job per person (two run at a time, `MIGRATION_CONCURRENCY` for more). Jobs survive restarts: one interrupted by a crash or a deploy carries on where it stopped. Microsoft's throttling (429 with Retry-After) is waited out as asked; a run that fails as a whole (Microsoft or a suite app unreachable) is tried again later, up to five times. Each person gets a report (counts copied, updated, deleted, skipped with the reason, errors, and the CSV to download).
+- **SharePoint sites** become Drive shared libraries named after the site, created and owned by the admin who starts the copy, with the site's owners as owners and members as editors when they have suite accounts.
+- Messages over 45 MB (`MIGRATION_MAX_MESSAGE_MB`) and files over Drive's limit are skipped and listed. Calendar events from three years back to three years ahead are copied (`MIGRATION_CALENDAR_PAST_DAYS`, `MIGRATION_CALENDAR_FUTURE_DAYS`).
+
+### Cutover checklist
+
+1. A week or so before: connect, discover, map, create accounts, and copy everyone. Check the reports and copy again anyone with errors.
+2. Lower the TTL of the domain's MX record (say to 5 minutes) a day ahead.
+3. At cutover: add the domain to the suite's mail server if it isn't `MAIL_DOMAIN`, then change the MX record (and SPF, DKIM, autodiscover) to the suite (see [Mail](#mail)).
+4. Wait until new mail arrives in the suite (send a test from outside), then choose **Copy** again for everyone (or **Sync changes** on each copy): only what changed since the last copy comes across (new and moved mail, read and flag changes, new, edited, renamed and deleted files, calendar, contact and task changes).
+5. Tell people to sign in to the suite, and to set up phones and desktop clients against it.
+6. Keep the Microsoft 365 tenant read-only for a while, run one last sync a day or two later for stragglers, then remove the source and delete the Entra app registration.
+
+### Other IMAP servers
+
+**Another IMAP server** copies mail from anything with IMAP (Google Workspace, another host, an old on-premises server): give the server, then each mailbox's login and password (an app password for accounts with two-step sign-in) and the suite account it moves into. Folders, read and flag state and dates come across; a re-run copies new mail and flag changes. Servers on a private network are refused unless `MIGRATION_ALLOW_PRIVATE_HOSTS=1`.
+
+### What is not copied
+
+Teams chats and channel messages, OneNote notebooks (listed as skipped), Planner plans, mailbox rules, signatures and automatic replies, shared and group mailboxes (copy one as a user), and sharing on individual OneDrive files. Recurring meetings arrive as their single occurrences (Calendar has no recurrence yet); each series' pattern is kept with the migration so it can be brought across as a series later. To Do repeats that Synergy has no match for (every two weeks, say) arrive without the repeat. Contacts from other contact folders arrive in the main list. Files keep their original date; the copy's author is the person (or, for libraries, the admin).
+
 ## Insights
 
 `insights.<domain>` is the Power BI equivalent. Its report designer and charts are [Metabase](https://github.com/metabase/metabase), the open source edition (AGPL) from the official `metabase/metabase` image, unmodified, served at `insights.<domain>/studio` behind the suite sign-in.
