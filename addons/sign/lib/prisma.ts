@@ -1,15 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+// One database client for the whole app (lib/db), whichever path a route imports it from.
+import { prisma } from './db';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query', 'error', 'warn'],
-  });
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-
+export { prisma };
 export default prisma;

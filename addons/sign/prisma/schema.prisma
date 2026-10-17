@@ -160,6 +160,8 @@ model Document {
   /// via the PARTIAL index documents_dealRef_requestKey_key (WHERE "requestKey" IS NOT NULL), which
   /// lives only in migration 20261010120000: Prisma 6 cannot declare a partial index in the schema.
   requestKey         String?
+  /// Set when the sender deleted it while someone on it was under a legal hold: kept for eDiscovery, hidden everywhere else.
+  heldDeletedAt      DateTime?
   auditLogs          AuditLog[]
   fields             DocumentField[]
   fieldCorrections   FieldCorrection[]
@@ -169,6 +171,7 @@ model Document {
   notifications      Notification[]
 
   @@index([dealRef])
+  @@index([heldDeletedAt])
   @@map("documents")
 }
 

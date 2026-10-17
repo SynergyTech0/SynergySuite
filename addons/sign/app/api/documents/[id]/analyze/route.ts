@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getFileBuffer } from "@/lib/storage";
 import { analyzeDocument } from "@/lib/ai/analyze";
 import { AiUnavailableError, isAiConfigured } from "@/lib/ai/client";
 import { auditHiddenText } from "@/lib/ai/hidden-text-audit";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,6 +16,8 @@ export const maxDuration = 60;
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const __owner = await documentForOwner(id);
+  if (isDenied(__owner)) return __owner.denied;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -53,6 +56,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const __owner = await documentForOwner(id);
+  if (isDenied(__owner)) return __owner.denied;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

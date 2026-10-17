@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { createNotification } from '@/lib/notifications';
 import { sendEmail } from '@/lib/email';
 import { NotificationType } from '@prisma/client';
+import { publicBase } from "@/lib/urls";
 
 export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
                         <table role="presentation" style="margin: 30px auto 0 auto;">
                             <tr>
                                 <td style="text-align: center;">
-                                    <a href="${process.env.NEXTAUTH_URL}/dashboard" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); transition: transform 0.2s;">Go to Dashboard</a>
+                                    <a href="${publicBase()}/dashboard" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); transition: transform 0.2s;">Go to Dashboard</a>
                                 </td>
                             </tr>
                         </table>
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest) {
                         <table role="presentation" style="margin:0 auto;">
                             <tr>
                                 <td style="text-align:center;">
-                                    <a href="${process.env.NEXTAUTH_URL}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">Manage Users</a>
+                                    <a href="${publicBase()}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">Manage Users</a>
                                 </td>
                             </tr>
                         </table>
@@ -211,4 +212,4 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({ message: 'User removed from enterprise' });
-}
+}

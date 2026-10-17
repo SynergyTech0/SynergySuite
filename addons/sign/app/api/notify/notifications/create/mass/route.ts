@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { createNotification } from "@/lib/notifications";
 import { authOptions } from "@/lib/auth";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
 	try {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 // API endpoint for creating notifications
 
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 

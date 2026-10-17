@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email";
 import { authOptions } from "@/lib/auth";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
 	try {
@@ -16,6 +16,11 @@ export async function POST(req: Request) {
 				{ error: "Unauthorized" },
 				{ status: 401 }
 			);
+		}
+
+		// Arbitrary mail from Sign's mailbox: admins only, so it can't be used to send look-alike signing requests.
+		if (session.user.role !== "ADMIN") {
+			return NextResponse.json({ error: "Admins only" }, { status: 403 });
 		}
 
 		const { to, subject, html } = await req.json();

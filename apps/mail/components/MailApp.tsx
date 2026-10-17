@@ -20,7 +20,36 @@ function readDeepLink(sp: URLSearchParams): (Where & { uid: number }) | null {
 }
 const PAGE = 50;
 
-export function MailApp({ me }: { me: string }) {
+/** Copilot's "draft an email" opens /#draft=<base64url JSON {to, cc, subject, body}>: compose, filled in, never sent. */
+export function readDraftLink(hash: string): { to: string; cc: string; subject: string; body: string } | null {
+  const m = /^#draft=([A-Za-z0-9_-]{1,40000})$/.exec(hash);
+  if (!m) return null;
+  try {
+    const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+    const bin = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
+    const v = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+    const s = (x: unknown, max: number) => (typeof x === "string" ? x.slice(0, max) : "");
+    return { to: s(v?.to, 2000), cc: s(v?.cc, 2000), subject: s(v?.subject, 300), body: s(v?.body, 8000) };
+  } catch {
+    return null;
+  }
+}
+
+/** Plain text as compose paragraphs. */
+export function textToHtml(text: string): string {
+  const paras = text.split(/\n{2,}/).map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`);
+  return paras.join("") || "<p><br></p>";
+}
+
+/** Tells the suite header's Copilot which message is open, so "summarize this" and "reply to this" know. */
+function setCopilotContext(ctx: string | null) {
+  const bar = document.querySelector("synergy-app-bar");
+  if (!bar) return;
+  if (ctx) bar.setAttribute("context", ctx);
+  else bar.setAttribute("context", "");
+}
+
+export function MailApp({ me, aiOn = false }: { me: string; aiOn?: boolean }) {
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [canAddAccounts, setCanAddAccounts] = useState(false);
   const [folders, setFolders] = useState<Record<string, Folder[] | undefined>>({});
@@ -44,7 +73,7 @@ export function MailApp({ me }: { me: string }) {
 
   const loadFolders = useCallback(async (account: string) => {
     try {
-      const { folders: fs } = await api<{ folders: Folder[] }>(`/api/folders?account=${account}`);
+      const { folders: fs } = await api<{ folders: Folder[] }>(`/api/folders?account=${encodeURIComponent(account)}`);
       setFolders((cur) => ({ ...cur, [account]: fs }));
       return fs;
     } catch (e) {
@@ -87,6 +116,19 @@ export function MailApp({ me }: { me: string }) {
     history.replaceState(null, "", "/");
     setDraft({ account: where?.account ?? accounts[0].id, to: to.split(",").map((s) => s.trim()).filter(Boolean).join(", "), cc: "", bcc: "", subject: "", html: "<p><br></p>" });
   }, [accounts, where]);
+
+  const draftLink = useRef(typeof window === "undefined" ? null : readDraftLink(location.hash));
+  useEffect(() => {
+    if (!draftLink.current || !accounts.length) return;
+    const d = draftLink.current;
+    draftLink.current = null;
+    history.replaceState(null, "", "/");
+    setDraft({ account: where?.account ?? accounts[0].id, to: d.to, cc: d.cc, bcc: "", subject: d.subject, html: d.body ? textToHtml(d.body) : "<p><br></p>" });
+  }, [accounts, where]);
+
+  useEffect(() => {
+    setCopilotContext(where && selected !== null && detail ? new URLSearchParams({ account: where.account, folder: where.folder, uid: String(selected) }).toString() : null);
+  }, [where, selected, detail]);
 
   const loadMessages = useCallback(async (w: Where, q: string, p: number) => {
     const seq = ++listSeq.current;
@@ -266,7 +308,7 @@ export function MailApp({ me }: { me: string }) {
         onMore={canMore ? () => { const p = page + 1; setPage(p); if (where) loadMessages(where, search, p); } : null}
       />
       {draft ? (
-        <Compose draft={draft} accounts={accounts} labels={labels.labels} defaultLabelId={labels.defaultLabelId} onClose={() => setDraft(null)}
+        <Compose draft={draft} accounts={accounts} aiOn={aiOn} labels={labels.labels} defaultLabelId={labels.defaultLabelId} onClose={() => setDraft(null)}
           onSent={() => { setDraft(null); flash("Sent"); if (where) loadFolders(where.account); }} />
       ) : (
         <ReadingPane

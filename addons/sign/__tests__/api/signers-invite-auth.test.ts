@@ -15,14 +15,15 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals'
 
 
-const mockGetServerSession = jest.fn()
-jest.mock('next-auth/next', () => ({
+// The suite gateway's session (lib/auth), as the route sees it.
+const mockGetServerSession = jest.fn<(...args: any[]) => Promise<any>>()
+jest.mock('@/lib/auth', () => ({
+  authOptions: {},
   getServerSession: (...args: any[]) => mockGetServerSession(...args),
 }))
-jest.mock('@/lib/auth', () => ({ authOptions: {} }))
 
-const mockFindUnique = jest.fn()
-const mockUpdate = jest.fn()
+const mockFindUnique = jest.fn<(...args: any[]) => Promise<any>>()
+const mockUpdate = jest.fn<(...args: any[]) => Promise<any>>()
 jest.mock('@/lib/db', () => ({
   prisma: {
     document: {

@@ -6,7 +6,7 @@ OneDrive for the Synergy suite: everyone's files, plus shared libraries for team
 - Previews for images, PDF, video, audio and text, with arrows between files
 - Version history: saving a file with the same name keeps the old one; any version can be downloaded or restored
 - Share with people (can view / can edit, inherited by everything inside a folder), and view links that need no account, optionally expiring
-- Shared libraries (SharePoint document libraries) with owners, members and visitors
+- Shared libraries (SharePoint document libraries) with owners, members and visitors. Each site in Sites has one too, whose people Sites keeps in step with the site's (`/api/svc/managed-libraries`, Bearer `DRIVE_SVC_TOKEN`); change those in Sites
 - Recent, Starred, Shared with me / by me, search by name and by words inside text files
 - Recycle bin, emptied after `DRIVE_TRASH_DAYS`
 - Storage quota per person, AI summaries of text files through `@synergy/ai`
@@ -20,6 +20,18 @@ Postgres holds the folder tree, versions, sharing and activity (`lib/db.ts`). Fi
 
 Downloads and previews are served with `nosniff` and a sandbox CSP, and HTML, SVG, XML and scripts go out as plain text or images, so an uploaded file can never run as a page on the Drive origin.
 
+## Team libraries
+
+Groups (apps/groups) gives each team a library and keeps it in step over a server-to-server API under `/api/svc/` (`lib/svc.ts`). Calls must carry `x-proxy-auth-secret: $PROXY_SHARED_SECRET`; anything else gets a 404, and the gateway never forwards `/api/svc/`.
+
+| Route | Does |
+|---|---|
+| `PUT /api/svc/libraries/groups:<id>` | `{ name, description?, members: [{ email, role }] }`: creates the library or renames it, and makes its members exactly that list. Returns `{ id, url }` |
+| `GET /api/svc/libraries/groups:<id>/recent?limit=8` | Latest files and folders in it (at most 50), recycle bin and held items left out |
+| `DELETE /api/svc/libraries/groups:<id>` | Removes every member; the files stay, and come back if the team does |
+
+A team's library is renamed, re-membered and deleted only from Groups: Drive shows its members read-only and refuses those changes.
+
 ## Settings
 
 | Setting | Meaning |
@@ -29,6 +41,7 @@ Downloads and previews are served with `nosniff` and a sandbox CSP, and HTML, SV
 | `DRIVE_QUOTA_MB` | Storage per person, every version counted. Empty = no limit. Shared libraries are not limited |
 | `DRIVE_MAX_FILE_MB` | Largest single upload. Empty = no limit |
 | `DRIVE_TRASH_DAYS` | Days in the recycle bin before deletion for good (default 93) |
+| `DRIVE_SVC_TOKEN` | Lets Sites make its sites' document libraries and set their people. Empty = off |
 | `DRIVE_VERSIONS` | Versions kept per file (default 100) |
 | `DRIVE_ZIP_MAX_MB` | Largest folder download as one zip (default and maximum 4000) |
 | `AI_*` / `DRIVE_AI_*` | The suite's AI model, for summaries (see `packages/ai`) |

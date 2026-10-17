@@ -92,3 +92,31 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   .bigsearch input { font-size: 16px; }
   .turn.user .bubble { max-width: 92%; }
 }
+
+/* Copilot side panel (/copilot, framed by every app's suite header) */
+.copilot { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px 16px; min-height: 100%; overflow: auto; height: 100vh; }
+.cp-where { margin: 0; }
+.cp-empty { padding: 28px 8px; }
+.cp-empty .chips { justify-content: center; }
+.copilot .turn.user .bubble { max-width: 90%; }
+.copilot .askform { margin-top: auto; position: sticky; bottom: 0; }
+.cp-foot { display: flex; gap: 16px; }
+.proposal { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.proposal.done { border-left-color: var(--ok); }
+.proposal.cancelled { opacity: .7; border-left-color: var(--line); }
+.proposal.error { border-left-color: var(--danger); }
+.proposal h3 { margin: 0; font-size: 13.5px; }
+.proposal dl { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.proposal dl > div { display: grid; grid-template-columns: 78px 1fr; gap: 8px; }
+.proposal dt { color: var(--muted); font-size: 12.5px; }
+.proposal dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.proposal .fields { display: flex; flex-direction: column; gap: 6px; }
+.proposal .fields label { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.proposal .fields input, .proposal .fields textarea { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; color: var(--text); background: var(--panel); }
+.cp-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.warnline, .errline, .okline { margin: 0; display: flex; gap: 6px; align-items: flex-start; }
+.warnline { color: #6b4a00; }
+.errline { color: var(--danger); }
+.okline { color: var(--ok); }
+.okline a { color: var(--accent); }
+.copilot p.notice { margin: 0; }

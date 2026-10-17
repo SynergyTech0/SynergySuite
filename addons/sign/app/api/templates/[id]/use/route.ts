@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { copyFile } from '@/lib/storage';
@@ -62,7 +62,7 @@ export async function POST(
         originalFileName: template.originalFileName,
         fileType: template.fileType,
         fileSize: template.fileSize,
-        status: DocumentStatus.PENDING,
+        status: DocumentStatus.DRAFT,
         signingOrder: 'PARALLEL',
         senderId: session.user.id,
         templateId: templateId,

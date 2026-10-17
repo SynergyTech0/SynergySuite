@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { UserRole, EnterpriseStatus, NotificationType } from "@prisma/client";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/email-templates";
 import { generateInvitationToken } from "@/lib/invitation-tokens";
 import crypto from "crypto";
+import { publicBase } from "@/lib/urls";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -153,7 +154,7 @@ export async function PATCH(request: NextRequest) {
           });
 
           // Create payment link URL
-          const paymentUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/enterprise/payment?token=${paymentToken}&requestId=${requestId}`;
+          const paymentUrl = `${publicBase()}/enterprise/payment?token=${paymentToken}&requestId=${requestId}`;
 
           emailTemplate = renderEnterpriseRequestApproved({
             customerRequestId: existingRequest.customerRequestId || "N/A",

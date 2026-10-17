@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFileBuffer } from "@/lib/storage";
 import * as path from "path";
+import { prisma } from "@/lib/db";
+import { getServerSession } from "@/lib/auth";
+import { verifyFileQuery } from "@/lib/file-links";
+
+/**
+ * May this request read the stored file? Either the link was signed for it (a signer's viewer,
+ * see lib/file-links), or the signed-in person sent the document, made the template, or is an admin.
+ */
+async function allowed(request: NextRequest, filePath: string, resolvedPath: string): Promise<boolean> {
+  const q = request.nextUrl.searchParams;
+  if (verifyFileQuery(filePath, q.get("exp"), q.get("sig"))) return true;
+  const session = await getServerSession();
+  if (!session) return false;
+  if (session.user.role === "ADMIN") return true;
+  const paths = [...new Set([filePath, resolvedPath, `/${filePath}`, `/${resolvedPath}`])];
+  const doc = await prisma.document.findFirst({
+    where: { senderId: session.user.id, OR: [{ cloudStoragePath: { in: paths } }, { signedDocumentPath: { in: paths } }] },
+    select: { id: true },
+  });
+  if (doc) return true;
+  const tpl = await prisma.template.findFirst({
+    where: { cloudStoragePath: { in: paths }, OR: [{ creatorId: session.user.id }, { isPublic: true }] },
+    select: { id: true },
+  });
+  return Boolean(tpl);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +53,10 @@ export async function GET(
       !filePath.startsWith("templates/")
     ) {
       resolvedPath = `documents/${filePath}`;
+    }
+
+    if (!(await allowed(request, filePath, resolvedPath))) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
     const buffer = await getFileBuffer(resolvedPath, 'LOCAL');

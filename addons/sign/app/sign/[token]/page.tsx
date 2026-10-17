@@ -211,7 +211,7 @@ function SignPageContent() {
     if (!signer?.document?.id) return;
 
     try {
-      const res = await fetch(`/api/documents/${signer.document.id}/fields`);
+      const res = await fetch(`/api/signers/fields?token=${encodeURIComponent(String(token))}`);
       if (!res.ok) {
         console.error("Failed to load fields: HTTP", res.status);
         return;
@@ -452,6 +452,7 @@ function SignPageContent() {
             }
             mode={completed ? "view" : "sign"}
             currentSignerId={signer.id}
+            signerToken={String(token)}
             onFieldsUpdate={loadFields}
           />
         )}

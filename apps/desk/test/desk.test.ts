@@ -158,6 +158,20 @@ describe.skipIf(!url)("desk", async () => {
     await expect(tickets.feedFor("bad")).rejects.toThrow();
   });
 
+  it("lets Field Service read a case and leave notes on it", async () => {
+    const t = await tickets.svcTicket(number.toLowerCase());
+    expect(t).toMatchObject({ number, requesterEmail: "pat@example.org" });
+    expect(typeof t.firstMessage).toBe("string");
+    const before = await tickets.get(id);
+    await tickets.svcNote(number, { body: "Field service WO-00001 is complete.", author: "field-service" });
+    const after = await tickets.get(id);
+    const note = after.messages[after.messages.length - 1];
+    expect(note).toMatchObject({ direction: "note", author: "field-service", emailed: false, body: "Field service WO-00001 is complete." });
+    expect(after.status).toBe(before.status);
+    await expect(tickets.svcTicket("T-0000-0000")).rejects.toMatchObject({ status: 404 });
+    await expect(tickets.svcNote(number, { body: "" })).rejects.toThrow(/Write something/);
+  });
+
   it("keeps canned replies", async () => {
     const c = await canned.create(staff, { title: "Reset", body: "Hi {{name}}" });
     expect((await canned.list()).map((x) => x.title)).toEqual(["Reset"]);

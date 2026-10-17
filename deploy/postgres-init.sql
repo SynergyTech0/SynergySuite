@@ -22,10 +22,13 @@ CREATE DATABASE phone;
 CREATE DATABASE engage;
 CREATE DATABASE stream;
 CREATE DATABASE bookings;
+CREATE DATABASE campaigns;
 CREATE DATABASE crm;
 CREATE DATABASE desk;
 CREATE DATABASE diagrams;
 CREATE DATABASE projects;
+CREATE DATABASE field;
+CREATE DATABASE groups;
 CREATE DATABASE contracts;
 CREATE DATABASE ops;
 CREATE DATABASE commerce;
@@ -35,3 +38,4 @@ CREATE DATABASE loop;
 -- Metabase's own settings, questions and dashboards (Insights).
 CREATE DATABASE metabase;
 CREATE DATABASE whiteboard;
+CREATE DATABASE sign;

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getFileDownloadUrl } from "@/lib/storage";
 import { AuditAction } from "@prisma/client";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export async function GET(
 ) {
   try {
     const { id: documentId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
     const session = await getServerSession(authOptions);
 
     // Get requester IP and User Agent for audit logging

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { type Library, type Role, api, person } from "./client";
 
-/** Members and settings of a shared library. Owners can change both. */
+/** Members and settings of a shared library. Owners can change both, except for a site's library, whose site decides, and a team's library, which Groups manages. */
 export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   library: Library; me: string; onClose: () => void; onChanged: () => void; onDeleted: () => void;
 }) {
@@ -13,7 +13,10 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   const [role, setRole] = useState<Role>("editor");
   const [name, setName] = useState(library.name);
   const [error, setError] = useState("");
-  const owner = library.role === "owner";
+  const site = library.managedBy?.startsWith("sites:") ? library.managedBy.slice(6) : null;
+  const managed = !!library.managedBy;
+  const owner = library.role === "owner" && !managed;
+  const manage = owner && !library.team;
   const base = `/api/libraries/${library.id}`;
 
   useEffect(() => {
@@ -36,7 +39,15 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
   return (
     <Modal title={library.name} onClose={onClose} wide>
       <div className="form">
-        {owner && (
+        {managed && (
+          <p className="muted">
+            {site ? (
+              <>This is a site&apos;s document library. Its name and people follow the site: change them in{" "}
+                <a href={sitesUrl(site)}>Sites</a>.</>
+            ) : "This library's people are managed in another app."}
+          </p>
+        )}
+        {manage && (
           <form
             className="sharerow"
             onSubmit={(e) => {
@@ -49,7 +60,8 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
           </form>
         )}
         <h3>Members</h3>
-        {owner && (
+        {library.team && <p className="muted small">Members of a team&apos;s library are managed in Groups.</p>}
+        {manage && (
           <form
             className="sharerow"
             onSubmit={(e) => {
@@ -71,7 +83,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
             <li key={m.email}>
               <span className="avatar">{m.email[0]?.toUpperCase()}</span>
               <span className="grow">{person(m.email, me)} <span className="muted small">{m.email}</span></span>
-              {owner ? (
+              {manage ? (
                 <select
                   value={m.role}
                   aria-label={`Role for ${m.email}`}
@@ -84,7 +96,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
               ) : (
                 <span className="muted small">{m.role === "owner" ? "Owner" : m.role === "editor" ? "Member" : "Visitor"}</span>
               )}
-              {(owner || m.email === me) && (
+              {!library.team && (owner || (m.email === me && !managed)) && (
                 <button
                   className="iconbtn"
                   title={m.email === me ? "Leave library" : "Remove"}
@@ -102,7 +114,7 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
         </ul>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="actions">
-          {owner && (
+          {manage && (
             <button
               className="btn danger"
               onClick={async () => {
@@ -119,4 +131,11 @@ export function LibraryDialog({ library, me, onClose, onChanged, onDeleted }: {
       </div>
     </Modal>
   );
+}
+
+/** The site in the Sites app, on this suite's domain. */
+function sitesUrl(siteId: string): string {
+  const id = encodeURIComponent(siteId);
+  if (!location.hostname.startsWith("drive.")) return `${location.protocol}//${location.hostname}:3170/?site=${id}`; // local dev
+  return `${location.protocol}//${location.hostname.replace(/^drive\./, "sites.")}/?site=${id}`;
 }

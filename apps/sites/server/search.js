@@ -1,9 +1,10 @@
 // POST /api/search: suite-wide search on behalf of the signed-in person (see @synergy/search).
 //
-// Who can see what: Sites has no per-site sharing or membership. Every signed-in staff member can
-// list every site (GET /api/sites), open any site in the editor and preview any page, published or
-// not, so search answers with the same: every site and every page, for anyone signed in.
+// Who can see what: the same sites the person sees in the app (GET /api/sites): every site that
+// isn't private, and private sites they own, are a member or visitor of, directly or through a
+// group, or whose team they're in. Pages deleted under a legal hold are never found here.
 const { readSearchQuery, queryToSql, matchesQuery, snippet, clipText } = require('@synergy/search');
+const { visibleSql } = require('./access');
 
 const KINDS = ['site', 'page'];
 // The most rows read per kind before the text check; the SQL prefilter makes this generous.
@@ -30,7 +31,7 @@ function blocksText(blocks) {
 
 const iso = d => new Date(d).toISOString();
 
-async function search(q, body) {
+async function search(q, body, who) {
   const s = readSearchQuery(body);
   const want = k => !s.kinds.length || s.kinds.includes(k);
   // The SQL only narrows (positive terms over a superset of the text); the exact check, with any
@@ -39,8 +40,10 @@ async function search(q, body) {
   const results = [];
 
   if (want('site')) {
-    const f = queryToSql(positive, ['name', 'description', 'slug']);
-    const { rows } = await q(`SELECT * FROM sites WHERE ${f.sql} ORDER BY updated_at DESC LIMIT ${SCAN}`, f.params);
+    const f = queryToSql(positive, ['s.name', 's.description', 's.slug']);
+    const v = visibleSql(who, 's', f.params.length + 1);
+    const { rows } = await q(
+      `SELECT * FROM sites s WHERE ${f.sql} AND ${v.sql} ORDER BY s.updated_at DESC LIMIT ${SCAN}`, [...f.params, ...v.params]);
     for (const r of rows) {
       const text = [r.name, r.description, r.slug].filter(Boolean).join('\n');
       if (!matchesQuery(text, s.parsed)) continue;
@@ -55,9 +58,11 @@ async function search(q, body) {
 
   if (want('page')) {
     const f = queryToSql(positive, ['p.title', 'p.blocks::text', 's.name']);
+    const v = visibleSql(who, 's', f.params.length + 1);
     const { rows } = await q(
       `SELECT p.*, s.name AS site_name, s.owner_email FROM pages p JOIN sites s ON s.id = p.site_id
-        WHERE ${f.sql} ORDER BY p.updated_at DESC LIMIT ${SCAN}`, f.params);
+        WHERE ${f.sql} AND ${v.sql} AND p.held_deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT ${SCAN}`,
+      [...f.params, ...v.params]);
     for (const r of rows) {
       const content = blocksText(r.blocks);
       if (!matchesQuery(`${r.title}\n${r.site_name}\n${content}`, s.parsed)) continue;

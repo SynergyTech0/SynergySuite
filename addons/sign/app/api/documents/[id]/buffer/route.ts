@@ -3,6 +3,7 @@ import { getFileBuffer } from "@/lib/storage";
 import * as path from "path";
 import prisma from "@/lib/prisma";
 import { CloudProvider } from "@prisma/client";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
+  const __owner = await documentForOwner(id);
+  if (isDenied(__owner)) return __owner.denied;
   console.log("📁 File request ID:", id);
 
   if (!id?.length) {
