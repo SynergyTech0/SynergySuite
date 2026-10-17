@@ -11,6 +11,8 @@ export interface EnterprisePaymentConfirmationData {
 	companyName: string;
 	teamSizeRange: string | number;
 	amount: number;
+	seats?: number;
+	pricePerSeat?: number;
 	passwordSetupUrl?: string;
 }
 

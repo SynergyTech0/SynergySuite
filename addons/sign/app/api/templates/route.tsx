@@ -1,7 +1,7 @@
 // API endpoint for retrieving templates
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { NextResponse, NextRequest } from "next/server";
 
 export async function GET(req: NextRequest) {

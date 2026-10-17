@@ -1,5 +1,5 @@
 "use client";
-import { Archive, ChevronDown, ChevronRight, FileText, Folder as FolderIcon, Inbox, Plus, Send, ShieldAlert, Trash2, PenSquare, X } from "lucide-react";
+import { Archive, ChevronDown, ChevronRight, FileText, Folder as FolderIcon, Inbox, Plus, Send, ShieldAlert, Trash2, PenSquare, Users, X } from "lucide-react";
 import { useState } from "react";
 import type { AccountSummary, Folder } from "@/lib/client";
 
@@ -28,10 +28,12 @@ export function FolderPane(props: {
       {props.accounts.map((a) => (
         <div key={a.id} className="account">
           <div className="accthead">
-            <button className="acctname" onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !c[a.id] }))} title={a.address}
-              aria-expanded={!collapsed[a.id]}>
+            <button className="acctname" onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !c[a.id] }))}
+              title={a.kind === "shared" ? `Shared mailbox: ${a.address}` : a.address} aria-expanded={!collapsed[a.id]}>
               {collapsed[a.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              {a.kind === "shared" && <Users size={14} aria-label="Shared mailbox" />}
               <span>{a.kind === "suite" ? a.address : a.label}</span>
+              {a.kind === "shared" && <small className="acctkind">Shared</small>}
             </button>
             <button className="iconbtn small" title="New folder" onClick={() => props.onNewFolder(a.id)}><Plus size={14} /></button>
             {a.kind === "imap" && (

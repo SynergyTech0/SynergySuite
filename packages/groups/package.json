@@ -1,0 +1,10 @@
+{
+  "name": "@synergy/groups",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Who is in which group: the Groups app's membership API for every other suite app.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "node --test test/*.test.js" }
+}

@@ -1,14 +1,7 @@
-import { NextResponse } from 'next/server';
-import { listAudiences, createAudience } from '@/lib/repo';
+import { body, route } from "@/lib/api";
+import { createAudience, listAudiences } from "@/lib/audiences";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return NextResponse.json(await listAudiences());
-}
-
-export async function POST(req: Request) {
-  const { name } = await req.json();
-  if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 });
-  return NextResponse.json(await createAudience(name.trim()));
-}
+export const GET = route(async () => listAudiences());
+export const POST = route(async (ctx, req) => createAudience(ctx, await body(req)));

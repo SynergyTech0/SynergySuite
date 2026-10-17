@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/lib/session-client";
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,7 +81,7 @@ export default function DocumentsPage() {
   // -----------------------------
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.push('/auth/login');
+      window.location.href = '/signin';
     } else if (status === 'authenticated') {
       const fetchDocuments = async () => {
         try {

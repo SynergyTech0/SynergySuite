@@ -1,8 +1,9 @@
 /**
  * The service API other suite apps use to read and move stock (`/api/svc/*`, Bearer
  * COMMERCE_SVC_TOKEN). Operations plans production and maintenance from these numbers and sends
- * every part it uses and every product it makes back through `stockMove`, so Commerce stays the one
- * stock ledger and Books hears about each move once.
+ * every part it uses and every product it makes back through `stockMove`, and Field Service sends
+ * the parts its technicians use on jobs, so Commerce stays the one stock ledger and Books hears
+ * about each move once.
  */
 import { timingSafeEqual } from "node:crypto";
 import { q, tx } from "./db";
@@ -22,11 +23,11 @@ export function svcAuthorized(header: string | null, token = process.env.COMMERC
 }
 
 export type SvcItem = {
-  id: string; sku: string; name: string; unit: string; cost: string; onHand: number;
+  id: string; sku: string; name: string; unit: string; cost: string; price: string; onHand: number;
   byLocation: { locationId: string; onHand: number }[];
 };
 
-/** Active products by search term or by an exact list of SKUs (`skus`), with stock by location. */
+/** Active products by search term or by an exact list of SKUs (`skus`), with price and stock by location. */
 export async function svcItems(f: { q?: string; skus?: string[] } = {}): Promise<SvcItem[]> {
   const where = ["p.active"];
   const args: unknown[] = [];
@@ -37,8 +38,8 @@ export async function svcItems(f: { q?: string; skus?: string[] } = {}): Promise
     args.push(`%${f.q.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     where.push(`(p.sku ILIKE $${args.length} OR p.name ILIKE $${args.length} OR p.barcode = $${args.length})`);
   }
-  const rows = await q<{ id: string; sku: string; name: string; unit: string; cost: string; levels: { l: string; n: string }[] | null }>(
-    `SELECT p.id, p.sku, p.name, p.unit, p.cost,
+  const rows = await q<{ id: string; sku: string; name: string; unit: string; cost: string; price: string; levels: { l: string; n: string }[] | null }>(
+    `SELECT p.id, p.sku, p.name, p.unit, p.cost, p.price,
             (SELECT json_agg(json_build_object('l', s.location_id, 'n', s.on_hand) ORDER BY s.location_id)
                FROM stock s WHERE s.product_id = p.id) AS levels
      FROM products p WHERE ${where.join(" AND ")} ORDER BY p.sku LIMIT 500`,
@@ -47,7 +48,7 @@ export async function svcItems(f: { q?: string; skus?: string[] } = {}): Promise
   return rows.map((r) => {
     const byLocation = (r.levels ?? []).map((x) => ({ locationId: x.l, onHand: Number(x.n) }));
     return {
-      id: r.id, sku: r.sku, name: r.name, unit: r.unit, cost: Number(r.cost).toFixed(4),
+      id: r.id, sku: r.sku, name: r.name, unit: r.unit, cost: Number(r.cost).toFixed(4), price: Number(r.price).toFixed(2),
       onHand: roundQty(byLocation.reduce((a, x) => a + x.onHand, 0)), byLocation,
     };
   });
@@ -57,9 +58,11 @@ export async function svcLocations(): Promise<{ id: string; name: string; kind: 
   return q("SELECT id, name, kind FROM locations WHERE active ORDER BY created_at");
 }
 
-const SVC_KINDS = ["mfg_issue", "mfg_receipt", "maint_issue"] as const;
+const SVC_KINDS = ["mfg_issue", "mfg_receipt", "maint_issue", "service_issue"] as const;
 type SvcKind = (typeof SVC_KINDS)[number];
-const KIND_TEXT: Record<SvcKind, string> = { mfg_issue: "Used in production", mfg_receipt: "Made", maint_issue: "Used in maintenance" };
+const KIND_TEXT: Record<SvcKind, string> = {
+  mfg_issue: "Used in production", mfg_receipt: "Made", maint_issue: "Used in maintenance", service_issue: "Used on a service job",
+};
 
 export type StockMoveInput = {
   reference?: unknown; sku?: unknown; name?: unknown; unit?: unknown; locationId?: unknown; qty?: unknown; unitCost?: unknown; kind?: unknown; account?: unknown; note?: unknown;
@@ -67,7 +70,7 @@ export type StockMoveInput = {
 export type StockMoveResult = { duplicate?: true; onHand: number; unitCost: string };
 
 /**
- * One part used (negative qty, `mfg_issue` or `maint_issue`) or one product made (positive qty,
+ * One part used (negative qty: `mfg_issue`, `maint_issue`, or `service_issue` for Field Service) or one product made (positive qty,
  * `mfg_receipt`). Issues are valued at average cost; receipts at the `unitCost` sent, which moves
  * the average. The value is posted to Books against `account` (by default the stock adjustment
  * account). `onHand` is what is left at that location afterwards. A receipt of a SKU Commerce
@@ -78,7 +81,7 @@ export async function stockMove(input: StockMoveInput): Promise<StockMoveResult>
   const reference = text(input.reference, 180);
   if (!reference) throw new UserError("reference is required");
   const kind = input.kind as SvcKind;
-  if (!SVC_KINDS.includes(kind)) throw new UserError("kind must be mfg_issue, mfg_receipt or maint_issue");
+  if (!SVC_KINDS.includes(kind)) throw new UserError("kind must be mfg_issue, mfg_receipt, maint_issue or service_issue");
   const n = quantity(input.qty, "qty", false);
   if (n === 0) throw new UserError("qty can't be zero");
   if (kind === "mfg_receipt" ? n < 0 : n > 0) {

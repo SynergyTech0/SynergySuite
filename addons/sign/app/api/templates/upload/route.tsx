@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
@@ -9,7 +9,6 @@ import {
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { verify } from "jsonwebtoken";
 import { getStorageDir } from "@/lib/storage";
 import {
 	scanPDFSecurity,
@@ -24,21 +23,6 @@ export async function POST(request: NextRequest) {
 		const session = await getServerSession(authOptions);
 		let userId: string | null = session?.user?.id || null;
 
-		if (!userId) {
-			const authHeader = request.headers.get("authorization");
-			if (authHeader?.startsWith("Bearer ")) {
-				try {
-					const token = authHeader.split(" ")[1];
-					const decoded: any = verify(
-						token,
-						process.env.NEXTAUTH_SECRET!
-					);
-					userId = decoded.userId || decoded.id || null;
-				} catch {
-					// Invalid or expired JWT
-				}
-			}
-		}
 
 		if (!userId)
 			return NextResponse.json(

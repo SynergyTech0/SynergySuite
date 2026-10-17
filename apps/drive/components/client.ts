@@ -49,7 +49,8 @@ export class ApiError extends Error {
 }
 
 export type Crumb = { label: string; parent?: string; library?: string; view?: string };
-export type Library = { id: string; name: string; description: string; role: Role; members: number };
+/** `team`: a team's library, whose name and members are managed in Groups. */
+export type Library = { id: string; name: string; description: string; role: Role; members: number; managedBy?: string | null; team: boolean };
 export type Me = { email: string; name: string; used: number; quota: number; ai: boolean };
 
 export async function api<T = unknown>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {

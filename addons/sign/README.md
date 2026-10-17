@@ -1,199 +1,55 @@
+# Sign
 
-# SynergySign - AI-Powered Electronic Signature Platform
+E-signatures for SynergySuite (the DocuSign equivalent): upload a PDF or start from a template, place fields, send it to one or more signers (in order or all at once), and get back the signed PDF with an audit trail.
 
-![Synergy Technologies](./public/synergy-logo.png)
+Status: early. It runs as an add-on behind the suite gateway on port 3300 (`sign.<domain>`).
 
-**By Synergy Technologies LLC**  
-*Powering the Future Through Technology*
+## Who signs in
 
-## Overview
+- **People in the suite** sign in with their suite account. The gateway passes who they are in headers and `lib/auth.ts` reads them with `@synergy/identity`; Sign has no login or sign-up of its own. A Sign account from before is matched by email, and someone new gets one the first time they open Sign. `SIGN_ADMIN_EMAILS` get the admin pages.
+- **Signers** are often outside the organization. They open `/sign/<token>` from their email and need no account. The gateway lets those pages, `/api/signers/*` and `/api/files/*` through without a session; the token (or a signed, expiring file link) is the only key, and `lib/access.ts` checks it on every request, including signing order and whether that signer already finished.
 
-SynergySign is a modern, AI-powered electronic signature platform that revolutionizes document workflow management. Built with cutting-edge technology, it offers intelligent field detection, seamless multi-party signing, and enterprise-grade security.
+## Running it
 
-## 🚀 Features
+In the suite, `deploy/compose.yml` runs it from `deploy/sign.Dockerfile` with its own `sign` database and a `sign-files` volume; see the Sign section of `deploy/README.md` for its settings.
 
-- **AI-Powered Field Detection**: Automatically detect and place signature fields using advanced AI
-- **Multi-Party Signing**: Manage documents requiring multiple signatures with role-based access
-- **Real-Time Tracking**: Monitor document status and receive instant notifications
-- **Template Management**: Create and reuse document templates for faster processing
-- **Analytics Dashboard**: Track signing activity and document metrics
-- **Affiliate System**: Built-in affiliate marketing program with automatic payouts
-- **Enterprise Support**: Custom solutions for organizations
-- **Bank-Level Security**: Enterprise-grade encryption and compliance
+For development, outside Docker:
 
-## 🛠️ Tech Stack
-
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: NextAuth.js
-- **Styling**: Tailwind CSS with shadcn/ui components
-- **Storage**: AWS S3
-- **Payments**: Stripe (for affiliate payouts)
-
-## 📋 Prerequisites
-
-- Node.js 18+ and Yarn
-- PostgreSQL database
-- AWS account (for S3 storage)
-- Stripe account (for affiliate payouts)
-
-## 🔧 Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ssynerg/ai_docusign_clone.git
-   cd ai_docusign_clone
-   ```
-
-2. **Install dependencies**
-   ```bash
-   cd nextjs_space
-   yarn install
-   ```
-
-3. **Set up environment variables**
-   
-   Copy the example environment file and fill in your values:
-   ```bash
-   cp .env.example .env
-   ```
-
-   Required environment variables:
-   ```env
-   # Database
-   DATABASE_URL="postgresql://username:password@localhost:5432/database_name?schema=public"
-
-   # Authentication
-   NEXTAUTH_SECRET="your-secret-key"
-   NEXTAUTH_URL="http://localhost:3000"
-
-   # AWS S3
-   AWS_PROFILE=hosted_storage
-   AWS_REGION=us-west-2
-   AWS_BUCKET_NAME=your-bucket-name
-   AWS_FOLDER_PREFIX=your-folder-prefix/
-
-   # Stripe (for affiliate payouts)
-   STRIPE_SECRET_KEY="sk_test_..."
-   STRIPE_PUBLISHABLE_KEY="pk_test_..."
-   STRIPE_WEBHOOK_SECRET="whsec_..."
-   ```
-
-4. **Set up the database**
-   ```bash
-   yarn prisma generate
-   yarn prisma db push
-   ```
-
-5. **Run the development server**
-   ```bash
-   yarn dev
-   ```
-
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## 📦 Production Deployment
-
-### Build the application
 ```bash
-yarn build
+npm ci --prefix ../.. && npm run build:packages --prefix ../..   # the suite packages Sign links to
+npm ci --legacy-peer-deps
+cp .env.example .env    # DATABASE_URL, SSO_URL or SUITE_DOMAIN, PROXY_SHARED_SECRET
+npx prisma migrate deploy
+npm run dev             # http://localhost:3300
 ```
 
-### Start the production server
-```bash
-yarn start
-```
+Without a gateway in front, send the identity headers yourself (`x-auth-request-email`, `x-auth-request-user`, and `x-proxy-auth-secret` when `PROXY_SHARED_SECRET` is set).
 
-### Important Production Notes
+Checks: `npm run typecheck`, `npm test` and `npm run build`.
 
-- **Environment Variables**: Ensure all production environment variables are properly configured
-- **Database**: Use a production PostgreSQL instance
-- **NEXTAUTH_URL**: Set to your production domain
-- **Stripe**: Use live keys (sk_live_... and pk_live_...)
-- **Stripe Webhooks**: Configure webhook endpoint at `https://yourdomain.com/api/webhooks/stripe`
-- **S3**: Configure production bucket with proper CORS settings
+## Mail
 
-## 🎯 Key Features Documentation
+Signing requests, reminders and completed documents go out from the suite mailbox `sign@<MAIL_DOMAIN>` through Stalwart (`MAIL_*`, set by compose), or through one outside mailbox with `SIGN_SMTP_HOST`, `SIGN_SMTP_USER` and `SIGN_SMTP_PASSWORD`. With neither, each message is written to `SIGN_DEV_MAIL_DIR` (default `./dev-mail`) instead of being sent, so the flow can still be tried.
 
-### Affiliate System
-The platform includes a complete affiliate marketing system:
-- Users can refer others and earn $2/month per active subscription
-- Automatic weekly payouts via Stripe
-- Admin dashboard for affiliate management
-- Detailed earnings tracking
+## Files
 
-See [AFFILIATE_SYSTEM.md](./AFFILIATE_SYSTEM.md) for full documentation.
+`STORAGE_MODE=local` keeps documents under `LOCAL_STORAGE_PATH`; `STORAGE_MODE=s3` uses `AWS_*` (and `AWS_ENDPOINT_URL` for an S3-compatible store). Downloads go through `/api/files/*`, which serves a file to its owner or through a link signed with `SIGN_LINK_SECRET`.
 
-### AI Features
-- Smart document analysis
-- Automatic field detection
-- Intelligent signature placement
-- Text extraction and processing
+## AI
 
-See [AI_FEATURES_GUIDE.md](./AI_FEATURES_GUIDE.md) for details.
+Field detection goes through `@synergy/ai`: `SIGN_AI_PROVIDER`, `SIGN_AI_BASE_URL`, `SIGN_AI_API_KEY` and `SIGN_AI_MODEL`, else the suite's `AI_*`. It needs a model that reads images.
 
-### File Storage
-Hybrid storage system supporting both local and S3 storage:
-- Automatic cloud uploads
-- Secure file access
-- Download management
+## Suite features
 
-See [HYBRID_STORAGE_SETUP.md](./HYBRID_STORAGE_SETUP.md) and [S3_SETUP_INSTRUCTIONS.md](./S3_SETUP_INSTRUCTIONS.md).
+- The suite header (`components/suite/SuiteBar.tsx`).
+- Suite search: `POST /api/search` finds documents you sent or were asked to sign.
+- Admin center: `POST /api/compliance/search` and `/api/compliance/export` (eDiscovery), and a document whose sender or signer is on legal hold is kept, not deleted (`lib/ediscovery.ts`).
 
-### Mobile App Development
-Native Android app built with Kotlin and Jetpack Compose:
-- Complete Kotlin/Compose project ready to build
-- MVVM + Clean Architecture
-- Hilt dependency injection
-- Retrofit for API integration
+## Not done
 
-See [ANDROID_APP_GUIDE.md](./ANDROID_APP_GUIDE.md) and the `android-app/` directory.
+- The Android app in `android-app/` used the removed mobile login and does not work with the suite.
+- Billing, affiliate and enterprise-invitation pages come from the hosted product; billing is hidden unless `SIGN_BILLING=1`, and none of it is wired to the suite.
 
-## 👥 Default Admin Account
+## License
 
-An admin account is automatically created when you first run the application:
-- **Email**: admin@synergysign.com
-- **Password**: Admin@123
-
-⚠️ **Important**: Change the admin password immediately after first login!
-
-## 📱 User Roles
-
-- **ADMIN**: Full system access including user management
-- **SENDER**: Can upload documents, manage templates, and send for signing
-- **SIGNER**: Can sign documents sent to them
-
-## 🔐 Security
-
-- All passwords are hashed using bcrypt
-- Session-based authentication with NextAuth.js
-- Role-based access control (RBAC)
-- Secure file storage with signed URLs
-- Environment-based secrets management
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is proprietary software owned by Synergy Technologies LLC.
-
-## 📞 Support
-
-For enterprise inquiries and support:
-- Email: sales@synergysign.com
-
-## 🏢 About Synergy Technologies
-
-Synergy Technologies LLC is committed to powering the future through innovative technology solutions. Our mission is to streamline business processes and enhance productivity through cutting-edge software.
-
----
-
-**Built with ❤️ by Synergy Technologies LLC**
-# ai_docusign_clone
+AGPL-3.0, as the rest of SynergySuite.

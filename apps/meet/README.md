@@ -35,7 +35,7 @@ The meetings table is created on first use. Invitations are only emailed when th
 | `SUITE_DOMAIN` | The suite's domain. Used for sign-in and sign-out links, the suite header, and the defaults below. |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | LiveKit API credentials; must match the LiveKit server's keys. |
 | `LIVEKIT_API_URL` | LiveKit's HTTP API, used for breakouts, moderation and recording (default `https://meet.<SUITE_DOMAIN>`). |
-| `NEXT_PUBLIC_LIVEKIT_URL` | LiveKit's WebSocket URL that browsers connect to, for example `wss://meet.<domain>`. Also a build argument in the Docker image. |
+| `LIVEKIT_WS_URL` / `NEXT_PUBLIC_LIVEKIT_URL` | LiveKit's WebSocket URL that browsers connect to, read at run time (default `wss://meet.<SUITE_DOMAIN>`, which the gateway passes to LiveKit). |
 | `MEET_PUBLIC_URL` | Base URL used in invitation links (default `https://meet.<SUITE_DOMAIN>`). |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Mail server for invitations. Port defaults to 465; `SMTP_FROM` defaults to `SMTP_USER`. No email is sent unless host, user and password are set, or when `DEMO_MODE=1`. |
 | `TURN_HOST` / `TURN_STATIC_SECRET` | Optional TURN relay for people behind strict firewalls. Give it a different public IP from the LiveKit server. |
@@ -46,4 +46,4 @@ The meetings table is created on first use. Invitations are only emailed when th
 
 ## Production
 
-The app is the `meet` service in `deploy/compose.yml`; see [deploy/README.md](../../deploy/README.md). The LiveKit server itself is not in the main compose file: run it from `deploy/docker-compose.yml` here (and `deploy/docker-compose.egress.yml` for recording), filling in `livekit.template.yaml` with the same keys.
+The app is the `meet` service in `deploy/compose.yml`; see [deploy/README.md](../../deploy/README.md). The LiveKit server is the `livekit` service in the same file, so meetings work from `deploy/quickstart.sh` with nothing else to run (see Meet and Phone media in the deploy README). Recording still needs LiveKit Egress and Redis, which are not in the main compose file yet: run `deploy/docker-compose.egress.yml` here next to your own media server. `deploy/docker-compose.yml` here remains for running LiveKit on its own host with host networking; point `LIVEKIT_UPSTREAM` at it.

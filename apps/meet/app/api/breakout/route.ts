@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { RoomServiceClient, DataPacket_Kind } from "livekit-server-sdk";
 import { getServerSession } from "@/lib/session";
+import { livekitApiUrl } from "@/lib/livekit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  *   - broadcast → push a host message into every breakout (e.g. "2 minutes left").
  * Clients receive these as data packets on the "breakout" topic and act on them.
  */
-const LIVEKIT_URL = process.env.LIVEKIT_API_URL || `https://meet.${process.env.SUITE_DOMAIN}`;
+const LIVEKIT_URL = livekitApiUrl();
 
 function client() {
   return new RoomServiceClient(LIVEKIT_URL, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);

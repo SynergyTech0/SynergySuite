@@ -15,7 +15,7 @@ import {
   Shield,
   DollarSign,
 } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+import { signOut } from "@/lib/session-client";
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },

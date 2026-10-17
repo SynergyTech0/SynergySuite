@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { verify } from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -220,18 +219,6 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     userId = session?.user?.id || null;
 
-    if (!userId) {
-      const header = request.headers.get("authorization");
-      if (header?.startsWith("Bearer ")) {
-        try {
-          const decoded: any = verify(
-            header.split(" ")[1],
-            process.env.NEXTAUTH_SECRET!
-          );
-          userId = decoded.userId || decoded.id || null;
-        } catch {}
-      }
-    }
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

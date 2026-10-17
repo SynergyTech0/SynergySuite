@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/lib/session-client";
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

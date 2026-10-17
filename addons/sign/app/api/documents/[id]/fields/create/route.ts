@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export async function POST(
   request: NextRequest,
@@ -15,6 +16,8 @@ export async function POST(
 
     const fieldData = await request.json();
     const documentId = ((await context.params).id);
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
 
     const field = await prisma.documentField.create({
       data: {

@@ -1,7 +1,7 @@
 "use client";
 // Browser-side helpers and the shapes the API returns.
 
-export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "imap" };
+export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "shared" | "imap" };
 export type Folder = { path: string; name: string; role: string | null; unread: number; total: number; depth: number };
 export type Person = { name: string; address: string };
 export type MessageSummary = {

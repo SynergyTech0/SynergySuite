@@ -8,7 +8,7 @@ function getStripeClient() {
     throw new Error('STRIPE_SECRET_KEY not configured');
   }
   return new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2024-11-20.acacia',
+    apiVersion: '2024-11-20.acacia' as Stripe.StripeConfig['apiVersion'],
   });
 }
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     // Verify cron secret
     const authHeader = req.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -178,7 +178,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get('secret');
-  if (secret !== process.env.CRON_SECRET) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return POST(req);

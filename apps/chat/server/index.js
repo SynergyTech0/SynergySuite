@@ -6,6 +6,7 @@ const db = require('./db');
 const api = require('./api');
 const hub = require('./ws');
 const compliance = require('./compliance');
+const teams = require('./teams');
 
 const { identify, optionsFromEnv } = require('@synergy/identity');
 const { baseApp, errorHandler, serveSpa } = require('@synergy/server');
@@ -30,6 +31,8 @@ async function main() {
 
   // Admin center over the internal network: COMPLIANCE_TOKEN instead of the gateway identity.
   app.use('/api/compliance', compliance.router);
+  // Groups app over the internal network: PROXY_SHARED_SECRET, never forwarded by the gateway.
+  app.use('/api/svc', teams.router);
 
   app.use('/api', async (req, res, next) => {
     try {

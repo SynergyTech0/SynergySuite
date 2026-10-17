@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@synergy/ai": "*",
     "@synergy/compliance": "*",
     "@synergy/config": "*",
     "@synergy/db": "*",

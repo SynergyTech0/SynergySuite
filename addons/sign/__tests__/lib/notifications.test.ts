@@ -1,4 +1,7 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals'
+/**
+ * @jest-environment node
+ */
+import { describe, it, expect, beforeEach } from '@jest/globals'
 
 // Mock the db import FIRST before any other imports
 jest.mock('@/lib/db', () => ({

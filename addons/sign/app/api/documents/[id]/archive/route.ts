@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export async function PUT(
   request: NextRequest,
@@ -8,6 +9,8 @@ export async function PUT(
   try {
     // ✅ FIX: resolve params properly
     const { id } = await context.params;
+    const __owner = await documentForOwner(id);
+    if (isDenied(__owner)) return __owner.denied;
 
     if (!id) {
       return NextResponse.json({ error: "Missing document id" }, { status: 400 });

@@ -2,11 +2,12 @@
 // Devices: navigation on the left, the chosen section on the right. Admins get the whole fleet;
 // everyone else gets My devices, their own computers and how to enroll one.
 import {
-  AppWindow, Bug, Crosshair, Fingerprint, History, Info, KeyRound, LayoutDashboard, Laptop, ShieldAlert, ShieldCheck, SlidersHorizontal, Smartphone, UserRound,
+  AppWindow, Bug, Crosshair, Fingerprint, History, Info, KeyRound, LayoutDashboard, Laptop, ShieldAlert, ShieldCheck, SlidersHorizontal, Smartphone, TabletSmartphone, UserRound,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { About } from "./About";
 import { AlertList, AlertView } from "./Alerts";
+import { AndroidSetup } from "./Android";
 import { AppleSetup } from "./Apple";
 import { Apps } from "./Apps";
 import { Audit } from "./Audit";
@@ -32,6 +33,7 @@ const MANAGE: Item[] = [
   { view: "apps", text: "Apps", icon: <AppWindow size={18} /> },
   { view: "enroll", text: "Enrollment", icon: <KeyRound size={18} /> },
   { view: "apple", text: "Apple devices", icon: <Smartphone size={18} /> },
+  { view: "android", text: "Android devices", icon: <TabletSmartphone size={18} /> },
 ];
 const SECURITY: Item[] = [
   { view: "alerts", text: "Alerts", icon: <ShieldAlert size={18} /> },
@@ -93,6 +95,7 @@ export function DevicesApp({ me }: { me: Me }) {
           : view === "profiles" ? <Profiles app={app} />
           : view === "apps" ? <Apps app={app} />
           : view === "apple" ? <AppleSetup app={app} />
+          : view === "android" ? <AndroidSetup app={app} />
           : view === "alerts" ? (route.id ? <AlertView key={route.id} app={app} id={route.id} /> : <AlertList app={app} />)
           : view === "vulnerabilities" ? <Vulnerabilities app={app} id={route.id} />
           : view === "hunting" ? <Hunting app={app} id={route.id} />

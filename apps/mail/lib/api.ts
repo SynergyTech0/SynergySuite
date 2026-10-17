@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { identify, optionsFromEnv } from "@synergy/identity";
-import { type Account, UserError, getAccount } from "./accounts";
+import { type Account, UserError, getAccount, onSuiteServer } from "./accounts";
 import { ensureMailbox } from "./provision";
 import { q } from "./db";
 
@@ -31,7 +31,8 @@ export function route<A extends unknown[]>(fn: (ctx: Ctx, req: Request, ...rest:
 export async function accountFor(ctx: Ctx, id: string | null): Promise<Account> {
   const acct = id ? await getAccount(ctx.user, id, ctx.name) : null;
   if (!acct) throw new UserError("No such account", 404);
-  if (acct.id === "suite") {
+  // A shared mailbox opens through the person's own suite login, so that has to exist too.
+  if (onSuiteServer(acct)) {
     await ensureMailbox(ctx.user, ctx.name);
     await noteSuiteUser(ctx.user);
   }

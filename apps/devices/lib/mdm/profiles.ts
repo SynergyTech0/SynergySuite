@@ -14,6 +14,8 @@ export const ID_PREFIX = "cloud.synergy.devices";
 export const MDM_PROFILE_ID = `${ID_PREFIX}.mdm`;
 
 export type ApplePlatform = "darwin" | "ios";
+/** Where a settings profile or app can go: Apple devices through MDM, Android through Google. */
+export type MdmPlatform = ApplePlatform | "android";
 
 type Profile = { identifier: string; name: string; description: string; organization: string; payloads: Record<string, PlistValue>[]; removable?: boolean };
 
@@ -113,13 +115,13 @@ export function enrollmentProfile(o: EnrollmentOptions): string {
 
 export type ProfileKind = "passcode" | "filevault" | "firewall" | "software_update" | "wifi" | "restrictions" | "custom";
 
-export const PROFILE_KINDS: { kind: ProfileKind; label: string; describe: string; platforms: ApplePlatform[] }[] = [
-  { kind: "passcode", label: "Passcode", describe: "Require a passcode or password, its length and how soon the screen locks.", platforms: ["darwin", "ios"] },
+export const PROFILE_KINDS: { kind: ProfileKind; label: string; describe: string; platforms: MdmPlatform[] }[] = [
+  { kind: "passcode", label: "Passcode", describe: "Require a passcode or password, its length and how soon the screen locks.", platforms: ["darwin", "ios", "android"] },
   { kind: "filevault", label: "FileVault", describe: "Turn on FileVault disk encryption at the next sign-in.", platforms: ["darwin"] },
   { kind: "firewall", label: "Firewall", describe: "Turn on the macOS firewall, optionally blocking all incoming connections.", platforms: ["darwin"] },
   { kind: "software_update", label: "Software updates", describe: "Check for, download and install macOS and security updates automatically.", platforms: ["darwin"] },
-  { kind: "wifi", label: "Wi-Fi", describe: "Add a Wi-Fi network so devices join it without typing the password.", platforms: ["darwin", "ios"] },
-  { kind: "restrictions", label: "Restrictions", describe: "Turn off the camera or screenshots, and require encrypted backups.", platforms: ["darwin", "ios"] },
+  { kind: "wifi", label: "Wi-Fi", describe: "Add a Wi-Fi network so devices join it without typing the password.", platforms: ["darwin", "ios", "android"] },
+  { kind: "restrictions", label: "Restrictions", describe: "Turn off the camera or screenshots, and require encrypted backups (Apple).", platforms: ["darwin", "ios", "android"] },
   { kind: "custom", label: "Custom profile", describe: "Upload a .mobileconfig made with Apple Configurator or iMazing Profile Editor.", platforms: ["darwin", "ios"] },
 ];
 

@@ -277,6 +277,15 @@ CREATE TABLE IF NOT EXISTS mdm_apps (
   created_by   TEXT NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Android (lib/mdm/android.ts): phones enroll through Google's Android Management API. An enrollment's
+-- id is Google's device name; a "play" app is a Google Play package name in store_id.
+ALTER TABLE mdm_enrollments DROP CONSTRAINT IF EXISTS mdm_enrollments_platform_check;
+ALTER TABLE mdm_enrollments ADD CONSTRAINT mdm_enrollments_platform_check CHECK (platform IN ('darwin', 'ios', 'android'));
+ALTER TABLE mdm_apps DROP CONSTRAINT IF EXISTS mdm_apps_platform_check;
+ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_platform_check CHECK (platform IN ('darwin', 'ios', 'android'));
+ALTER TABLE mdm_apps DROP CONSTRAINT IF EXISTS mdm_apps_source_check;
+ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_source_check CHECK (source IN ('app_store', 'package', 'play'));
 `;
 
 type Db = ReturnType<typeof createDb>;

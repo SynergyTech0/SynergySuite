@@ -7,7 +7,7 @@ import type { SearchObject } from "imapflow";
  */
 
 export type Msg = { uid: number; raw: Buffer; internalDate: Date; flags: Set<string> };
-export type Folder = { uidValidity: bigint; nextUid: number; specialUse?: string; msgs: Msg[] };
+export type Folder = { uidValidity: bigint; nextUid: number; specialUse?: string; flags?: string[]; msgs: Msg[] };
 export const server = {
   boxes: new Map<string, Map<string, Folder>>(),
   fetched: 0, // messages whose source was fetched
@@ -93,7 +93,21 @@ export class FakeImapFlow {
   async logout() {}
   close() {}
   async list() {
-    return [...this.box!.entries()].map(([path, f]) => ({ path, name: path, specialUse: f.specialUse, flags: new Set<string>(), parent: [] }));
+    return [...this.box!.entries()].map(([path, f]) => {
+      const parent = path.split("/");
+      const name = parent.pop()!;
+      return { path, name, delimiter: "/", specialUse: f.specialUse, flags: new Set<string>(f.flags ?? []), parent };
+    });
+  }
+  async mailboxCreate(path: string) {
+    if (!this.box!.has(path)) this.box!.set(path, { uidValidity: 1n, nextUid: 1, msgs: [] });
+    return { path, created: true };
+  }
+  async append(path: string, raw: string | Buffer, flags: string[] = []) {
+    const f = this.box!.get(path);
+    if (!f) throw new Error(`no folder ${path}`);
+    f.msgs.push({ uid: f.nextUid++, raw: Buffer.isBuffer(raw) ? raw : Buffer.from(raw), internalDate: new Date(), flags: new Set(flags) });
+    return { destination: path };
   }
   async getMailboxLock(path: string) {
     const f = this.box!.get(path);

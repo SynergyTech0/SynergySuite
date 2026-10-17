@@ -227,3 +227,8 @@ export function begin(email: string, now = Date.now()): () => void {
   inflight.add(email);
   return () => inflight.delete(email);
 }
+
+/** Forgets the per-minute counts (tests). */
+export function resetLimits(): void {
+  recent.clear();
+}

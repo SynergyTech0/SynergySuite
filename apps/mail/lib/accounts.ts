@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { q } from "./db";
 import { open, seal } from "./secret";
+import { isSharedMailboxMember, sharedMailboxesOf } from "./memberships";
 
 /**
  * secure: TLS from the first byte (993/465). Otherwise the connection is upgraded with STARTTLS,
@@ -15,7 +16,7 @@ export type Auth = { user: string; pass: string } | { user: string; accessToken:
 
 /** Everything needed to talk to one mailbox. Never sent to the browser. */
 export type Account = {
-  id: string; // "suite" for the suite-hosted mailbox, otherwise the accounts row id
+  id: string; // "suite" for the suite-hosted mailbox, "shared:<address>" for a shared one, otherwise the accounts row id
   owner: string; // the suite user it belongs to
   label: string;
   address: string;
@@ -24,10 +25,12 @@ export type Account = {
   imap: Endpoint;
   smtp: Endpoint;
   auth: Auth;
+  /** Shared mailboxes: the folder tree, inside the member's own login, that is this account. */
+  folderRoot?: string;
 };
 
 /** What the browser is allowed to see about an account. */
-export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "imap" };
+export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "shared" | "imap" };
 
 const bool = (v: string | undefined, d: boolean) => (v === undefined || v === "" ? d : v === "true" || v === "1");
 
@@ -57,6 +60,28 @@ function suiteAccount(email: string, name = ""): Account | null {
     auth,
   };
 }
+
+/**
+ * A shared mailbox (a Stalwart group account) the person is a member of. Stalwart shows a
+ * group's folders to each member under "Shared Folders/<address>/" in their own login and lets
+ * them send from its address, so this is the person's own suite login scoped to that folder
+ * tree (see mailbox.ts), sending as the group. Only for current members (Groups decides).
+ */
+function sharedAccount(email: string, name: string, shared: { address: string; name: string }): Account | null {
+  const suite = suiteAccount(email, name);
+  if (!suite) return null;
+  return {
+    ...suite,
+    id: `shared:${shared.address}`,
+    label: shared.name,
+    address: shared.address,
+    fromName: shared.name === shared.address ? "" : shared.name,
+    folderRoot: `${process.env.MAIL_SHARED_FOLDERS || "Shared Folders"}/${shared.address}`,
+  };
+}
+
+/** True for accounts on the suite's own mail server (the person's mailbox and shared ones). */
+export const onSuiteServer = (acct: Pick<Account, "id">) => acct.id === "suite" || acct.id.startsWith("shared:");
 
 /**
  * How Mail logs in to the suite mail server on a user's behalf.
@@ -103,7 +128,10 @@ function fromRow(r: Row): Account {
 export async function listAccounts(owner: string): Promise<AccountSummary[]> {
   const out: AccountSummary[] = [];
   const suite = suiteAccount(owner);
-  if (suite) out.push({ id: suite.id, label: suite.label, address: suite.address, kind: "suite" });
+  if (suite) {
+    out.push({ id: suite.id, label: suite.label, address: suite.address, kind: "suite" });
+    for (const m of await sharedMailboxesOf(owner)) out.push({ id: `shared:${m.address}`, label: m.name, address: m.address, kind: "shared" });
+  }
   const rows = await q<Row>("SELECT * FROM accounts WHERE owner_email = $1 ORDER BY id", [owner]);
   for (const r of rows) out.push({ id: String(r.id), label: r.label, address: r.address, kind: "imap" });
   return out;
@@ -112,6 +140,10 @@ export async function listAccounts(owner: string): Promise<AccountSummary[]> {
 /** The account if it belongs to this user, else null. */
 export async function getAccount(owner: string, id: string, ownerName = ""): Promise<Account | null> {
   if (id === "suite") return suiteAccount(owner, ownerName);
+  if (id.startsWith("shared:")) {
+    const shared = await isSharedMailboxMember(owner, id.slice("shared:".length));
+    return shared ? sharedAccount(owner, ownerName, shared) : null;
+  }
   if (!/^\d+$/.test(id)) return null;
   const rows = await q<Row>("SELECT * FROM accounts WHERE id = $1 AND owner_email = $2", [id, owner]);
   return rows[0] ? fromRow(rows[0]) : null;

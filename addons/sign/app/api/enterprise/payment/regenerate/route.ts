@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { renderEnterpriseRequestApproved } from "@/lib/email-templates";
 import crypto from "crypto";
+import { publicBase } from "@/lib/urls";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 		});
 
 		// Create new payment link URL
-		const paymentUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/enterprise/payment?token=${paymentToken}&requestId=${requestId}`;
+		const paymentUrl = `${publicBase()}/enterprise/payment?token=${paymentToken}&requestId=${requestId}`;
 
 		// Send email with new payment link
 		const emailTemplate = renderEnterpriseRequestApproved({
