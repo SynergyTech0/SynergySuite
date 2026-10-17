@@ -13,16 +13,18 @@ export type Paginated<T> = {
 /**
  * Generic list fetch for org-scoped resources: `GET /organizations/:orgId/<resource>`.
  * Every SynergyBooks list endpoint returns the same `{ items, total, page, … }` envelope.
+ * `take` raises the page size (the API defaults to 50) for pages that total a whole list.
  */
-export function useOrgList<T>(resource: string, params?: { search?: string; status?: string }) {
+export function useOrgList<T>(resource: string, params?: { search?: string; status?: string; take?: number }) {
   const orgId = useAuth((s) => s.user?.organizationId);
   const qs = new URLSearchParams();
   if (params?.search) qs.set('search', params.search);
   if (params?.status && params.status !== 'ALL') qs.set('status', params.status);
+  if (params?.take) qs.set('take', String(params.take));
   const query = qs.toString();
 
   return useQuery({
-    queryKey: [resource, orgId, params?.search ?? '', params?.status ?? 'ALL'],
+    queryKey: [resource, orgId, params?.search ?? '', params?.status ?? 'ALL', ...(params?.take ? [params.take] : [])],
     queryFn: () => apiFetch<Paginated<T>>(`/organizations/${orgId}/${resource}${query ? `?${query}` : ''}`),
     enabled: !!orgId,
   });

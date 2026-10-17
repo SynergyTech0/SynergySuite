@@ -1,20 +1,14 @@
 import { useState } from 'react';
-import { Plus, Search, Eye, Edit, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { Plus, Search, Eye, Edit, CheckCircle, XCircle, RotateCcw, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
-
-const journalEntries = [
-  { id: 'GJ-2024-000001', date: '2024-01-15', description: 'Customer payment received', debit: 5000, credit: 5000, status: 'POSTED', type: 'GENERAL' },
-  { id: 'GJ-2024-000002', date: '2024-01-14', description: 'Office supplies purchase', debit: 250, credit: 250, status: 'POSTED', type: 'GENERAL' },
-  { id: 'GJ-2024-000003', date: '2024-01-14', description: 'AWS subscription payment', debit: 1200, credit: 1200, status: 'DRAFT', type: 'GENERAL' },
-  { id: 'AJ-2024-000001', date: '2024-01-13', description: 'Depreciation - December', debit: 2500, credit: 2500, status: 'POSTED', type: 'ADJUSTING' },
-  { id: 'GJ-2024-000004', date: '2024-01-12', description: 'Consulting revenue', debit: 8500, credit: 8500, status: 'POSTED', type: 'GENERAL' },
-  { id: 'GJ-2024-000005', date: '2024-01-11', description: 'Rent payment - January', debit: 3000, credit: 3000, status: 'POSTED', type: 'GENERAL' },
-  { id: 'RV-2024-000001', date: '2024-01-10', description: 'Reversal - Duplicate entry', debit: 500, credit: 500, status: 'POSTED', type: 'REVERSING' },
-];
+import { useJournals, journalKind } from '../hooks/useJournals';
+import { formatMoney, formatDate } from '../lib/format';
 
 export function JournalEntries() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const journalsQ = useJournals({ search: searchQuery.trim() || undefined, status: statusFilter, take: 200 });
+  const journalEntries = journalsQ.data?.items ?? [];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -24,6 +18,12 @@ export function JournalEntries() {
         return <span className="badge-warning">Draft</span>;
       case 'VOIDED':
         return <span className="badge-danger"><XCircle className="w-3 h-3 mr-1" />Voided</span>;
+      case 'REVERSED':
+        return <span className="badge bg-orange-100 text-orange-800"><RotateCcw className="w-3 h-3 mr-1" />Reversed</span>;
+      case 'PENDING_APPROVAL':
+        return <span className="badge-warning">Pending approval</span>;
+      case 'APPROVED':
+        return <span className="badge-info">Approved</span>;
       default:
         return <span className="badge">{status}</span>;
     }
@@ -98,14 +98,36 @@ export function JournalEntries() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
+              {journalsQ.isLoading && (
+                <tr>
+                  <td colSpan={8} className="text-center text-gray-400 py-8">
+                    <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {journalsQ.isError && (
+                <tr>
+                  <td colSpan={8} className="text-center text-red-600 py-8">
+                    {(journalsQ.error as Error).message || 'Journal entries could not be loaded.'}
+                  </td>
+                </tr>
+              )}
+              {journalsQ.isSuccess && journalEntries.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center text-gray-500 py-8">
+                    {searchQuery || statusFilter !== 'ALL' ? 'No entries match your filter.' : 'No journal entries yet.'}
+                  </td>
+                </tr>
+              )}
               {journalEntries.map((entry) => (
                 <tr key={entry.id}>
-                  <td className="font-mono text-primary-600">{entry.id}</td>
-                  <td className="text-gray-500">{entry.date}</td>
-                  <td>{entry.description}</td>
-                  <td>{getTypeBadge(entry.type)}</td>
-                  <td className="text-right font-mono">${entry.debit.toLocaleString()}</td>
-                  <td className="text-right font-mono">${entry.credit.toLocaleString()}</td>
+                  <td className="font-mono text-primary-600">{entry.entryNumber ?? entry.journalNumber}</td>
+                  <td className="text-gray-500">{formatDate(entry.journalDate)}</td>
+                  <td>{entry.description || '-'}</td>
+                  <td>{getTypeBadge(journalKind(entry))}</td>
+                  <td className="text-right font-mono">{formatMoney(entry.totalDebit)}</td>
+                  <td className="text-right font-mono">{formatMoney(entry.totalCredit)}</td>
                   <td>{getStatusBadge(entry.status)}</td>
                   <td>
                     <div className="flex items-center gap-1">

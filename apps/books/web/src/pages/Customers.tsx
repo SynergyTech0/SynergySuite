@@ -1,14 +1,23 @@
-import { Plus, Search, Mail, Phone, MoreVertical } from 'lucide-react';
-
-const customers = [
-  { id: '1', name: 'Acme Corp', email: 'billing@acme.com', phone: '(555) 123-4567', balance: 12500, invoices: 5 },
-  { id: '2', name: 'TechStart Inc', email: 'ap@techstart.io', phone: '(555) 234-5678', balance: 8750, invoices: 3 },
-  { id: '3', name: 'Global Solutions', email: 'finance@globalsol.com', phone: '(555) 345-6789', balance: 0, invoices: 8 },
-  { id: '4', name: 'Innovate LLC', email: 'accounts@innovate.co', phone: '(555) 456-7890', balance: 23000, invoices: 12 },
-  { id: '5', name: 'Summit Partners', email: 'billing@summit.com', phone: '(555) 567-8901', balance: 5200, invoices: 2 },
-];
+import { useState } from 'react';
+import { Plus, Search, Mail, Phone, MoreVertical, Loader2 } from 'lucide-react';
+import { useCustomers } from '../hooks/useParties';
+import { useOrgList, num } from '../hooks/useOrgList';
+import type { ApiInvoice } from '../hooks/useInvoices';
+import { formatMoney, initials } from '../lib/format';
 
 export function Customers() {
+  const [search, setSearch] = useState('');
+  const customersQ = useCustomers(search.trim() || undefined);
+  const invoicesQ = useOrgList<ApiInvoice>('invoices', { take: 1000 });
+  const customers = customersQ.data?.items ?? [];
+
+  // Invoice count per customer, from the org's invoices.
+  const invoiceCount = new Map<string, number>();
+  for (const inv of invoicesQ.data?.items ?? []) {
+    if (inv.customer?.id) invoiceCount.set(inv.customer.id, (invoiceCount.get(inv.customer.id) ?? 0) + 1);
+  }
+  const totalReceivables = customers.reduce((sum, c) => sum + num(c.balance), 0);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -24,15 +33,15 @@ export function Customers() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="stat-card">
-          <p className="stat-value">{customers.length}</p>
+          <p className="stat-value">{customersQ.data?.total ?? 0}</p>
           <p className="stat-label">Total Customers</p>
         </div>
         <div className="stat-card">
-          <p className="stat-value text-green-600">${customers.reduce((sum, c) => sum + c.balance, 0).toLocaleString()}</p>
+          <p className="stat-value text-green-600">{formatMoney(totalReceivables)}</p>
           <p className="stat-label">Total Receivables</p>
         </div>
         <div className="stat-card">
-          <p className="stat-value">{customers.reduce((sum, c) => sum + c.invoices, 0)}</p>
+          <p className="stat-value">{invoicesQ.data?.total ?? 0}</p>
           <p className="stat-label">Total Invoices</p>
         </div>
       </div>
@@ -41,7 +50,13 @@ export function Customers() {
         <div className="card-header">
           <div className="relative max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Search customers..." className="input pl-9" />
+            <input
+              type="text"
+              placeholder="Search customers..."
+              className="input pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         </div>
         <div className="table-container">
@@ -56,13 +71,35 @@ export function Customers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
+              {customersQ.isLoading && (
+                <tr>
+                  <td colSpan={5} className="text-center text-gray-400 py-8">
+                    <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {customersQ.isError && (
+                <tr>
+                  <td colSpan={5} className="text-center text-red-600 py-8">
+                    {(customersQ.error as Error).message || 'Customers could not be loaded.'}
+                  </td>
+                </tr>
+              )}
+              {customersQ.isSuccess && customers.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center text-gray-500 py-8">
+                    {search ? 'No customers match your search.' : 'No customers yet.'}
+                  </td>
+                </tr>
+              )}
               {customers.map((customer) => (
                 <tr key={customer.id}>
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
                         <span className="text-sm font-medium text-primary-700">
-                          {customer.name.split(' ').map(n => n[0]).join('')}
+                          {initials(customer.name)}
                         </span>
                       </div>
                       <span className="font-medium">{customer.name}</span>
@@ -70,20 +107,25 @@ export function Customers() {
                   </td>
                   <td>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Mail className="w-3 h-3" />
-                        {customer.email}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Phone className="w-3 h-3" />
-                        {customer.phone}
-                      </div>
+                      {customer.email && (
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Mail className="w-3 h-3" />
+                          {customer.email}
+                        </div>
+                      )}
+                      {customer.phone && (
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Phone className="w-3 h-3" />
+                          {customer.phone}
+                        </div>
+                      )}
+                      {!customer.email && !customer.phone && <span className="text-sm text-gray-400">-</span>}
                     </div>
                   </td>
-                  <td>{customer.invoices}</td>
+                  <td>{invoiceCount.get(customer.id) ?? 0}</td>
                   <td className="text-right font-mono">
-                    <span className={customer.balance > 0 ? 'text-green-600' : ''}>
-                      ${customer.balance.toLocaleString()}
+                    <span className={num(customer.balance) > 0 ? 'text-green-600' : ''}>
+                      {formatMoney(num(customer.balance))}
                     </span>
                   </td>
                   <td>

@@ -1,6 +1,193 @@
-import { useState } from 'react';
-import { Building2, CreditCard, Users, Bell, Shield, Database, Sparkles, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, CreditCard, Users, Bell, Shield, Database, Sparkles, Save, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
+import { useOrganization, useUpdateOrganization } from '../hooks/useOrganization';
+import { useCompanies, useMembers } from '../hooks/usePlanning';
+import { useAuth } from '../stores/authStore';
+import { initials } from '../lib/format';
+
+const ENTITY_TYPES = [
+  { value: 'LLC', label: 'LLC' },
+  { value: 'S_CORP', label: 'S-Corporation' },
+  { value: 'C_CORP', label: 'C-Corporation' },
+  { value: 'PARTNERSHIP', label: 'Partnership' },
+  { value: 'SOLE_PROPRIETORSHIP', label: 'Sole Proprietorship' },
+  { value: 'NON_PROFIT', label: 'Non-profit' },
+  { value: 'TRUST', label: 'Trust' },
+  { value: 'ESTATE', label: 'Estate' },
+];
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Company details from the organization record, saved back with PUT /organizations/:id. */
+function CompanyForm() {
+  const org = useOrganization();
+  const save = useUpdateOrganization();
+  const [form, setForm] = useState({ name: '', entityType: 'LLC', taxId: '', fiscalYearEnd: 12 });
+
+  useEffect(() => {
+    if (org.data) {
+      setForm({
+        name: org.data.name ?? '',
+        entityType: org.data.entityType ?? 'LLC',
+        taxId: org.data.taxId ?? '',
+        fiscalYearEnd: Number(org.data.fiscalYearEnd) || 12,
+      });
+    }
+  }, [org.data]);
+
+  if (org.isLoading) {
+    return (
+      <div className="card-body text-center text-sm text-gray-400 py-12">
+        <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+        Loading…
+      </div>
+    );
+  }
+  if (org.isError) {
+    return <div className="card-body text-sm text-red-600">{(org.error as Error).message || 'Company details could not be loaded.'}</div>;
+  }
+
+  return (
+    <form
+      className="card-body space-y-6"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate({
+          name: form.name.trim(),
+          entityType: form.entityType,
+          fiscalYearEnd: form.fiscalYearEnd,
+          ...(form.taxId.trim() ? { ein: form.taxId.trim() } : {}),
+        });
+      }}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+          <input type="text" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Legal Entity Type</label>
+          <select className="input" value={form.entityType} onChange={(e) => setForm({ ...form, entityType: e.target.value })}>
+            {ENTITY_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">EIN / Tax ID</label>
+          <input
+            type="text"
+            className="input"
+            placeholder="XX-XXXXXXX"
+            value={form.taxId}
+            onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Fiscal Year End</label>
+          <select
+            className="input"
+            value={form.fiscalYearEnd}
+            onChange={(e) => setForm({ ...form, fiscalYearEnd: Number(e.target.value) })}
+          >
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i + 1}>
+                {m} {new Date(2001, i + 1, 0).getDate()}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {save.isSuccess && <span className="text-sm text-green-700">Saved.</span>}
+        {save.isError && <span className="text-sm text-red-600">{(save.error as Error).message || 'Could not save.'}</span>}
+        <button className="btn-primary" disabled={save.isPending}>
+          {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          Save Changes
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** People with access to the current company. */
+function TeamMembers() {
+  const navigate = useNavigate();
+  const { data: companies } = useCompanies();
+  const current = companies?.find((c) => c.current);
+  const members = useMembers(current?.id);
+  const me = useAuth((s) => s.user?.id);
+
+  return (
+    <div className="card">
+      <div className="card-header flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Team Members</h2>
+        <button className="btn-primary text-sm" onClick={() => navigate('/consolidation')}>
+          <Users className="w-4 h-4 mr-2" />
+          Invite User
+        </button>
+      </div>
+      <div className="table-container">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {(members.isLoading || !current) && (
+              <tr>
+                <td colSpan={3} className="text-center text-gray-400 py-8">
+                  <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {members.isError && (
+              <tr>
+                <td colSpan={3} className="text-center text-red-600 py-8">
+                  {(members.error as Error).message || 'Team members could not be loaded.'}
+                </td>
+              </tr>
+            )}
+            {(members.data ?? []).map((m) => (
+              <tr key={m.userId}>
+                <td>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-medium text-primary-700">{initials(m.name || m.email)}</span>
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {m.name || m.email}
+                        {m.userId === me && <span className="text-gray-400 font-normal"> (you)</span>}
+                      </p>
+                      <p className="text-sm text-gray-500">{m.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span className="badge bg-purple-100 text-purple-800">
+                    {m.role.charAt(0) + m.role.slice(1).toLowerCase()}
+                  </span>
+                </td>
+                <td>
+                  {m.active ? <span className="badge-success">Active</span> : <span className="badge bg-gray-100 text-gray-600">Inactive</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 const tabs = [
   { id: 'company', name: 'Company', icon: Building2 },
@@ -52,52 +239,7 @@ export function Settings() {
               <div className="card-header">
                 <h2 className="text-lg font-semibold">Company Information</h2>
               </div>
-              <div className="card-body space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                    <input type="text" className="input" defaultValue="Acme Corporation" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Legal Entity Type</label>
-                    <select className="input">
-                      <option>LLC</option>
-                      <option>S-Corporation</option>
-                      <option>C-Corporation</option>
-                      <option>Partnership</option>
-                      <option>Sole Proprietorship</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">EIN / Tax ID</label>
-                    <input type="text" className="input" defaultValue="XX-XXXXXXX" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Fiscal Year End</label>
-                    <select className="input">
-                      <option>December 31</option>
-                      <option>March 31</option>
-                      <option>June 30</option>
-                      <option>September 30</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Business Address</label>
-                  <input type="text" className="input mb-2" placeholder="Street Address" />
-                  <div className="grid grid-cols-3 gap-2">
-                    <input type="text" className="input" placeholder="City" />
-                    <input type="text" className="input" placeholder="State" />
-                    <input type="text" className="input" placeholder="ZIP" />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button className="btn-primary">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </button>
-                </div>
-              </div>
+              <CompanyForm />
             </div>
           )}
 
@@ -163,63 +305,7 @@ export function Settings() {
             </div>
           )}
 
-          {activeTab === 'users' && (
-            <div className="card">
-              <div className="card-header flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Team Members</h2>
-                <button className="btn-primary text-sm">
-                  <Users className="w-4 h-4 mr-2" />
-                  Invite User
-                </button>
-              </div>
-              <div className="table-container">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Last Active</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    <tr>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                            <span className="text-xs font-medium text-primary-700">JD</span>
-                          </div>
-                          <div>
-                            <p className="font-medium">John Doe</p>
-                            <p className="text-sm text-gray-500">john@acme.com</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td><span className="badge bg-purple-100 text-purple-800">Admin</span></td>
-                      <td><span className="badge-success">Active</span></td>
-                      <td className="text-gray-500">Just now</td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <span className="text-xs font-medium text-green-700">JS</span>
-                          </div>
-                          <div>
-                            <p className="font-medium">Jane Smith</p>
-                            <p className="text-sm text-gray-500">jane@acme.com</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td><span className="badge bg-blue-100 text-blue-800">Accountant</span></td>
-                      <td><span className="badge-success">Active</span></td>
-                      <td className="text-gray-500">2 hours ago</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {activeTab === 'users' && <TeamMembers />}
 
           {activeTab !== 'company' && activeTab !== 'ai' && activeTab !== 'users' && (
             <div className="card">

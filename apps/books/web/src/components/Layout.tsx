@@ -22,6 +22,7 @@ import clsx from 'clsx';
 import { TopBar } from './TopBar';
 import { SuiteBar } from './SuiteBar';
 import { QuickCreateMenu } from './QuickCreateMenu';
+import { useTaxAiStatus } from '../hooks/useTaxAi';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -72,6 +73,7 @@ const navigation = [
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const taxAi = useTaxAiStatus();
   const [expandedItems, setExpandedItems] = useState<string[]>([
     'Receivables',
     'Payables',
@@ -195,7 +197,9 @@ export function Layout() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-accent-700">Tax Intelligence</p>
-              <p className="text-xs text-accent-600">Active</p>
+              <p className="text-xs text-accent-600">
+                {taxAi.isLoading ? 'Checking…' : taxAi.data?.configured ? 'Active' : 'Not configured'}
+              </p>
             </div>
           </div>
         </div>
