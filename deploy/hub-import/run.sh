@@ -10,7 +10,8 @@
 #
 # Each <part>.sql starts with a line naming the old database container and the suite
 # service whose importer reads it, e.g. `-- hub-import: container=saauth-db service=auth`,
-# plus script=<path> when the importer isn't scripts/import-hub.mjs in that container.
+# plus script=<path> when the importer isn't scripts/import-hub.mjs in that container, and
+# user=<role> db=<database> when the old container doesn't name them in POSTGRES_USER/POSTGRES_DB.
 # Set HUB_DB_CONTAINER if your old container has another name. Parts: ls deploy/hub-import/*.sql
 #
 # A part whose files live outside the database (on a volume, in object storage) also has a
@@ -34,10 +35,15 @@ service=$(sed -n 's/.*service=\([^ ]*\).*/\1/p' <<<"$header")
 [ -n "$container" ] && [ -n "$service" ] || die "$sql must start with: -- hub-import: container=<name> service=<name>"
 script=$(sed -n 's/.*script=\([^ ]*\).*/\1/p' <<<"$header")
 container=${HUB_DB_CONTAINER:-$container}
+dbuser=$(sed -n 's/.* user=\([^ ]*\).*/\1/p' <<<"$header")
+dbname=$(sed -n 's/.* db=\([^ ]*\).*/\1/p' <<<"$header")
+# Expanded inside the old container when the header doesn't name them, as before.
+pg_user=${dbuser:-'${POSTGRES_USER:-postgres}'}
+pg_db=${dbname:-'${POSTGRES_DB:-${POSTGRES_USER:-postgres}}'}
 
 files=$here/$part.files.sh
 {
-  ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-\${POSTGRES_USER:-postgres}}\"'" < "$sql"
+  ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"$pg_user\" -d \"$pg_db\"'" < "$sql"
   if [ -f "$files" ]; then
     echo '#hub-files'
     ssh "$target" "HUB_FILES_CONTAINER=${HUB_FILES_CONTAINER:-} bash -s" < "$files"

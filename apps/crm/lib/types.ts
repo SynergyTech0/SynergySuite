@@ -69,7 +69,14 @@ export type Account = Audit & {
   website: string;
   phone: string;
   address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  lat: number | null;
+  lng: number | null;
   type: AccountType;
+  /** Other facts about the account (label -> text), e.g. what an import brought that has no field here. */
+  details: Record<string, string>;
 };
 
 export type Contact = Audit & {

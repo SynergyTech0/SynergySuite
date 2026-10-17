@@ -5,11 +5,21 @@ import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
 import { OWNER_NAME, audit, merged, ownerFor, type AuditRow } from "./records";
 import type { Contact, Ctx } from "./types";
+import { pageSize } from "./paging";
 import { UserError, isUuid, likeTerm, optionalEmail, required, text } from "./util";
 
 export type ContactRow = AuditRow & { id: string; account_id: string; account_name: string; name: string; email: string; phone: string; title: string };
 
 const SELECT = `SELECT c.*, a.name AS account_name, ${OWNER_NAME("c")} FROM contacts c JOIN accounts a ON a.id = c.account_id`;
+
+/**
+ * The ids of contacts whose name, email, phone or title, or whose account's name, is like the
+ * pattern in parameter `p`. Both sides use trigram indexes (lib/db.ts), so a search doesn't read
+ * every contact.
+ */
+export const CONTACT_MATCH = (p: string) =>
+  `SELECT sc.id FROM contacts sc WHERE sc.search_text ILIKE ${p}
+   UNION SELECT sc.id FROM contacts sc JOIN accounts sa ON sa.id = sc.account_id WHERE sa.name ILIKE ${p}`;
 
 export function contactRow(ctx: Ctx, r: ContactRow): Contact {
   return {
@@ -33,7 +43,7 @@ async function fields(ctx: Ctx, b: Record<string, unknown>) {
   };
 }
 
-export type ListContacts = { q?: string; accountId?: string; mine?: boolean };
+export type ListContacts = { q?: string; accountId?: string; mine?: boolean; offset?: number; limit?: number };
 
 export async function list(ctx: Ctx, f: ListContacts = {}): Promise<Contact[]> {
   const params: unknown[] = [];
@@ -41,7 +51,7 @@ export async function list(ctx: Ctx, f: ListContacts = {}): Promise<Contact[]> {
   if (f.q) {
     params.push(likeTerm(f.q));
     const p = `$${params.length}`;
-    where.push(`(c.name ILIKE ${p} OR c.email ILIKE ${p} OR c.title ILIKE ${p} OR c.phone ILIKE ${p} OR a.name ILIKE ${p})`);
+    where.push(`c.id IN (${CONTACT_MATCH(p)})`);
   }
   if (f.accountId && isUuid(f.accountId)) {
     params.push(f.accountId);
@@ -51,7 +61,11 @@ export async function list(ctx: Ctx, f: ListContacts = {}): Promise<Contact[]> {
     params.push(ctx.email);
     where.push(`c.owner = $${params.length}`);
   }
-  const rows = await q<ContactRow>(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(c.name) LIMIT 1000`, params);
+  params.push(pageSize(f.limit), Math.max(0, Math.floor(Number(f.offset) || 0)));
+  const rows = await q<ContactRow>(
+    `${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(c.name), c.id LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
+  );
   return rows.map((r) => contactRow(ctx, r));
 }
 

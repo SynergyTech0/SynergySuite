@@ -26,7 +26,8 @@ export const GET = route(async (ctx, req, { params }: Params<"kind">) => {
   if (kind === "accounts") {
     return download(toCsv(await accounts.list(ctx, f), [
       ["Name", (r) => r.name], ["Type", (r) => label(r.type)], ["Industry", (r) => r.industry], ["Website", (r) => r.website],
-      ["Phone", (r) => r.phone], ["Address", (r) => r.address], ["Owner", (r) => r.owner], ["Updated", (r) => r.updatedAt],
+      ["Phone", (r) => r.phone], ["Address", (r) => r.address], ["City", (r) => r.city], ["State", (r) => r.state],
+      ["ZIP", (r) => r.postalCode], ["Owner", (r) => r.owner], ["Updated", (r) => r.updatedAt],
     ]), "accounts.csv");
   }
   if (kind === "contacts") {

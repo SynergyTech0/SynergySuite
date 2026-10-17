@@ -101,6 +101,22 @@ const site = (url: string) => url ? <a href={url} target="_blank" rel="noopener 
 const mail = (email: string) => email ? <a href={`mailto:${email}`}>{email}</a> : "";
 const tel = (phone: string) => phone ? <a href={`tel:${phone.replace(/[^\d+]/g, "")}`}>{phone}</a> : "";
 
+/** Street, then "City, ST 12345", with a map link when the account has a position. */
+function place(a: Account): React.ReactNode {
+  const town = [[a.city, a.state].filter(Boolean).join(", "), a.postalCode].filter(Boolean).join(" ");
+  const lines = [a.address, town].filter(Boolean).join("\n");
+  const map = a.lat !== null && a.lng !== null
+    ? `https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=17/${a.lat}/${a.lng}`
+    : "";
+  if (!lines && !map) return "";
+  return (
+    <>
+      {lines ? <span className="pre">{lines}</span> : null}
+      {map ? <>{lines ? <br /> : null}<a href={map} target="_blank" rel="noopener noreferrer">Map</a></> : null}
+    </>
+  );
+}
+
 export function AccountDetail({ app, id, onChange }: DetailProps) {
   const [a, reload, error] = useRecord<Account & { contacts: Contact[]; opportunities: Opportunity[] }>(`/api/accounts/${id}`, app);
   const [editing, setEditing] = useState<null | "account" | "contact" | "opportunity">(null);
@@ -117,8 +133,14 @@ export function AccountDetail({ app, id, onChange }: DetailProps) {
     <div className="card">
       <Header app={app} view="accounts" name={a.name} sub={a.industry} square badges={<Badge value={a.type} />} editable={a.editable} onEdit={() => setEditing("account")} onDelete={askDelete} />
       <section className="panel">
-        <Facts items={[["Website", site(a.website)], ["Phone", tel(a.phone)], ["Owner", a.ownerName], ["Address", a.address ? <span className="pre">{a.address}</span> : ""], ["Created", formatDate(a.createdAt)], ["Updated", formatDate(a.updatedAt)]]} />
+        <Facts items={[["Website", site(a.website)], ["Phone", tel(a.phone)], ["Owner", a.ownerName], ["Address", place(a)], ["Created", formatDate(a.createdAt)], ["Updated", formatDate(a.updatedAt)]]} />
       </section>
+      {Object.keys(a.details).length ? (
+        <section className="panel">
+          <h3>Details</h3>
+          <Facts items={Object.entries(a.details).sort(([x], [y]) => x.localeCompare(y)).map(([k, v]) => [k, <span key={k} className="pre">{v}</span>])} />
+        </section>
+      ) : null}
       <section className="panel">
         <h3>Contacts ({a.contacts.length}) <button className="btn small ghost" onClick={() => setEditing("contact")}><Plus size={14} /> Add</button></h3>
         {a.contacts.length ? (
