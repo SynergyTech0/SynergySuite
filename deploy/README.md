@@ -156,6 +156,37 @@ Not included:
 - `/api/svc/*` on groups, chat, drive and mail is answered only on the compose network (with `PROXY_SHARED_SECRET`); the gateway returns 404 for it.
 - `GROUPS_ADMIN_EMAILS` may manage and restore every group; `GROUPS_CREATE=admins` keeps creating groups to them.
 
+## The Hub and linked apps
+
+Account's Hub (`https://auth.<SUITE_DOMAIN>/hub`, also "All apps" at the bottom of every app's launcher) lists the suite apps plus any **linked apps**: tools the company runs somewhere else. Add, hide, restrict and grant them in Account > Admin > Apps. A restricted app shows only to the people granted it.
+
+### Moving from an older Synergy Hub
+
+If you ran the standalone SynergyAuth Hub before the suite, bring its people and apps across from the repository root:
+
+```bash
+deploy/hub-import/run.sh auth root@your-hub-server --dry-run   # see what would happen
+deploy/hub-import/run.sh auth root@your-hub-server
+```
+
+It reads the hub's database over your own SSH access (container `saauth-db`, or set `HUB_DB_CONTAINER`). People keep their passwords. Anyone who already has an account here keeps it unchanged unless you add `--overwrite-passwords`. Two-step sign-in has to be set up again, because the hub encrypted those secrets with its own key. Hub apps the suite now covers (Boards, Docs, Cal, Books and so on; the list is `COVERED` in `apps/auth/scripts/import-hub.mjs`) are replaced by their suite apps. Every other hub app becomes a linked app at its old address, with its grants. Running it again only adds what is missing.
+
+Then the hub's apps, one part at a time, each with `--dry-run` first (`ls deploy/hub-import/*.sql` lists them). Run `auth` first: the other parts find people by email.
+
+```bash
+deploy/hub-import/run.sh planner root@your-apps-server --dry-run
+```
+
+- `planner` (SynergyBoards, container `sboards-db`): SynergyBoards workspaces, boards, members, lists, cards (issue keys, sprints, assignees, labels, checklists, comments, links, custom fields, work logs), activity history and automations, into Planner as they were. People are matched by email; anyone not yet in Planner gets their boards when they first sign in. Uploaded attachment files stay on the hub (link and Drive attachments come across), as do pending invites and notifications.
+- `trust` (SynergyTrust, container `strust-db`): controls, evidence, monitors and their run history, policies, risks, vendors, personnel, assets, GDPR records, audits, agents, the trust centre and both logs move into the suite's Trust organisation (the only one, the one named with `--tenant <slug>`, or a new one under the hub's name). People and memberships match by email and sign in through the suite; Trust passwords, second factors, sessions and invitations stay behind. The framework catalog is matched by key, not copied. The audit trail is re-chained in the suite with original times, ending in a `hub.imported` event that records the hub chain's head hash. A live collector agent keeps its token: point it at `https://trust.<domain>`.
+- `books` (SynergyBooks, container `synergybooks-db`): the hub's organization becomes a new company in Books with its chart of accounts, journals (the trial balance is checked against the hub's before anything is saved), AI tax classifications, customers, invoices, bank accounts and bank transactions, and its people (matched by email) get access to it. Add `--into-org <company id>` to put it into a company you already have instead (accounts are matched by number; journal and invoice numbers already in use get a `HUB-` prefix). The IRC library the Tax AI reads comes along too, unless it is already there or you add `--skip-tax-library`. Bank accounts come with their last four digits only, as the hub kept them, and with their transaction history; new transactions sync only if Books can reach the payments service that linked them (`PAY_SERVICE_URL` and `PAY_SERVICE_TOKEN` in the Books container), otherwise link the bank again in Books.
+- `bookings` (Booking by Synergy, container `scadence-db`): each team becomes a booking page at its team address with its members as staff, and each person with event types of their own gets a page at their user name with their weekly availability as its hours. Event types become services with the same address, length, buffers, location, price, questions and email reminders; round-robin types are booked with anyone available. Hidden and inactive types arrive switched off. Staff are matched to suite accounts by email; if someone signs in here with another address, add `--map-email old@example.com=new@example.com` so the pages are theirs. Bookings, calendar connections and webhooks stay behind, and booking links move to `bookings.<domain>/book/<page>/<service>`, so update the links on your sites.
+- `sign` (SynergySign, container `ssign-db`): documents with their signers, fields, audit trail and notifications, and the original and signed PDFs, which `sign.files.sh` reads from the old app's volume (container `synergysign-app`, or set `HUB_FILES_CONTAINER`). People are matched by email; anyone new gets a Sign user and signs in with their suite account. Sign admins still come from `SIGN_ADMIN_EMAILS`. Plans and billing, affiliate and enterprise records, templates and contract events the hub never sent stay behind. The PDFs are written to Sign's volume (`LOCAL_STORAGE_PATH`), not to an S3 backup.
+- `docs` (SynergyDocs, container `sdocs-db`): every document, spreadsheet and presentation with its sharing, comments and version history. Office grew out of SynergyDocs and stores them the same way, so they open as they were, in this suite's organization (`DOCS_ORG`). Open Office once before importing so it has set up its database.
+- `drive` (SynergyDrive, container `sdrive-postgres`): folders, files and their versions into each owner's own files; `drive.files.sh` reads the contents from the old object storage through the old API container (`sdrive-api`). The old Drive knew people only by an id made from their email, so they are matched against the suite's accounts and anyone already in Drive; add `--email someone@example.com` for anyone it lists as unknown. A folder that already exists by name is used as it is, and a file whose name is taken gets "name (1)". The hub's recycle bin and shared drives stay behind, and imported files don't count against quotas. Open Drive once before importing.
+
+Each part keeps the hub's ids, so running it again skips what is already here, and something deleted here after an import comes back if you import again. The files of `sign` and `drive` travel inside the same SSH stream as the rows (base64, about a third larger) and are never written to disk on the way.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.

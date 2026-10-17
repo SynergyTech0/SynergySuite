@@ -12,17 +12,18 @@ async function post(url: string, data: Record<string, string>) {
 }
 
 export default function AdminConsole() {
-  const [tab, setTab] = useState<'users' | 'clients' | 'audit' | 'settings'>('users');
+  const [tab, setTab] = useState<'users' | 'apps' | 'clients' | 'audit' | 'settings'>('users');
   return (
     <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        {(['users', 'clients', 'audit', 'settings'] as const).map((t) => (
+        {(['users', 'apps', 'clients', 'audit', 'settings'] as const).map((t) => (
           <button key={t} className={`inline ${tab === t ? '' : 'secondary'}`} onClick={() => setTab(t)}>
             {t[0].toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
       {tab === 'users' && <Users />}
+      {tab === 'apps' && <Apps />}
       {tab === 'clients' && <Clients />}
       {tab === 'audit' && <Audit />}
       {tab === 'settings' && <Settings />}
@@ -220,6 +221,116 @@ function Users() {
               </tr>
             ))}
           </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+type HubApp = {
+  id: string; slug: string; name: string; description: string | null; url: string; category: string | null;
+  sort: number; open_to_all: boolean; disabled: boolean; suite: boolean; granted: string[];
+};
+
+/*
+ * The tiles people see in the Hub and the launcher. Suite apps are listed
+ * automatically; linked apps are anything else the company uses (another
+ * server, a vendor's site). A restricted app shows only to people granted it.
+ */
+function Apps() {
+  const [apps, setApps] = useState<HubApp[]>([]);
+  const [form, setForm] = useState({ name: '', slug: '', url: '', category: '', open_to_all: '1' });
+  const [grant, setGrant] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState('');
+
+  const load = async () => {
+    const r = await fetch('/api/admin/apps');
+    if (r.ok) setApps((await r.json()).apps);
+  };
+  useEffect(() => { load(); }, []);
+
+  const act = async (payload: Record<string, string>) => {
+    const r = await post('/api/admin/apps', payload);
+    setMsg(r.status === 200 ? '' : r.body.error ?? 'failed');
+    load();
+    return r.status === 200;
+  };
+
+  const create = async () => {
+    if (await act({ action: 'create', ...form })) setForm({ name: '', slug: '', url: '', category: '', open_to_all: '1' });
+  };
+
+  const linked = apps.filter((a) => !a.suite);
+  const suite = apps.filter((a) => a.suite);
+
+  const row = (a: HubApp) => (
+    <tr key={a.id}>
+      <td>{a.name}</td>
+      <td className="mono">{a.url}</td>
+      <td>{a.category}</td>
+      <td>
+        <span className={`pill ${a.disabled ? 'bad' : 'on'}`}>{a.disabled ? 'hidden' : 'shown'}</span>{' '}
+        <span className={`pill ${a.open_to_all ? 'on' : 'off'}`}>{a.open_to_all ? 'everyone' : 'restricted'}</span>
+        {!a.open_to_all && (
+          <div className="sub" style={{ marginTop: 6 }}>
+            {a.granted.length ? a.granted.map((e) => (
+              <span key={e} style={{ marginRight: 8 }}>
+                {e} <button className="inline secondary" onClick={() => act({ action: 'revoke', id: a.id, email: e })}>×</button>
+              </span>
+            )) : 'Nobody yet'}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <input placeholder="email" value={grant[a.id] ?? ''} onChange={(e) => setGrant({ ...grant, [a.id]: e.target.value })} />
+              <button className="inline secondary" onClick={async () => { if (await act({ action: 'grant', id: a.id, email: grant[a.id] ?? '' })) setGrant({ ...grant, [a.id]: '' }); }}>Grant</button>
+            </div>
+          </div>
+        )}
+      </td>
+      <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className="inline secondary" onClick={() => act({ action: 'update', id: a.id, disabled: a.disabled ? '0' : '1' })}>
+          {a.disabled ? 'Show' : 'Hide'}
+        </button>
+        <button className="inline secondary" onClick={() => act({ action: 'update', id: a.id, open_to_all: a.open_to_all ? '0' : '1' })}>
+          {a.open_to_all ? 'Restrict' : 'Open to all'}
+        </button>
+        {!a.suite && <button className="inline secondary" onClick={() => act({ action: 'delete', id: a.id })}>Remove</button>}
+      </td>
+    </tr>
+  );
+
+  return (
+    <>
+      <div className="panel">
+        <h2>Add a linked app</h2>
+        <p className="sub">Linked apps sit next to the suite apps in the Hub, for tools that run somewhere else.</p>
+        {msg && <div className="error">{msg}</div>}
+        <label>Name</label>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <label>Short name (lowercase, used in links)</label>
+        <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+        <label>Address</label>
+        <input value={form.url} placeholder="https://" onChange={(e) => setForm({ ...form, url: e.target.value })} />
+        <label>Category</label>
+        <input value={form.category} placeholder="Work, Sales, Finance…" onChange={(e) => setForm({ ...form, category: e.target.value })} />
+        <label style={{ marginTop: 12 }}>
+          <input type="checkbox" style={{ width: 'auto', marginRight: 6 }}
+            checked={form.open_to_all === '1'}
+            onChange={(e) => setForm({ ...form, open_to_all: e.target.checked ? '1' : '0' })} />
+          Everyone can see it (untick to grant people one by one)
+        </label>
+        <button className="inline" style={{ marginTop: 14 }} onClick={create}>Add</button>
+      </div>
+      <div className="panel">
+        <h2>Linked apps</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Address</th><th>Category</th><th>Who sees it</th><th /></tr></thead>
+          <tbody>{linked.map(row)}</tbody>
+        </table>
+      </div>
+      <div className="panel">
+        <h2>Suite apps</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Address</th><th>Category</th><th>Who sees it</th><th /></tr></thead>
+          <tbody>{suite.map(row)}</tbody>
         </table>
       </div>
     </>
