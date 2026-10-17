@@ -1,7 +1,7 @@
 import type { Platform } from "./queries";
 
 /** osquery platforms plus iPhone and iPad (ios), which report through Apple MDM. */
-export type DevicePlatform = Platform | "ios";
+export type DevicePlatform = Platform | "ios" | "android";
 import { UserError } from "./util";
 
 /**
@@ -31,14 +31,14 @@ export type Rule =
 export type RuleCheck = Rule["check"];
 
 export const RULES: { check: RuleCheck; label: string; describe: string; platforms: DevicePlatform[] }[] = [
-  { check: "disk_encryption", label: "Disk encryption", describe: "BitLocker on C:, FileVault, an encrypted root volume on Linux, or data protection on with a passcode on iPhone and iPad.", platforms: ["windows", "darwin", "linux", "ios"] },
+  { check: "disk_encryption", label: "Disk encryption", describe: "BitLocker on C:, FileVault, an encrypted root volume on Linux, data protection on with a passcode on iPhone and iPad, or storage encryption on Android.", platforms: ["windows", "darwin", "linux", "ios", "android"] },
   { check: "firewall", label: "Firewall on", describe: "Windows Firewall, the macOS application firewall, or ufw, firewalld or nftables running.", platforms: ["windows", "darwin", "linux"] },
   { check: "antivirus", label: "Antivirus running", describe: "Windows Security reports antivirus as good; on Linux a known scanner is running (ClamAV, Defender, Falcon).", platforms: ["windows", "linux"] },
-  { check: "screen_lock", label: "Screen lock", describe: "A password is needed after the screen saver or a period of inactivity; on iPhone and iPad, a passcode is set.", platforms: ["windows", "darwin", "ios"] },
-  { check: "system_protection", label: "System protection", describe: "System Integrity Protection and Gatekeeper on (macOS), User Account Control on (Windows).", platforms: ["windows", "darwin"] },
+  { check: "screen_lock", label: "Screen lock", describe: "A password is needed after the screen saver or a period of inactivity; on iPhone, iPad and Android, a passcode, PIN or pattern is set.", platforms: ["windows", "darwin", "ios", "android"] },
+  { check: "system_protection", label: "System protection", describe: "System Integrity Protection and Gatekeeper on (macOS), User Account Control on (Windows), and a genuine, unmodified system on Android (Play Integrity).", platforms: ["windows", "darwin", "android"] },
   { check: "auto_update", label: "Automatic updates", describe: "Windows Security reports automatic updates as good.", platforms: ["windows"] },
-  { check: "os_min_version", label: "Minimum OS version", describe: "The operating system is at least this version.", platforms: ["windows", "darwin", "linux", "ios"] },
-  { check: "checked_in", label: "Checked in recently", describe: "The device reported to Devices within this many days.", platforms: ["windows", "darwin", "linux", "ios"] },
+  { check: "os_min_version", label: "Minimum OS version", describe: "The operating system is at least this version.", platforms: ["windows", "darwin", "linux", "ios", "android"] },
+  { check: "checked_in", label: "Checked in recently", describe: "The device reported to Devices within this many days.", platforms: ["windows", "darwin", "linux", "ios", "android"] },
   { check: "max_admins", label: "Limit administrators", describe: "No more than this many local administrator accounts.", platforms: ["windows", "darwin", "linux"] },
   { check: "max_vulnerabilities", label: "Limit vulnerabilities", describe: "No more than this many known vulnerabilities at this severity or worse in installed packages.", platforms: ["linux"] },
   { check: "no_open_alerts", label: "No open threats", describe: "No unresolved security alert at this severity or worse.", platforms: ["windows", "darwin", "linux"] },

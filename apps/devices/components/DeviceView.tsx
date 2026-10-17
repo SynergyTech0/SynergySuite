@@ -65,8 +65,8 @@ export function DeviceView({ app, id, tab }: { app: AppCtx; id: string; tab: str
         <Modal title={`Retire ${d.hostname}?`} onClose={() => setRetiring(false)}>
           <div className="form">
             <p>The device stops reporting and leaves every list. Its alerts and history are kept. To manage it again, enroll it again.</p>
-            {m?.status === "enrolled" ? <p className="small">It is also told to remove its management profile, which takes away the settings and apps Devices installed. Its own data stays.</p> : null}
-            {d.host_identifier.startsWith("mdm:") ? null : <p className="muted small">Retiring doesn&apos;t remove osquery from the computer; uninstall it there if it is no longer needed.</p>}
+            {m?.status === "enrolled" ? <p className="small">{d.platform === "android" ? (m.enrollment_type === "work_profile" ? "Its work profile is removed, with the work apps and data in it. Personal apps and data stay." : "A company phone stays managed until it's erased; erase it to release it.") : "It is also told to remove its management profile, which takes away the settings and apps Devices installed. Its own data stays."}</p> : null}
+            {d.host_identifier.startsWith("mdm:") || d.host_identifier.startsWith("android:") ? null : <p className="muted small">Retiring doesn&apos;t remove osquery from the computer; uninstall it there if it is no longer needed.</p>}
             <div className="actions">
               <button className="btn" onClick={() => setRetiring(false)}>Cancel</button>
               <button className="btn danger" onClick={() => api(`/api/devices/${id}/retire`, { method: "POST" }).then(() => { app.say(`${d.hostname} retired`); app.go({ view: back }); }).catch((e) => app.say(e.message))}>Retire</button>

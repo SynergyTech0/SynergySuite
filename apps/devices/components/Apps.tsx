@@ -1,13 +1,16 @@
 "use client";
-// Apps for managed devices: App Store apps for iPhone, iPad and Mac, and signed .pkg installers for Macs.
+// Apps for managed devices: App Store apps for iPhone, iPad and Mac, signed .pkg installers for Macs,
+// and managed Google Play apps for Android.
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { api, useData } from "./client";
 import { Modal } from "./Modal";
 import { type AppCtx, Badge, Empty, PLATFORM } from "./shared";
 
+const SOURCE = { app_store: "App Store", package: "Package", play: "Google Play" } as const;
+
 export type CatalogApp = {
-  id: string; name: string; platform: string; source: "app_store" | "package"; store_id: string | null; bundle_id: string; version: string;
+  id: string; name: string; platform: string; source: "app_store" | "package" | "play"; store_id: string | null; bundle_id: string; version: string;
   url: string | null; auto_install: boolean; installed: number;
 };
 
@@ -26,7 +29,7 @@ export function Apps({ app }: { app: AppCtx }) {
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} /> Add app</button>
       </div>
       {!apps ? <p className="muted">Loading…</p> : !apps.length ? (
-        <section className="panel"><Empty><h2>No apps yet</h2><p>Add an App Store app by its link, or a signed macOS installer package by its download address.</p></Empty></section>
+        <section className="panel"><Empty><h2>No apps yet</h2><p>Add an App Store app by its link, a signed macOS installer package by its download address, or an Android app from Google Play.</p></Empty></section>
       ) : (
         <section className="panel flush">
           <table className="table">
@@ -34,15 +37,15 @@ export function Apps({ app }: { app: AppCtx }) {
             <tbody>
               {apps.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.name}<div className="rsub">{a.source === "app_store" ? `App Store ${a.store_id}` : `${a.bundle_id} ${a.version}`}</div></td>
+                  <td>{a.name}<div className="rsub">{a.source === "app_store" ? `App Store ${a.store_id}` : a.source === "play" ? a.store_id : `${a.bundle_id} ${a.version}`}</div></td>
                   <td>{PLATFORM[a.platform] ?? a.platform}</td>
-                  <td className="muted">{a.source === "app_store" ? "App Store" : "Package"}</td>
+                  <td className="muted">{SOURCE[a.source]}</td>
                   <td className="num">{a.installed}</td>
                   <td>
                     <label className="check small"><input type="checkbox" checked={a.auto_install} onChange={(e) => run(api(`/api/mdm/apps/${a.id}`, { method: "PATCH", json: { auto_install: e.target.checked } }), e.target.checked ? "New devices will get it" : "New devices won't get it")} /> Install automatically</label>
                   </td>
                   <td className="nowrap">
-                    <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}/install`, { method: "POST", json: { all: true } }), `Installing ${a.name} on every managed ${a.platform === "darwin" ? "Mac" : "iPhone and iPad"}`)}>Install on all</button>{" "}
+                    <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}/install`, { method: "POST", json: { all: true } }), `Installing ${a.name} on every managed ${a.platform === "darwin" ? "Mac" : a.platform === "android" ? "Android device" : "iPhone and iPad"}`)}>Install on all</button>{" "}
                     <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}`, { method: "DELETE" }), "Removed from the list")}>Remove</button>
                   </td>
                 </tr>
@@ -51,14 +54,14 @@ export function Apps({ app }: { app: AppCtx }) {
           </table>
         </section>
       )}
-      <p className="muted small">App Store apps install without asking for an Apple ID on supervised devices with licenses from Apple Business Manager; otherwise the person is asked to sign in to the App Store. Packages must be signed with a Developer ID Installer certificate.</p>
+      <p className="muted small">App Store apps install without asking for an Apple ID on supervised devices with licenses from Apple Business Manager; otherwise the person is asked to sign in to the App Store. Packages must be signed with a Developer ID Installer certificate. Google Play apps install silently on Android work profiles and company phones.</p>
       {adding ? <AddApp app={app} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} /> : null}
     </div>
   );
 }
 
 function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; onSaved: () => void }) {
-  const [source, setSource] = useState<"app_store" | "package">("app_store");
+  const [source, setSource] = useState<"app_store" | "package" | "play">("app_store");
   const [platform, setPlatform] = useState("ios");
   const [name, setName] = useState("");
   const [store, setStore] = useState("");
@@ -81,6 +84,7 @@ function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; o
         <div className="seg" role="tablist">
           <button type="button" className={source === "app_store" ? "on" : ""} onClick={() => setSource("app_store")}>App Store</button>
           <button type="button" className={source === "package" ? "on" : ""} onClick={() => setSource("package")}>Mac package (.pkg)</button>
+          <button type="button" className={source === "play" ? "on" : ""} onClick={() => setSource("play")}>Google Play</button>
         </div>
         <label><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} /></label>
         {source === "app_store" ? (
@@ -90,6 +94,8 @@ function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; o
               <select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="ios">iPhone and iPad</option><option value="darwin">Mac</option></select>
             </label>
           </>
+        ) : source === "play" ? (
+          <label><span>Google Play link or package name</span><input value={store} onChange={(e) => setStore(e.target.value)} placeholder="https://play.google.com/store/apps/details?id=com.example.app" required /></label>
         ) : (
           <>
             <label><span>Download address (https)</span><input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://files.example.com/app.pkg" required /></label>

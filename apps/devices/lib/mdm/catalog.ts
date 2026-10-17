@@ -3,8 +3,9 @@ import type { Me } from "../api";
 import { audit, q } from "../db";
 import { UserError, text, uuid } from "../util";
 import { organization, send } from "./apple";
+import { installOnAndroid, playPackage, syncAndroidPolicies } from "./android";
 import { mdmConfig } from "./nanomdm";
-import { type ApplePlatform, PROFILE_KINDS, type ProfileKind, type Settings, cleanSettings, profileIdentifier, settingsProfile } from "./profiles";
+import { type ApplePlatform, type MdmPlatform, PROFILE_KINDS, type ProfileKind, type Settings, cleanSettings, profileIdentifier, settingsProfile } from "./profiles";
 
 /**
  * Settings profiles and apps for Apple devices, like Intune's configuration profiles and app
@@ -13,9 +14,10 @@ import { type ApplePlatform, PROFILE_KINDS, type ProfileKind, type Settings, cle
  * asks for it on a device or across the fleet, and on new devices when "install automatically" is on.
  */
 
-type ProfileRow = { id: string; name: string; description: string; kind: ProfileKind; settings: Settings; platforms: ApplePlatform[]; enabled: boolean; version: number };
+type ProfileRow = { id: string; name: string; description: string; kind: ProfileKind; settings: Settings; platforms: MdmPlatform[]; enabled: boolean; version: number };
 
-const PLATFORMS: ApplePlatform[] = ["darwin", "ios"];
+const PLATFORMS: MdmPlatform[] = ["darwin", "ios", "android"];
+const PLATFORM_NAME: Record<MdmPlatform, string> = { darwin: "Mac", ios: "iPhone and iPad", android: "Android" };
 
 /** Settings never shown back in full (Wi-Fi passwords). */
 function redact(p: ProfileRow): ProfileRow {
@@ -32,12 +34,12 @@ export async function listProfiles() {
   return { profiles: rows.map(redact), kinds: PROFILE_KINDS };
 }
 
-function platformsOf(kind: ProfileKind, v: unknown): ApplePlatform[] {
+function platformsOf(kind: ProfileKind, v: unknown): MdmPlatform[] {
   const allowed = PROFILE_KINDS.find((k) => k.kind === kind)!.platforms;
   if (v === undefined || (Array.isArray(v) && !v.length)) return allowed;
-  if (!Array.isArray(v) || v.some((p) => !PLATFORMS.includes(p))) throw new UserError("platforms must be darwin or ios");
-  const out = (v as ApplePlatform[]).filter((p) => allowed.includes(p));
-  if (!out.length) throw new UserError(`${PROFILE_KINDS.find((k) => k.kind === kind)!.label} profiles are for ${allowed.map((p) => (p === "darwin" ? "Mac" : "iPhone and iPad")).join(" and ")} only`);
+  if (!Array.isArray(v) || v.some((p) => !PLATFORMS.includes(p))) throw new UserError("platforms must be darwin, ios or android");
+  const out = (v as MdmPlatform[]).filter((p) => allowed.includes(p));
+  if (!out.length) throw new UserError(`${PROFILE_KINDS.find((k) => k.kind === kind)!.label} profiles are for ${allowed.map((p) => PLATFORM_NAME[p]).join(" and ")} only`);
   return out;
 }
 
@@ -53,6 +55,7 @@ export async function createProfile(me: Me, v: Record<string, unknown>): Promise
   );
   await audit(me.email, "mdm.profile.create", row.id, { name, kind });
   await deployProfile(row.id, me.email);
+  await syncAndroidPolicies(me.email);
   return row;
 }
 
@@ -79,6 +82,7 @@ export async function updateProfile(me: Me, id: string, v: Record<string, unknow
   );
   await audit(me.email, "mdm.profile.update", p.id, { name, enabled });
   await deployProfile(p.id, me.email);
+  await syncAndroidPolicies(me.email);
 }
 
 export async function deleteProfile(me: Me, id: string): Promise<void> {
@@ -90,6 +94,7 @@ export async function deleteProfile(me: Me, id: string): Promise<void> {
   }
   await q(`DELETE FROM mdm_profiles WHERE id = $1`, [p.id]);
   await audit(me.email, "mdm.profile.delete", p.id, { name: p.name, removed_from: on.length });
+  await syncAndroidPolicies(me.email);
 }
 
 /**
@@ -103,7 +108,7 @@ export async function deployProfile(profileId: string, actor: string): Promise<v
   const want = p.enabled
     ? await q<{ id: string }>(
         `SELECT e.id FROM mdm_enrollments e LEFT JOIN mdm_profile_status s ON s.enrollment_id = e.id AND s.profile_id = $1
-         WHERE e.status = 'enrolled' AND e.platform = ANY($2) AND (s.version IS NULL OR s.version <> $3 OR s.status = 'error')`,
+         WHERE e.status = 'enrolled' AND e.platform <> 'android' AND e.platform = ANY($2) AND (s.version IS NULL OR s.version <> $3 OR s.status = 'error')`,
         [p.id, p.platforms, p.version],
       )
     : [];
@@ -141,7 +146,7 @@ export async function deployToEnrollment(enrollmentId: string, platform: ApplePl
 
 /* ---------------------------------------------------------------- apps */
 
-type AppRow = { id: string; name: string; platform: ApplePlatform; source: "app_store" | "package"; store_id: string | null; bundle_id: string; version: string; url: string | null; manifest: Record<string, unknown> | null; auto_install: boolean };
+type AppRow = { id: string; name: string; platform: MdmPlatform; source: "app_store" | "package" | "play"; store_id: string | null; bundle_id: string; version: string; url: string | null; manifest: Record<string, unknown> | null; auto_install: boolean };
 
 export async function listApps() {
   return q(
@@ -205,8 +210,8 @@ export async function packageManifest(url: string, meta: { bundle_id: string; ve
 }
 
 export async function createApp(me: Me, v: Record<string, unknown>, fetcher: typeof fetch = fetch): Promise<{ id: string }> {
-  const source = v.source === "package" ? "package" : "app_store";
-  const platform: ApplePlatform = source === "package" ? "darwin" : v.platform === "darwin" ? "darwin" : "ios";
+  const source = v.source === "package" ? "package" : v.source === "play" ? "play" : "app_store";
+  const platform: MdmPlatform = source === "package" ? "darwin" : source === "play" ? "android" : v.platform === "darwin" ? "darwin" : "ios";
   const name = text(v.name, 120);
   if (!name) throw new UserError("Name the app");
   let store: string | null = null;
@@ -216,6 +221,8 @@ export async function createApp(me: Me, v: Record<string, unknown>, fetcher: typ
   const version = text(v.version, 50);
   if (source === "app_store") {
     store = storeId(v.store);
+  } else if (source === "play") {
+    store = playPackage(v.store);
   } else {
     if (!/^[A-Za-z0-9.-]+$/.test(bundle)) throw new UserError("Enter the package's bundle identifier, like com.example.app");
     if (!version) throw new UserError("Enter the package's version");
@@ -228,6 +235,7 @@ export async function createApp(me: Me, v: Record<string, unknown>, fetcher: typ
     [name, platform, source, store, bundle, version, url, manifest ? JSON.stringify(manifest) : null, v.auto_install === true, me.email],
   );
   await audit(me.email, "mdm.app.create", row.id, { name, platform, source });
+  if (platform === "android") await syncAndroidPolicies(me.email);
   return row;
 }
 
@@ -235,12 +243,17 @@ export async function updateApp(me: Me, id: string, v: Record<string, unknown>):
   const [a] = await q<{ id: string }>(`UPDATE mdm_apps SET auto_install = $2 WHERE id = $1 RETURNING id`, [uuid(id, "app"), v.auto_install === true]);
   if (!a) throw new UserError("No such app", 404);
   await audit(me.email, "mdm.app.update", id, { auto_install: v.auto_install === true });
+  await syncAndroidPolicies(me.email);
 }
 
 export async function deleteApp(me: Me, id: string): Promise<void> {
-  const [a] = await q<{ name: string }>(`DELETE FROM mdm_apps WHERE id = $1 RETURNING name`, [uuid(id, "app")]);
+  const [a] = await q<{ name: string; platform: string }>(`DELETE FROM mdm_apps WHERE id = $1 RETURNING name, platform`, [uuid(id, "app")]);
   if (!a) throw new UserError("No such app", 404);
   await audit(me.email, "mdm.app.delete", id, { name: a.name });
+  if (a.platform === "android") {
+    await q(`UPDATE mdm_enrollments SET info = jsonb_set(info, '{android_apps}', (info->'android_apps') - $1) WHERE info ? 'android_apps'`, [id]);
+    await syncAndroidPolicies(me.email);
+  }
 }
 
 async function installAppOn(a: AppRow, ids: string[], actor: string): Promise<string> {
@@ -263,9 +276,15 @@ export async function installApp(me: Me, id: string, v: { devices?: unknown; all
      WHERE e.status = 'enrolled' AND e.platform = $1 AND d.retired_at IS NULL AND ($2::uuid[] IS NULL OR e.device_id = ANY($2)) AND ($3 OR d.owner = $4)`,
     [a.platform, deviceIds, me.role === "admin", me.email],
   );
-  if (!rows.length) throw new UserError(`No enrolled ${a.platform === "darwin" ? "Mac" : "iPhone or iPad"} to install it on`);
   if (v.all === true && me.role !== "admin") throw new UserError("Only device admins can install on every device", 403);
-  await installAppOn(a, rows.map((r) => r.id), me.email);
+  if (a.platform === "android" && v.all === true) {
+    // Android apps are part of the shared policy: "everywhere" is the same as installing on new phones too.
+    await updateApp(me, a.id, { auto_install: true });
+    return { devices: rows.length };
+  }
+  if (!rows.length) throw new UserError(`No enrolled ${PLATFORM_NAME[a.platform]} device to install it on`);
+  if (a.platform === "android") await installOnAndroid(rows.map((r) => r.id), a.id, me.email);
+  else await installAppOn(a, rows.map((r) => r.id), me.email);
   await audit(me.email, "mdm.app.install", a.id, { name: a.name, devices: rows.length });
   return { devices: rows.length };
 }
