@@ -46,7 +46,8 @@
     "apps/trust",
     "apps/whiteboard",
     "addons/portal",
-    "addons/campaigns"
+    "addons/campaigns",
+    "addons/law"
   ],
   "scripts": {
     "build:packages": "npm run build -w @synergy/config -w @synergy/ai -w @synergy/identity -w @synergy/compliance -w @synergy/search -w @synergy/groups -w @synergy/db -w @synergy/server -w @synergy/dav -w @synergy/shell",
