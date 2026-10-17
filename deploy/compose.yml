@@ -79,6 +79,9 @@ services:
       SA_ENCRYPTION_KEY: ${SA_ENCRYPTION_KEY:?set SA_ENCRYPTION_KEY}
       SUITE_DOMAIN: ${SUITE_DOMAIN}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      # Blocking sign-in from non-compliant devices (admin console > Settings) asks Devices.
+      DEVICES_INTERNAL_URL: http://devices:3810
+      DEVICES_SVC_TOKEN: ${DEVICES_SVC_TOKEN:-}
       <<: *demo-env
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3500/api/oidc/jwks').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

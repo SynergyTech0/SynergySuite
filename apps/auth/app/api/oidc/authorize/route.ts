@@ -4,12 +4,14 @@ import { findClient, issueCode, hasGrant } from '@/lib/oauth';
 import { currentUser } from '@/lib/session';
 import { audit } from '@/lib/audit';
 import { b } from '@/lib/users';
+import { checkDeviceAccess, blockedPage } from '@/lib/device-access';
 
 /*
  * OIDC authorization endpoint (code flow only, Keycloak-style hosted login).
  *  - no SSO session          -> 303 to /login?return_to=<this url>
  *  - session, MFA pending    -> /login/mfa
  *  - third-party, no grant   -> /consent
+ *  - a device out of policy  -> /login/device-blocked (lib/device-access.ts)
  *  - else                    -> 303 back to client with ?code=&state=
  */
 export async function GET(req: NextRequest) {
@@ -59,6 +61,9 @@ export async function GET(req: NextRequest) {
   if (!b(client.first_party) && !(await hasGrant(auth.user.id, clientId, scope))) {
     return redirect(`/consent?return_to=${returnTo}`);
   }
+
+  const access = await checkDeviceAccess(auth.user, `oidc:${clientId}`, req);
+  if (!access.allowed) return redirect(blockedPage(req.nextUrl.pathname + '?' + p.toString()));
 
   const code = await issueCode({
     clientId, userId: auth.user.id, redirectUri, scope, nonce,

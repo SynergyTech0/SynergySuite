@@ -43,6 +43,7 @@ describe.skipIf(!base)("devices end to end", async () => {
     csearch: await import("../app/api/compliance/search/route"),
     cexport: await import("../app/api/compliance/export/route"),
     posture: await import("../app/api/svc/posture/route"),
+    access: await import("../app/api/svc/access/route"),
   };
 
   const post = async (r: { POST: (req: Request) => Promise<Response> }, body: unknown, opts: { gzip?: boolean; token?: string } = {}) => {
@@ -216,6 +217,19 @@ describe.skipIf(!base)("devices end to end", async () => {
     expect(p).toMatchObject({ devices: 1, noncompliant: 1, policies: 1, encryption: { not_encrypted: 1 } });
     expect(p.alerts_open.critical).toBe(1);
     expect(p.noncompliant_sample[0]).toMatchObject({ hostname: "Alices-MacBook" });
+  });
+
+  it("tells Auth whose devices fail the policies, for blocking sign-in", async () => {
+    const get = (email: string, token = "svc-token") =>
+      routes.access.GET(new Request(`http://devices/api/svc/access?email=${encodeURIComponent(email)}`, { headers: { authorization: `Bearer ${token}` } }));
+    expect((await get(alice.email, "wrong")).status).toBe(401);
+    expect((await get("nobody")).status).toBe(400);
+    const a = await (await get(" Alice@Example.com ")).json();
+    expect(a.email).toBe(alice.email);
+    expect(a.devices).toHaveLength(1);
+    expect(a.devices[0]).toMatchObject({ id: deviceId, name: "Alices-MacBook", platform: "darwin", compliance: "noncompliant" });
+    expect(a.devices[0].failing).toContainEqual({ label: "Disk encryption", detail: "The system disk is not encrypted" });
+    expect((await (await get(bob.email)).json()).devices).toEqual([]);
   });
 
   it("checks Linux packages against OSV advisories", async () => {

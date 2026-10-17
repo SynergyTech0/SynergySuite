@@ -114,6 +114,18 @@ PCs check in hourly; Windows has no wake-up for other servers without Microsoft'
 commands wait for the next check-in (Settings › Accounts › Access work or school › Info › Sync
 checks in now). Windows has no remote lock for PCs.
 
+## Blocking sign-in from non-compliant devices
+
+Like Intune's conditional access. In Auth's admin console (Settings > Device compliance), choose
+Off, Report only or Block. With Block, a person can't sign in to any app while one of their devices
+is non-compliant: Auth asks Devices (`/api/svc/access`, Bearer `DEVICES_SVC_TOKEN`) at sign-in and
+whenever their session renews, about hourly, and shows a page listing each device and the settings
+to fix. A device that hasn't reported yet doesn't block. People with no device can be allowed
+(default) or blocked, and some people can be left out (break-glass accounts). Report only lets
+everyone in and records who would have been blocked in Auth's audit log. If Devices doesn't answer,
+sign-in goes ahead and the audit log notes it. The Auth admin console itself never checks devices,
+so an admin can always turn this off. It needs `DEVICES_SVC_TOKEN` set; compose gives it to Auth.
+
 ## Settings
 
 | Variable | |
@@ -123,7 +135,7 @@ checks in now). Windows has no remote lock for PCs.
 | `DEVICES_PUBLIC_HOST` | Host agents connect to; default `devices.<SUITE_DOMAIN>` |
 | `DEVICES_TLS_CA` | PEM CA certificate installed on agents for a private CA |
 | `DEVICES_OSV_URL` | OSV API base (default `https://api.osv.dev`); `off` turns scanning off |
-| `DEVICES_SVC_TOKEN` | Bearer token for `/api/svc/posture`, read by Trust |
+| `DEVICES_SVC_TOKEN` | Bearer token for `/api/svc/posture` (read by Trust) and `/api/svc/access` (read by Auth) |
 | `DEVICES_AI_*` | Own AI model for alert explanations; defaults to the suite's `AI_*` |
 | `DEVICES_MDM_URL` | NanoMDM's address (compose sets `http://devices-mdm:9000`) |
 | `DEVICES_MDM_API_KEY` | NanoMDM's API key, shared with `devices-mdm` |
@@ -136,7 +148,7 @@ checks in now). Windows has no remote lock for PCs.
 
 ## Not yet
 
-Blocking sign-in from non-compliant devices is the next milestone. Windows identity certificates
+Windows identity certificates
 last five years and aren't renewed automatically yet; Microsoft Store apps and Windows Autopilot
 aren't supported. Android zero-touch enrollment and private Play
 apps aren't supported yet. Apple Business Manager
