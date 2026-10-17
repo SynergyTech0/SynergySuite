@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ protocol: 
   }
   try {
     const upstream = await relay(body as Record<string, unknown>, {
-      config: aiConfigForCad(),
+      config: await aiConfigForCad(),
       protocol,
       headers: { "anthropic-version": req.headers.get("anthropic-version"), "anthropic-beta": req.headers.get("anthropic-beta") },
       signal: req.signal,

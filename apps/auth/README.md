@@ -60,6 +60,13 @@ patterns, running on Next.js with SynergyDB storage.
   `/login/device-blocked`, which lists each device and what to fix. Off,
   report-only or block, an exempt list, and whether people with no device may
   sign in are set in `/admin` → Settings. Fails open, audited, if Devices is down.
+- **The suite's AI model**: `/admin` → Settings → AI model picks the provider
+  (Anthropic (Claude), OpenAI, an OpenAI-compatible server or Ollama), model,
+  base URL, API key and optional embedding and speech models for every app.
+  The key is encrypted with `SA_ENCRYPTION_KEY` and never shown again (only its
+  last 4); Test makes one small real request; changes are audited without the
+  key. Apps read it from `GET /api/internal/ai-settings` with
+  `PROXY_SHARED_SECRET` (`@synergy/ai`), falling back to their `AI_*` settings.
 - **Hosted pages**: `/login`, `/login/mfa`, `/consent`, `/forgot`, `/reset`,
   `/account` (MFA, passkeys, password, sessions), `/admin` (users, clients,
   audit, settings).
@@ -90,7 +97,9 @@ assertion replay rejection), SCIM CRUD, and a SAML round-trip where the test
 acts as the SP and validates the response signature against the IdP metadata.
 With `E2E_DEVICES_PORT` and `E2E_DEVICES_TOKEN` set (and the server started with
 `DEVICES_INTERNAL_URL=http://localhost:<port>` and `DEVICES_SVC_TOKEN=<token>`),
-the test also plays Devices and checks device compliance at sign-in.
+the test also plays Devices and checks device compliance at sign-in. It also
+checks the AI model setting (start the server and the test with the same
+`PROXY_SHARED_SECRET` to include the internal endpoint's answer).
 
 ## Wire up an app (any OIDC client library)
 
@@ -112,6 +121,7 @@ Works with `next-auth` (OIDC provider), `openid-client`, Spring, etc.
 | `ISSUER_URL` | prod | Public https origin; drives OIDC issuer, WebAuthn origin, reset links |
 | `SA_ENCRYPTION_KEY` | prod | 32-byte hex/base64 key for secrets-at-rest (dev auto-generates `.sa-dev-key`) |
 | `SA_RP_ID` | no | WebAuthn Relying Party ID; defaults to `ISSUER_URL` host |
+| `PROXY_SHARED_SECRET` | no | The suite's shared secret: other apps present it to check app passwords and read the AI model settings |
 | `DEVICES_INTERNAL_URL`/`DEVICES_SVC_TOKEN` | no | Devices' internal address and service token, for device compliance at sign-in |
 | `SMTP_HOST`/`SMTP_PORT`/`MAIL_FROM` | no | Password-reset email (dev falls back to `./dev-mail/*.eml`) |
 

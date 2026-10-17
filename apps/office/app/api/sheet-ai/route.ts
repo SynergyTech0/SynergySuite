@@ -13,7 +13,7 @@ export async function GET() {
   if (!me.email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   let config = null;
   try {
-    config = configFor();
+    config = await configFor();
   } catch {
     /* a misconfigured provider counts as off */
   }

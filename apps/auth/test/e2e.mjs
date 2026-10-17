@@ -3,7 +3,8 @@
  * Exercises: discovery, login+lockout, TOTP MFA enroll/login, backup codes,
  * PKCE code flow, tokens, userinfo, refresh rotation + reuse detection,
  * introspection, revocation, client_credentials, logout, app passwords (set
- * PROXY_SHARED_SECRET for the server and this test to check them end to end).
+ * PROXY_SHARED_SECRET for the server and this test to check them end to end), and the suite's
+ * AI model setting: write-only key, encrypted at rest, served only to the internal network.
  * With E2E_DEVICES_PORT set (the server started with DEVICES_INTERNAL_URL=http://localhost:<port>
  * and DEVICES_SVC_TOKEN=$E2E_DEVICES_TOKEN), it also plays Devices to check device compliance.
  */
@@ -648,6 +649,80 @@ async function main() {
   await pool2.end();
   ok('stored hashed, never as typed', stored.length === 2 && stored.every((x) => /^[0-9a-f]{64}$/.test(x.token_hash) && x.token_hash !== iphone.password));
   ok('an admin password reset revokes app passwords', live === 0);
+
+  console.log('== AI model setting ==');
+  // Plays an OpenAI-compatible server for the Test button: the right key gets an answer.
+  const aiSeen = [];
+  const fakeAi = createServer((rq, rs) => {
+    let b = '';
+    rq.on('data', (c) => (b += c));
+    rq.on('end', () => {
+      aiSeen.push({ path: rq.url, auth: rq.headers.authorization, body: JSON.parse(b || '{}') });
+      const good = rq.headers.authorization === 'Bearer sk-e2e-ai-key-ABCD';
+      rs.writeHead(good ? 200 : 401, { 'content-type': 'application/json' });
+      rs.end(JSON.stringify(good ? { choices: [{ message: { content: 'OK' } }] } : { error: { message: 'Incorrect API key provided' } }));
+    });
+  });
+  await new Promise((res) => fakeAi.listen(0, '127.0.0.1', res));
+  const aiBase = `http://127.0.0.1:${fakeAi.address().port}/v1`;
+  const aiKey = 'sk-e2e-ai-key-ABCD';
+  const aiPost = (o, cookies = adminJar) => req('POST', '/api/admin/settings', {
+    body: JSON.stringify(o), cookies, headers: { 'content-type': 'application/json' },
+  });
+  const internalAi = (s) => req('GET', '/api/internal/ai-settings', { headers: s === undefined ? {} : { 'x-proxy-auth-secret': s } });
+  await aiPost({ action: 'clear_ai_model' });
+  r = await req('GET', '/api/admin/settings', { cookies: adminJar });
+  ok('no AI model saved to begin with', (await r.json()).ai_model === null);
+  r = await aiPost({ action: 'set_ai_model', provider: 'anthropic', model: 'm' });
+  ok('a hosted provider needs a key', r.status === 400);
+  r = await aiPost({ action: 'set_ai_model', provider: 'compatible', model: 'm', api_key: aiKey });
+  ok('a compatible server needs a base URL', r.status === 400);
+  r = await aiPost({ action: 'set_ai_model', provider: 'compatible', model: 'e2e-model', base_url: aiBase + '/', api_key: aiKey, embedding_model: 'e2e-embed' });
+  const savedText = await r.text();
+  ok('admin saves the AI model', r.status === 200, savedText);
+  ok('the save answer has no key', !savedText.includes(aiKey) && JSON.parse(savedText).ai_model?.key_last4 === 'ABCD');
+  r = await req('GET', '/api/admin/settings', { cookies: adminJar });
+  const settingsText = await r.text();
+  const aiView = JSON.parse(settingsText).ai_model;
+  ok('settings show only that a key is set and its last 4', aiView?.key_set === true && aiView.key_last4 === 'ABCD' && !settingsText.includes(aiKey) && !('api_key' in aiView));
+  ok('settings show the model and base URL', aiView?.model === 'e2e-model' && aiView.base_url === aiBase && aiView.embedding_model === 'e2e-embed');
+  r = await req('GET', '/api/admin/settings', { cookies: apJar });
+  ok('a non-admin can\'t read the settings', r.status === 403);
+  r = await aiPost({ action: 'set_ai_model', provider: 'openai', model: 'x', api_key: 'sk-evil' }, apJar);
+  ok('a non-admin can\'t change the AI model', r.status === 403);
+  r = await req('GET', '/api/admin/settings');
+  ok('signed out can\'t read the settings', r.status === 403);
+  const pg3 = (await import('pg')).default;
+  const pool3 = new pg3.Pool({ connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5499/synergydb', max: 1 });
+  const storedAi = JSON.stringify((await pool3.query(`SELECT value FROM sa_settings WHERE key = 'ai_model'`)).rows[0]?.value ?? null);
+  await pool3.end();
+  ok('the key is stored encrypted', storedAi.includes('enc:v1:') && !storedAi.includes(aiKey));
+  ok('internal settings refused without the secret', (await internalAi()).status === 403);
+  ok('internal settings refused with a wrong secret', (await internalAi('wrong-secret')).status === 403);
+  if (secret) {
+    r = await internalAi(secret);
+    const inner = (await r.json()).settings;
+    ok('apps on the internal network get the decrypted key', r.status === 200 && inner?.api_key === aiKey && inner.provider === 'openai' && inner.model === 'e2e-model' && inner.base_url === aiBase);
+  } else {
+    console.log('  SKIP  internal settings with the secret (set PROXY_SHARED_SECRET for the server and this test)');
+  }
+  r = await aiPost({ action: 'test_ai_model', provider: 'compatible', model: 'e2e-model', base_url: aiBase });
+  let t = await r.json();
+  ok('Test makes one real call with the saved key', t.ok === true && t.reply === 'OK' && aiSeen.at(-1)?.auth === `Bearer ${aiKey}` && aiSeen.at(-1)?.path === '/v1/chat/completions');
+  r = await aiPost({ action: 'test_ai_model', provider: 'compatible', model: 'e2e-model', base_url: aiBase, api_key: 'sk-wrong-key-0000' });
+  t = await r.json();
+  ok('Test reports the provider\'s error', t.ok === false && t.error.includes('401') && t.error.includes('Incorrect API key provided') && !t.error.includes('sk-wrong-key-0000'));
+  r = await aiPost({ action: 'set_ai_model', provider: 'compatible', model: 'e2e-model-2', base_url: aiBase });
+  if (secret) ok('saving without a new key keeps the saved one', (await (await internalAi(secret)).json()).settings?.api_key === aiKey);
+  r = await req('GET', '/api/admin/audit', { cookies: adminJar });
+  const auditText = await r.text();
+  ok('AI model changes are audited without the key', auditText.includes('admin.ai_model_set') && auditText.includes('admin.ai_model_tested') && !auditText.includes(aiKey) && !auditText.includes('sk-wrong-key-0000'));
+  r = await aiPost({ action: 'clear_ai_model' });
+  ok('admin clears the AI model', r.status === 200);
+  r = await req('GET', '/api/admin/settings', { cookies: adminJar });
+  ok('cleared', (await r.json()).ai_model === null);
+  if (secret) ok('apps are told nothing is saved', (await (await internalAi(secret)).json()).settings === null);
+  fakeAi.close();
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

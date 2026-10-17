@@ -4,7 +4,7 @@
  * transcript. Nothing runs unless an administrator has set a model.
  */
 import { readFile, rm } from "node:fs/promises";
-import { AiRequestError, AiUnavailableError, aiConfig, speechConfig, structured, transcribe } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, isAiAvailable, loadAiConfig, loadSpeechConfig, structured, transcribe } from "@synergy/ai";
 import { type Chapter, type Cue, cleanChapters, clock, parseCues, splitIntoCues, timedTranscript, toVtt } from "./captions";
 import { q } from "./db";
 import { audioPieces, enqueue } from "./media";
@@ -16,14 +16,9 @@ export const PREFIX = "STREAM_";
 /** Length of the audio pieces sent for speech to text. */
 const PIECE = 30;
 
-export function aiStatus(): { speech: boolean; text: boolean } {
-  let text = false;
-  try {
-    text = !!aiConfig({ prefix: PREFIX });
-  } catch {
-    text = false;
-  }
-  return { speech: !!speechConfig({ prefix: PREFIX }), text };
+export async function aiStatus(): Promise<{ speech: boolean; text: boolean }> {
+  const [text, speech] = await Promise.all([isAiAvailable({ prefix: PREFIX }), loadSpeechConfig({ prefix: PREFIX }).catch(() => null)]);
+  return { speech: !!speech, text };
 }
 
 /** An AI failure as words for the person who asked. */
@@ -39,8 +34,8 @@ export function aiMessage(e: unknown): string {
  * captions_status says how it went.
  */
 export async function startCaptioning(id: string, owner: string): Promise<void> {
-  const cfg = speechConfig({ prefix: PREFIX });
-  if (!cfg) throw new UserError("Automatic captions need a speech model. An administrator can set AI_SPEECH_MODEL.", 503);
+  const cfg = await loadSpeechConfig({ prefix: PREFIX }).catch(() => null);
+  if (!cfg) throw new UserError("Automatic captions need a speech model. An administrator can add one in the admin console's AI model settings (or set AI_SPEECH_MODEL).", 503);
   const [v] = await q<{ status: string; duration: number | null; captions_status: string; title: string }>(
     `SELECT status, duration, captions_status, title FROM videos WHERE id = $1 AND owner = $2 AND held_deleted_at IS NULL`,
     [id, owner],
@@ -86,7 +81,7 @@ export async function summarize(id: string, owner: string): Promise<Summary> {
   let out: { summary?: string; chapters?: { start: string; title: string }[] };
   try {
     out = await structured<typeof out>({
-      config: aiConfig({ prefix: PREFIX }),
+      config: await loadAiConfig({ prefix: PREFIX }),
       system:
         "You summarize workplace videos from their transcript. Write plainly, in the transcript's language. " +
         "The summary is 2 to 4 sentences on what the video covers. Chapters mark where new topics start: 3 to 12 of them, " +

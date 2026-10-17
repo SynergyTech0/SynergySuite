@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { aiConfig, chat, isAiConfigured } from '@synergy/ai';
+import { chat, isAiAvailable, loadAiConfig } from '@synergy/ai';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // Bring your own model: the suite-wide AI_* settings, overridable with BOOKS_AI_*.
@@ -192,7 +192,8 @@ export class BankAutoCategorizeService {
     }
 
     let aiCategorized = 0;
-    if (useAi && isAiConfigured(AI) && unresolved.length) {
+    const aiOn = useAi && (await isAiAvailable(AI));
+    if (aiOn && unresolved.length) {
       aiCategorized = await this.aiPass(unresolved, acct);
     }
 
@@ -201,7 +202,7 @@ export class BankAutoCategorizeService {
       categorized,
       aiCategorized,
       remaining: unresolved.length - aiCategorized,
-      aiUsed: useAi && isAiConfigured(AI),
+      aiUsed: aiOn,
     };
   }
 
@@ -220,7 +221,7 @@ export class BankAutoCategorizeService {
 
     let text = '';
     try {
-      text = await chat({ system, prompt: user, maxTokens: 2000, config: aiConfig(AI) });
+      text = await chat({ system, prompt: user, maxTokens: 2000, config: await loadAiConfig(AI) });
     } catch (e) {
       this.logger.warn(`AI categorize failed: ${(e as Error).message}`);
       return 0;

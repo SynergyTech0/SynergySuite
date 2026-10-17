@@ -3,11 +3,11 @@ import { assistantSettings, relayProtocol } from "@/lib/ai";
 import { assistantMessage } from "@/lib/model";
 
 describe("3D modeling assistant", () => {
-  it("is off until the suite has a model, and follows CAD_AI_* over AI_*", () => {
-    expect(assistantSettings({})).toEqual({ enabled: false });
-    expect(assistantSettings({ AI_MODEL: "llama3.1", AI_PROVIDER: "ollama" })).toEqual({ enabled: true, protocol: "openai", model: "llama3.1" });
-    expect(assistantSettings({ AI_MODEL: "m", AI_API_KEY: "k", CAD_AI_PROVIDER: "anthropic", CAD_AI_MODEL: "big" })).toEqual({ enabled: true, protocol: "anthropic", model: "big" });
-    expect(assistantSettings({ AI_MODEL: "m", AI_API_KEY: "k", AI_PROVIDER: "nonsense" })).toEqual({ enabled: false });
+  it("is off until the suite has a model, and follows CAD_AI_* over AI_*", async () => {
+    expect(await assistantSettings({})).toEqual({ enabled: false });
+    expect(await assistantSettings({ AI_MODEL: "llama3.1", AI_PROVIDER: "ollama" })).toEqual({ enabled: true, protocol: "openai", model: "llama3.1" });
+    expect(await assistantSettings({ AI_MODEL: "m", AI_API_KEY: "k", CAD_AI_PROVIDER: "anthropic", CAD_AI_MODEL: "big" })).toEqual({ enabled: true, protocol: "anthropic", model: "big" });
+    expect(await assistantSettings({ AI_MODEL: "m", AI_API_KEY: "k", AI_PROVIDER: "nonsense" })).toEqual({ enabled: false });
   });
 
   it("relays only the two chat endpoints", () => {

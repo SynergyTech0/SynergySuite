@@ -15,7 +15,7 @@ export async function POST(req: Request): Promise<Response> {
     return error("Cross-site request refused", 403);
   }
   if (!(await currentUser())) return error("Sign in required", 401);
-  const config = aiConfigForDiagrams();
+  const config = await aiConfigForDiagrams();
   if (!config) return error("AI is off: the administrator hasn't set up an AI model for the suite.", 503);
   const raw = await req.text();
   if (Buffer.byteLength(raw) > MAX_AI_REQUEST) return error("That diagram is too large to send to the AI model", 413);

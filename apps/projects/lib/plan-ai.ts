@@ -1,4 +1,4 @@
-import { AiRequestError, AiUnavailableError, aiConfig, structured } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, isAiAvailable, loadAiConfig, structured } from "@synergy/ai";
 import { q } from "./db";
 import { requireManager } from "./projects";
 import { UserError, text } from "./util";
@@ -10,12 +10,8 @@ import { UserError, text } from "./util";
  */
 export const AI_PREFIX = "PROJECTS_";
 
-export function planAiAvailable(): boolean {
-  try {
-    return !!aiConfig({ prefix: AI_PREFIX });
-  } catch {
-    return false;
-  }
+export function planAiAvailable(): Promise<boolean> {
+  return isAiAvailable({ prefix: AI_PREFIX });
 }
 
 export type DraftPlan = {
@@ -55,14 +51,8 @@ const SCHEMA = {
 
 export async function draftPlan(email: string, projectId: string, extra: unknown): Promise<DraftPlan> {
   await requireManager(email, projectId);
-  const cfg = (() => {
-    try {
-      return aiConfig({ prefix: AI_PREFIX });
-    } catch {
-      return null;
-    }
-  })();
-  if (!cfg) throw new UserError("AI is off: set AI_MODEL (or PROJECTS_AI_MODEL) to draft plans", 503);
+  const cfg = await loadAiConfig({ prefix: AI_PREFIX }).catch(() => null);
+  if (!cfg) throw new UserError("AI is off: an administrator can pick a model in the admin console (or set AI_MODEL or PROJECTS_AI_MODEL) to draft plans", 503);
   const [p] = await q<{ name: string; description: string; client_name: string }>(
     `SELECT name, description, client_name FROM projects WHERE id = $1::uuid`,
     [projectId],

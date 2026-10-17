@@ -1,4 +1,4 @@
-import { AiUnavailableError, aiConfig, chat, structured, type AiConfig } from "@synergy/ai";
+import { AiUnavailableError, chat, loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 import { parseQuery } from "@synergy/search";
 import type { Viewer } from "./api";
 import { appName, fanOut, type AppOutcome, type FanoutOptions, type Hit } from "./fanout";
@@ -23,9 +23,9 @@ const MAX_SOURCES = 12;
 const SOURCE_BUDGET = 24_000;
 const PER_SOURCE_MAX = 4000;
 
-export function searchAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function searchAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: AI_PREFIX, env });
+    return await loadAiConfig({ prefix: AI_PREFIX, env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }
@@ -187,7 +187,7 @@ export interface AskDeps extends FanoutOptions {
 }
 
 export async function answer(viewer: Viewer, input: AskInput, deps: AskDeps = {}): Promise<AskAnswer> {
-  const config = deps.config === undefined ? searchAiConfig(deps.env) : deps.config;
+  const config = deps.config === undefined ? await searchAiConfig(deps.env) : deps.config;
   if (!config) throw new AiUnavailableError(AI_OFF_MESSAGE);
 
   const queries = await planQueries(input, config);

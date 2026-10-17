@@ -1,4 +1,4 @@
-import { AiUnavailableError, aiConfig, chat, isAiConfigured, structured } from "@synergy/ai";
+import { AiUnavailableError, chat, isAiAvailable, loadAiConfig, structured } from "@synergy/ai";
 import { body, route } from "@/lib/api";
 import { UserError, text } from "@/lib/util";
 
@@ -17,7 +17,7 @@ type Task = { title: string; assignee?: string; due?: string };
  *   summarize: { mode, context }           -> { markdown }
  *   tasks:     { mode, context }           -> { tasks: [{ title, assignee, due }] }
  */
-export const GET = route(async () => ({ enabled: isAiConfigured(AI) }));
+export const GET = route(async () => ({ enabled: await isAiAvailable(AI) }));
 
 export const POST = route(async (_me, req) => {
   const b = await body<{ mode?: unknown; prompt?: unknown; context?: unknown }>(req);
@@ -30,7 +30,7 @@ export const POST = route(async (_me, req) => {
         system: SYSTEM,
         prompt: `${context ? `The page so far:\n"""\n${context}\n"""\n\n` : ""}Write this for the page: ${prompt}`,
         maxTokens: 1500,
-        config: aiConfig(AI),
+        config: await loadAiConfig(AI),
       });
       return { markdown: markdown.trim() };
     }
@@ -40,7 +40,7 @@ export const POST = route(async (_me, req) => {
         system: SYSTEM,
         prompt: `Summarize this page in a few bullets, then list any decisions and open questions:\n"""\n${context}\n"""`,
         maxTokens: 800,
-        config: aiConfig(AI),
+        config: await loadAiConfig(AI),
       });
       return { markdown: markdown.trim() };
     }
@@ -66,7 +66,7 @@ export const POST = route(async (_me, req) => {
           required: ["tasks"],
         },
         maxTokens: 1200,
-        config: aiConfig(AI),
+        config: await loadAiConfig(AI),
       });
       const tasks = (Array.isArray(out?.tasks) ? out.tasks : [])
         .map((t) => ({
@@ -80,7 +80,7 @@ export const POST = route(async (_me, req) => {
     }
     throw new UserError("Unknown request");
   } catch (err) {
-    if (err instanceof AiUnavailableError) throw new UserError("AI isn't set up on this server. An administrator can turn it on with the AI_* settings.", 503);
+    if (err instanceof AiUnavailableError) throw new UserError("AI isn't set up on this server. An administrator can turn it on in the admin console's AI model settings.", 503);
     throw err;
   }
 });

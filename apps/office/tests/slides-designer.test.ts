@@ -85,8 +85,8 @@ test("the AI tools through @synergy/ai and an OpenAI-compatible server", async (
   const { server, port, seen } = await startFakeAi();
   try {
     const { aiDesignIdeas, aiDraftDeck, slidesAiConfig, aiFailure } = await import("../lib/slides/ai-server");
-    assert.equal(slidesAiConfig({}), null);
-    const cfg = slidesAiConfig({ AI_BASE_URL: `http://127.0.0.1:${port}/v1`, SLIDES_AI_MODEL: "fake" })!;
+    assert.equal(await slidesAiConfig({}), null);
+    const cfg = (await slidesAiConfig({ AI_BASE_URL: `http://127.0.0.1:${port}/v1`, SLIDES_AI_MODEL: "fake" }))!;
     assert.equal(cfg.model, "fake");
     const pic: ImageEl = { id: "p", z: 1, type: "image", src: "", x: 0, y: 0, w: 400, h: 200, alt: "Chart" };
     const s = slide({ body: "<ul><li><p>Point</p></li></ul>", elements: [pic] });
@@ -109,7 +109,7 @@ test("the AI tools through @synergy/ai and an OpenAI-compatible server", async (
     assert.match(seen[1].messages[0].content, /about 3 content slides/);
 
     // a server that is down reads as a failed request (502), not a crash
-    const down = slidesAiConfig({ AI_BASE_URL: "http://127.0.0.1:9/v1", AI_MODEL: "x", AI_TIMEOUT_MS: "2000" })!;
+    const down = (await slidesAiConfig({ AI_BASE_URL: "http://127.0.0.1:9/v1", AI_MODEL: "x", AI_TIMEOUT_MS: "2000" }))!;
     const e = await aiDraftDeck("x", 3, down).catch((x) => x);
     assert.equal(aiFailure(e).status, 502);
   } finally {

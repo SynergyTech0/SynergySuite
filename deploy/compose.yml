@@ -31,7 +31,10 @@ x-next: &next
 x-app-env: &app-env
   PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET:?set PROXY_SHARED_SECRET}
   SUITE_DOMAIN: ${SUITE_DOMAIN:?set SUITE_DOMAIN}
-  # Bring your own AI model: one setting for every app's AI features (see .env.example).
+  # Bring your own AI model. Normally picked in auth's admin console (Settings > AI model), which
+  # apps read from auth over this network with PROXY_SHARED_SECRET; these are the fallback when
+  # nothing is saved there (see .env.example).
+  AUTH_INTERNAL_URL: http://auth:3500
   AI_PROVIDER: ${AI_PROVIDER:-}
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
@@ -96,7 +99,8 @@ services:
       SA_ENCRYPTION_KEY: ${SA_ENCRYPTION_KEY:?set SA_ENCRYPTION_KEY}
       SUITE_DOMAIN: ${SUITE_DOMAIN}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
-      # Calendar and Contacts check app passwords here with it (phone sync).
+      # Calendar and Contacts check app passwords here with it (phone sync), and every app reads
+      # the AI model saved in the admin console with it.
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
       # Blocking sign-in from non-compliant devices (admin console > Settings) asks Devices.
       DEVICES_INTERNAL_URL: http://devices:3810

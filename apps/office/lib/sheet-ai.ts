@@ -2,7 +2,7 @@
 // request, and insights worded for a table. They use whatever model the suite
 // is set up with through @synergy/ai (OFFICE_AI_* settings, falling back to
 // AI_*); with none, AiUnavailableError tells the caller AI is off.
-import { aiConfig, structured, type AiConfig } from "@synergy/ai";
+import { loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 
 export const AI_PREFIX = "OFFICE_";
 export const MAX_PROMPT = 2000;
@@ -22,7 +22,7 @@ export type FormulaContext = {
 export type FormulaAnswer = { formula: string; explanation: string };
 export type InsightAnswer = { insights: { title: string; text: string }[] };
 
-export const configFor = (env?: Record<string, string | undefined>): AiConfig | null => aiConfig({ prefix: AI_PREFIX, env });
+export const configFor = (env?: Record<string, string | undefined>): Promise<AiConfig | null> => loadAiConfig({ prefix: AI_PREFIX, env });
 
 const clip = (s: unknown, n: number) => String(s ?? "").slice(0, n);
 
@@ -58,9 +58,9 @@ export function cleanFormula(f: unknown): string {
   return s;
 }
 
-export async function suggestFormula(request: string, ctx: FormulaContext, config: AiConfig | null = configFor()): Promise<FormulaAnswer> {
+export async function suggestFormula(request: string, ctx: FormulaContext, config?: AiConfig | null): Promise<FormulaAnswer> {
   const answer = await structured<FormulaAnswer>({
-    config,
+    config: config === undefined ? await configFor() : config,
     system: FORMULA_SYSTEM,
     prompt: formulaPrompt(request, ctx),
     toolName: "record_formula",
@@ -79,9 +79,9 @@ export async function suggestFormula(request: string, ctx: FormulaContext, confi
   return { formula: cleanFormula(answer?.formula), explanation: clip(answer?.explanation, 600).trim() };
 }
 
-export async function suggestInsights(table: string, config: AiConfig | null = configFor()): Promise<InsightAnswer> {
+export async function suggestInsights(table: string, config?: AiConfig | null): Promise<InsightAnswer> {
   const answer = await structured<InsightAnswer>({
-    config,
+    config: config === undefined ? await configFor() : config,
     system:
       "You are a data analyst. Given a table's column summary and sample rows, state up to five short, specific, factual insights " +
       "(largest contributors, trends, unusual values, relationships). Only state what the numbers support; never invent values.",

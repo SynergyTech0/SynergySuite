@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!sameOrigin(req)) return NextResponse.json({ error: "Cross-site request refused" }, { status: 403 });
   const me = identify(req.headers, optionsFromEnv());
   if (!me) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
-  const config = mailAiConfig();
+  const config = await mailAiConfig();
   if (!config) return NextResponse.json({ error: AI_OFF, aiOff: true }, { status: 503 });
   try {
     let body: unknown;

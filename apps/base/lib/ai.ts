@@ -4,16 +4,16 @@
  * and fields (never its records) and answers with SQL, which is checked like any other query
  * before anyone runs it. If the SQL doesn't pass, the model is told why and asked once more.
  */
-import { AiRequestError, AiUnavailableError, aiConfig, structured, type AiConfig } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 import type { TableInfo } from "./catalog";
 import { TYPE_LABELS } from "./fields";
 import { HttpError } from "./http";
 import { quoteName } from "./names";
 import { prepareSql, QueryError, type SqlScope } from "./sql";
 
-export function baseAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function baseAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: "BASE_", env });
+    return await loadAiConfig({ prefix: "BASE_", env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }

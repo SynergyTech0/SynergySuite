@@ -6,24 +6,24 @@
  * the administrator's AI_* settings (or DIAGRAMS_AI_* for a model of its own) decide what answers
  * and the browser never holds a key.
  */
-import { aiConfig, type AiConfig } from "@synergy/ai";
+import { loadAiConfig, type AiConfig } from "@synergy/ai";
 
 export const AI_PREFIX = "DIAGRAMS_";
 
 /** The prompt carries the open diagram for "change my diagram"; diagrams can be large. */
 export const MAX_AI_REQUEST = 8 * 1024 * 1024;
 
-export function aiConfigForDiagrams(env?: Record<string, string | undefined>): AiConfig | null {
+export async function aiConfigForDiagrams(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: AI_PREFIX, env });
+    return await loadAiConfig({ prefix: AI_PREFIX, env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }
 }
 
 /** The draw.io settings that point its AI window at /api/ai/chat; empty when no model is set. */
-export function editorAiSettings(env?: Record<string, string | undefined>): Record<string, unknown> {
-  const cfg = aiConfigForDiagrams(env);
+export async function editorAiSettings(env?: Record<string, string | undefined>): Promise<Record<string, unknown>> {
+  const cfg = await aiConfigForDiagrams(env);
   if (!cfg) return { enableAi: false };
   return {
     enableAi: true,

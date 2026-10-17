@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { speechConfig, transcribe } from "@synergy/ai";
+import { loadSpeechConfig, transcribe } from "@synergy/ai";
 import { identity } from "@/lib/identity";
 import { aiFailure } from "@/lib/slides/ai-server";
 
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const me = await identity();
   if (!me.email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  const cfg = speechConfig({ prefix: "SLIDES_" });
+  const cfg = await loadSpeechConfig({ prefix: "SLIDES_" }).catch(() => null);
   return NextResponse.json({ configured: !!cfg, model: cfg?.model || null });
 }
 
@@ -21,7 +21,7 @@ const MAX_AUDIO = 4 * 1024 * 1024;
 export async function POST(req: NextRequest) {
   const me = await identity();
   if (!me.email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  const cfg = speechConfig({ prefix: "SLIDES_" });
+  const cfg = await loadSpeechConfig({ prefix: "SLIDES_" }).catch(() => null);
   if (!cfg) return NextResponse.json({ error: "No speech model is configured for this suite. An administrator can set AI_SPEECH_MODEL on an OpenAI-compatible server." }, { status: 503 });
   const mime = (req.headers.get("content-type") || "audio/webm").split(";")[0];
   if (!/^audio\/[\w.+-]+$/.test(mime)) return NextResponse.json({ error: "bad request" }, { status: 400 });

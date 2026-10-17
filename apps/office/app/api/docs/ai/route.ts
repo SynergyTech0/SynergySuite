@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const me = await identity();
   if (!me.email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  const cfg = docsAiConfig();
+  const cfg = await docsAiConfig();
   return NextResponse.json({ configured: !!cfg, model: cfg?.model || null });
 }
 
@@ -20,7 +20,7 @@ const MAX_BODY = 256 * 1024;
 export async function POST(req: NextRequest) {
   const me = await identity();
   if (!me.email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  const cfg = docsAiConfig();
+  const cfg = await docsAiConfig();
   if (!cfg) return NextResponse.json({ error: "No AI model is configured for this suite. An administrator can set AI_MODEL with AI_API_KEY or AI_BASE_URL." }, { status: 503 });
   const raw = await req.text();
   if (raw.length > MAX_BODY) return NextResponse.json({ error: "too large" }, { status: 413 });

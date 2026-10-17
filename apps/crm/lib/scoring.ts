@@ -7,23 +7,23 @@
  * direction-changing characters are stripped before they reach the prompt, the fields are passed
  * as quoted data, and the model's answer is checked rather than trusted.
  */
-import { AiRequestError, AiUnavailableError, aiConfig, structured, type AiConfig } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 import { q } from "./db";
 import * as leads from "./leads";
 import { assertCanEdit } from "./permissions";
 import { label, type Ctx, type Lead } from "./types";
 import { UserError } from "./util";
 
-export function crmAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function crmAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: "CRM_", env });
+    return await loadAiConfig({ prefix: "CRM_", env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }
 }
 
-export function scoringEnabled(): boolean {
-  return crmAiConfig() !== null;
+export async function scoringEnabled(): Promise<boolean> {
+  return (await crmAiConfig()) !== null;
 }
 
 /**
@@ -111,8 +111,9 @@ async function logCall(model: string, ok: boolean, started: number, who: string,
   ]).catch(() => {}); // the audit row must never break the feature
 }
 
-export async function scoreLead(ctx: Ctx, id: string, cfg: AiConfig | null = crmAiConfig()): Promise<Lead> {
-  if (!cfg) throw new UserError("AI lead scoring is off. An administrator can set AI_MODEL or CRM_AI_MODEL.", 503);
+export async function scoreLead(ctx: Ctx, id: string, config?: AiConfig | null): Promise<Lead> {
+  const cfg = config === undefined ? await crmAiConfig() : config;
+  if (!cfg) throw new UserError("AI lead scoring is off. An administrator can pick a model in the admin console (or set AI_MODEL or CRM_AI_MODEL).", 503);
   const lead = await leads.raw(ctx, id);
   assertCanEdit(ctx, lead);
   if (lead.score_is_override) throw new UserError("This lead has a manual score. Clear it to let the AI score it.", 409);

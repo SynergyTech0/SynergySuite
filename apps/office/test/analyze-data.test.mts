@@ -102,10 +102,10 @@ test("formulas from a model are cleaned up to one line starting with =", () => {
 });
 
 test("no model set up: AI is off", async () => {
-  assert.equal(configFor({}), null);
+  assert.equal(await configFor({}), null);
   await assert.rejects(suggestFormula("sum", {}, null), (e: Error) => e.name === "AiUnavailableError");
   // OFFICE_ settings win over the suite's.
-  assert.equal(configFor({ AI_MODEL: "a", AI_BASE_URL: "http://x", OFFICE_AI_MODEL: "b" })?.model, "b");
+  assert.equal((await configFor({ AI_MODEL: "a", AI_BASE_URL: "http://x", OFFICE_AI_MODEL: "b" }))?.model, "b");
 });
 
 test("the formula and insight helpers ask the configured model through a forced tool call", async () => {
@@ -125,7 +125,7 @@ test("the formula and insight helpers ask the configured model through a forced 
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
   const port = (server.address() as any).port;
   try {
-    const config = configFor({ OFFICE_AI_BASE_URL: `http://127.0.0.1:${port}/v1`, OFFICE_AI_MODEL: "local-model" });
+    const config = await configFor({ OFFICE_AI_BASE_URL: `http://127.0.0.1:${port}/v1`, OFFICE_AI_MODEL: "local-model" });
     const f = await suggestFormula("total sales for North", { cell: "F2" }, config);
     assert.deepEqual(f, { formula: '=SUMIF(A2:A8,"North",C2:C8)', explanation: "Adds Sales where Region is North." });
     assert.equal(seen[0].url, "/v1/chat/completions");

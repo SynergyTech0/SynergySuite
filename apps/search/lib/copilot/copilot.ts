@@ -133,7 +133,7 @@ async function openItem(viewer: Viewer, input: CopilotInput, deps: CopilotDeps):
 type RawProposal = { reply?: unknown; actions?: unknown };
 
 export async function respond(viewer: Viewer, input: CopilotInput, deps: CopilotDeps = {}): Promise<CopilotReply> {
-  const config = deps.config === undefined ? searchAiConfig(deps.env) : deps.config;
+  const config = deps.config === undefined ? await searchAiConfig(deps.env) : deps.config;
   if (!config) throw new AiUnavailableError(AI_OFF_MESSAGE);
   const now = deps.now ?? Date.now();
   const mode = modeOf(input.message, Boolean(input.app && input.context));

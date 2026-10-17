@@ -7,12 +7,12 @@ import { currentUser } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 /** What the page tells draw.io in its configure message (https://www.drawio.com/doc/faq/configure-diagram-editor). */
-function editorConfig(): Record<string, unknown> {
+async function editorConfig(): Promise<Record<string, unknown>> {
   return {
     // The shape libraries open in the left panel, much like Visio's basic stencils.
     defaultLibraries: "general;basic;arrows2;flowchart;uml;er;bpmn;network",
     defaultFonts: ["Segoe UI", "Helvetica", "Verdana", "Times New Roman", "Garamond", "Courier New"],
-    ...editorAiSettings(),
+    ...(await editorAiSettings()),
   };
 }
 
@@ -22,7 +22,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const { id } = await params;
   return (
     <Suspense>
-      <Editor id={id} me={me.email} editorConfig={editorConfig()} />
+      <Editor id={id} me={me.email} editorConfig={await editorConfig()} />
     </Suspense>
   );
 }

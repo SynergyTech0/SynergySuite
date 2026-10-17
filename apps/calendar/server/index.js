@@ -78,7 +78,7 @@ function cleanAttendees(list) {
 }
 
 const router = express.Router();
-router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail, ai: calendarAiConfig() !== null })));
+router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail, ai: (await calendarAiConfig()) !== null })));
 
 // Draft with Copilot: notes for the event editor. Returns text only; nothing is saved here.
 router.post('/draft', wrap(draftHandler));

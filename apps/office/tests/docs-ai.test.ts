@@ -57,11 +57,11 @@ test("document blocks become plain text for the model", () => {
   assert.deepEqual(mdToNodes(text).map((n) => n.type), ["heading", "paragraph", "bulletList", "orderedList"]);
 });
 
-test("configuration reads DOCS_AI_* before AI_*", () => {
-  assert.equal(docsAiConfig({}), null);
-  assert.equal(docsAiConfig({ AI_MODEL: "m", AI_BASE_URL: "http://x" })!.model, "m");
-  assert.equal(docsAiConfig({ AI_MODEL: "m", AI_BASE_URL: "http://x", DOCS_AI_MODEL: "d" })!.model, "d");
-  assert.equal(docsAiConfig({ AI_PROVIDER: "nope", AI_MODEL: "m" }), null);
+test("configuration reads DOCS_AI_* before AI_*", async () => {
+  assert.equal(await docsAiConfig({}), null);
+  assert.equal((await docsAiConfig({ AI_MODEL: "m", AI_BASE_URL: "http://x" }))!.model, "m");
+  assert.equal((await docsAiConfig({ AI_MODEL: "m", AI_BASE_URL: "http://x", DOCS_AI_MODEL: "d" }))!.model, "d");
+  assert.equal(await docsAiConfig({ AI_PROVIDER: "nope", AI_MODEL: "m" }), null);
 });
 
 test("a task goes to the model and its answer comes back clean", async () => {
@@ -83,7 +83,7 @@ test("a task goes to the model and its answer comes back clean", async () => {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   try {
     const port = (server.address() as AddressInfo).port;
-    const cfg = docsAiConfig({ DOCS_AI_MODEL: "stub", DOCS_AI_BASE_URL: `http://127.0.0.1:${port}/v1` })!;
+    const cfg = (await docsAiConfig({ DOCS_AI_MODEL: "stub", DOCS_AI_BASE_URL: `http://127.0.0.1:${port}/v1` }))!;
     assert.equal(await aiDocsTask("grammar", { text: "teh cat sat" }, cfg), "The cat sat.");
     assert.ok(seen!.messages.some((m) => m.role === "user" && m.content === "teh cat sat"));
     assert.ok(seen!.messages.some((m) => m.role === "system" && /proofreader/.test(m.content)));

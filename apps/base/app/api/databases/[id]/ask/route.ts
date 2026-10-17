@@ -7,7 +7,7 @@ import { sqlScope } from "@/lib/queries";
 type P = { id: string };
 
 /** Whether an AI model is configured (the Ask box only shows when one is). */
-export const GET = route<P>(async () => ({ enabled: baseAiConfig() !== null }));
+export const GET = route<P>(async () => ({ enabled: (await baseAiConfig()) !== null }));
 
 /** POST `{ question, sql? }` → `{ sql, explanation }`: a query written by the suite's AI model. */
 export const POST = route<P>(async (req, me, { id }) => {
@@ -15,7 +15,7 @@ export const POST = route<P>(async (req, me, { id }) => {
   const b = await body<{ question?: unknown; sql?: unknown; queryId?: unknown }>(req);
   const question = typeof b.question === "string" ? b.question.trim() : "";
   if (!question) throw new HttpError(400, "Ask a question about the data");
-  const config = baseAiConfig();
+  const config = await baseAiConfig();
   if (!config) return NextResponse.json({ error: "AI is off: no model is configured for the suite" }, { status: 503 });
   const tables = await listTables(id, me.email);
   const scope = await sqlScope(id, tables, typeof b.queryId === "string" ? b.queryId : undefined);
