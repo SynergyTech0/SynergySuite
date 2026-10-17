@@ -170,9 +170,16 @@ export class Metabase {
     const admin = isAdmin(this.c, email);
     let u = await this.findUser(email);
     if (!u) {
-      u = await this.asService<MetabaseUser>("/api/user", {
-        body: { ...splitName(name, email), email, password: personPassword(this.c, email) },
-      });
+      try {
+        u = await this.asService<MetabaseUser>("/api/user", {
+          body: { ...splitName(name, email), email, password: personPassword(this.c, email) },
+        });
+      } catch (err) {
+        // A person's first visit makes several requests at once, so another one may have just
+        // made the account.
+        u = err instanceof MetabaseError ? await this.findUser(email) : null;
+        if (!u) throw err;
+      }
     }
     if (!u.is_active) throw new MetabaseError(403, "Your Insights account has been turned off. Ask an admin to turn it back on in Insights' admin settings.");
     if (admin && !u.is_superuser) {
