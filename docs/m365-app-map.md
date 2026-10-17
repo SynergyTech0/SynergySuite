@@ -35,6 +35,7 @@
 | Dynamics 365 Supply Chain Management | Manufacturing (BOMs, routings, work orders, MRP), asset management and maintenance | `apps/ops` | Have |
 | Entra ID | Sign-in, SSO, MFA, directory | synergyauth | Have, strongest piece |
 | Admin center | Users, licences, settings | `apps/admin` + synergyauth admin console | Have |
+| Migration (FastTrack, Migration Manager, Exchange IMAP migration) | Move mailboxes, OneDrive and SharePoint into the suite | `apps/admin` "Move from Microsoft 365": Graph (read-only Entra app) into Mail, Drive, Calendar, Contacts and To Do, delta re-runs for cutover, IMAP-to-IMAP for other hosts; no Teams chats, OneNote or Planner yet | Partial |
 | Intune | Device inventory, compliance policies, enrollment | `apps/devices` (osquery agents); no lock, wipe, settings or app push yet | Partial |
 | Defender for Endpoint | Threat detection, vulnerabilities, hunting | `apps/devices` detections, indicators, OSV vulnerabilities, live queries; detects and alerts, doesn't block | Partial |
 | Purview / eDiscovery | Retention, legal hold, search | `apps/admin` Compliance, `@synergy/compliance` in each app | Have |

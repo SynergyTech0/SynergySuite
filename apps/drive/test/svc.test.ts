@@ -81,7 +81,7 @@ describe.skipIf(!base)("drive service api", async () => {
     libId = res.body.id as string;
     expect(res.body.url).toBe(`https://drive.example.com/?library=${libId}`);
     const mine = await drive.libraries(alice);
-    expect(mine).toEqual([{ id: libId, name: "Marketing", description: "Team files", role: "owner", members: 2, team: true }]);
+    expect(mine).toEqual([{ id: libId, name: "Marketing", description: "Team files", role: "owner", members: 2, managedBy: null, team: true }]);
     expect(await drive.members(alice, libId)).toEqual([
       { email: alice.email, role: "owner" },
       { email: bob.email, role: "editor" },
