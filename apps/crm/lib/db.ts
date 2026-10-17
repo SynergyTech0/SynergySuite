@@ -4,7 +4,8 @@ import { createDb } from "@synergy/db";
  * The sales model. `members` are the suite's people as the CRM knows them (keyed by email,
  * with a role); every record has an owner among them. Accounts hold contacts and opportunities;
  * leads are prospects not yet qualified, converted into an account, a contact and maybe a deal.
- * Activities (tasks, events, calls, notes) hang off any record by type and id.
+ * Activities (tasks, events, calls, notes) hang off any record by type and id. Referral partners
+ * send leads and deals; each referral tracks the reward owed and paid for one of them.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS members (
@@ -144,6 +145,64 @@ CREATE TABLE IF NOT EXISTS record_shares (
 CREATE INDEX IF NOT EXISTS record_shares_principal_idx ON record_shares (principal);
 CREATE INDEX IF NOT EXISTS opportunities_owner_idx ON opportunities (owner);
 CREATE INDEX IF NOT EXISTS contacts_owner_idx ON contacts (owner);
+
+-- Referral partners: a person or company that sends business, maybe someone already in the CRM
+-- as a contact or account. Their default reward is copied onto each referral when it is made, so
+-- changing it later doesn't rewrite what was promised. code lets a web form attribute a lead.
+CREATE TABLE IF NOT EXISTS referral_partners (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'person' CHECK (kind IN ('person','company')),
+  company      TEXT NOT NULL DEFAULT '',
+  email        TEXT NOT NULL DEFAULT '',
+  phone        TEXT NOT NULL DEFAULT '',
+  notes        TEXT NOT NULL DEFAULT '',
+  status       TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  code         TEXT,
+  reward_type  TEXT NOT NULL DEFAULT 'percent' CHECK (reward_type IN ('fixed','percent')),
+  reward_value NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (reward_value >= 0),
+  contact_id   UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  account_id   UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  owner        TEXT NOT NULL REFERENCES members(email) ON UPDATE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by   TEXT,
+  updated_by   TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS referral_partners_code_idx ON referral_partners (lower(code)) WHERE code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS referral_partners_owner_idx ON referral_partners (owner);
+
+-- A lead or deal a partner sent. A converted lead's referral moves onto the deal it became (and
+-- keeps the lead), so one referral follows the business from first contact to won or lost.
+CREATE TABLE IF NOT EXISTS referrals (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  partner_id     UUID NOT NULL REFERENCES referral_partners(id) ON DELETE CASCADE,
+  lead_id        UUID UNIQUE REFERENCES leads(id) ON DELETE SET NULL,
+  opportunity_id UUID UNIQUE REFERENCES opportunities(id) ON DELETE SET NULL,
+  reward_type    TEXT NOT NULL CHECK (reward_type IN ('fixed','percent')),
+  reward_value   NUMERIC(14,2) NOT NULL CHECK (reward_value >= 0),
+  paid_on        DATE,
+  paid_amount    NUMERIC(14,2),
+  paid_note      TEXT NOT NULL DEFAULT '',
+  paid_by        TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by     TEXT,
+  updated_by     TEXT
+);
+CREATE INDEX IF NOT EXISTS referrals_partner_idx ON referrals (partner_id);
+
+-- Partners came after the first installs: let activities and shares point at them too.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'activities_related_type_check' AND pg_get_constraintdef(oid) LIKE '%partner%') THEN
+    ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_related_type_check;
+    ALTER TABLE activities ADD CONSTRAINT activities_related_type_check CHECK (related_type IN ('account','contact','lead','opportunity','partner'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'record_shares_kind_check' AND pg_get_constraintdef(oid) LIKE '%partner%') THEN
+    ALTER TABLE record_shares DROP CONSTRAINT IF EXISTS record_shares_kind_check;
+    ALTER TABLE record_shares ADD CONSTRAINT record_shares_kind_check CHECK (kind IN ('account','contact','lead','opportunity','partner'));
+  END IF;
+END $$;
 
 -- Records deleted while their owner was on legal hold, kept whole for eDiscovery (lib/ediscovery.ts).
 CREATE TABLE IF NOT EXISTS held_records (

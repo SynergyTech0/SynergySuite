@@ -5,21 +5,26 @@ import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
 import { computePipelineSummary, STAGE_PROBABILITY, type PipelineSummary } from "./pipeline";
 import { OWNER_NAME, audit, merged, ownerFor, type AuditRow } from "./records";
+import * as referrals from "./referrals";
 import { STAGES, type Ctx, type Opportunity, type Stage } from "./types";
 import { UserError, isUuid, isoDate, likeTerm, money, oneOf, percent, required } from "./util";
 
 export type OppRow = AuditRow & {
   id: string; account_id: string; account_name: string; name: string; amount: string | null; stage: Stage;
   close_day: string | null; probability: number | null;
+  referral_id: string | null; referral_partner_id: string | null; referral_partner_name: string | null;
 };
 
-export const OPP_SELECT = `SELECT o.*, to_char(o.close_date, 'YYYY-MM-DD') AS close_day, a.name AS account_name, ${OWNER_NAME("o")}
-  FROM opportunities o JOIN accounts a ON a.id = o.account_id`;
+export const OPP_SELECT = `SELECT o.*, to_char(o.close_date, 'YYYY-MM-DD') AS close_day, a.name AS account_name, ${OWNER_NAME("o")},
+    rf.id AS referral_id, rf.partner_id AS referral_partner_id, rp.name AS referral_partner_name
+  FROM opportunities o JOIN accounts a ON a.id = o.account_id
+  LEFT JOIN referrals rf ON rf.opportunity_id = o.id LEFT JOIN referral_partners rp ON rp.id = rf.partner_id`;
 
 export function oppRow(ctx: Ctx, r: OppRow): Opportunity {
   return {
     id: r.id, accountId: r.account_id, accountName: r.account_name, name: r.name, amount: r.amount, stage: r.stage,
     closeDate: r.close_day, probability: r.probability,
+    referralId: r.referral_id, referralPartnerId: r.referral_partner_id, referralPartnerName: r.referral_partner_name ?? "",
     ...audit(ctx, r),
   };
 }
@@ -83,12 +88,16 @@ export async function get(ctx: Ctx, id: string): Promise<Opportunity> {
 export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Opportunity> {
   const v = await fields(ctx, b);
   const owner = await ownerFor(ctx, b.owner, null);
-  const [row] = await q<{ id: string }>(
-    `INSERT INTO opportunities (account_id, name, amount, stage, close_date, probability, owner, created_by, updated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
-    [v.accountId, v.name, v.amount, v.stage, v.closeDate, v.probability, owner, ctx.email],
-  );
-  return get(ctx, row.id);
+  const id = await tx(async (tq) => {
+    const [row] = await tq<{ id: string }>(
+      `INSERT INTO opportunities (account_id, name, amount, stage, close_date, probability, owner, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
+      [v.accountId, v.name, v.amount, v.stage, v.closeDate, v.probability, owner, ctx.email],
+    );
+    if (b.referralPartnerId) await referrals.attribute(ctx, tq, "opportunity", row.id, b.referralPartnerId);
+    return row.id;
+  });
+  return get(ctx, id);
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Opportunity> {
@@ -99,11 +108,14 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
     b,
   ));
   const owner = await ownerFor(ctx, b.owner, cur.owner);
-  await q(
-    `UPDATE opportunities SET account_id=$2, name=$3, amount=$4, stage=$5, close_date=$6, probability=$7, owner=$8, updated_by=$9, updated_at=now()
-     WHERE id = $1`,
-    [id, v.accountId, v.name, v.amount, v.stage, v.closeDate, v.probability, owner, ctx.email],
-  );
+  await tx(async (tq) => {
+    await tq(
+      `UPDATE opportunities SET account_id=$2, name=$3, amount=$4, stage=$5, close_date=$6, probability=$7, owner=$8, updated_by=$9, updated_at=now()
+       WHERE id = $1`,
+      [id, v.accountId, v.name, v.amount, v.stage, v.closeDate, v.probability, owner, ctx.email],
+    );
+    if (b.referralPartnerId !== undefined) await referrals.attribute(ctx, tq, "opportunity", id, b.referralPartnerId);
+  });
   return get(ctx, id);
 }
 
@@ -122,6 +134,7 @@ export async function remove(ctx: Ctx, id: string): Promise<void> {
     await keepHeld(tq, ctx.email, "activity", "t.related_type = 'opportunity' AND t.related_id = $1", [id]);
     await keepHeld(tq, ctx.email, "opportunity", "t.id = $1", [id]);
     await tq("DELETE FROM activities WHERE related_type = 'opportunity' AND related_id = $1", [id]);
+    await referrals.dropWith(tq, "opportunity", "$1::uuid", [id]);
     await tq("DELETE FROM opportunities WHERE id = $1", [id]);
   });
 }

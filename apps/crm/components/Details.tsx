@@ -3,10 +3,11 @@
 import { ArrowLeft, ArrowRight, Lock, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { effectiveProbability } from "@/lib/pipeline";
-import { label, type Account, type Contact, type Lead, type Opportunity, type RecordType } from "@/lib/types";
+import { label, type Account, type Contact, type Lead, type Opportunity, type Partner, type RecordType, type Referral, type ReferralTotals } from "@/lib/types";
 import { api, formatDate, formatDateTime, formatMoney, type View } from "./client";
-import { AccountEditor, ContactEditor, ConvertDialog, LeadEditor, OpportunityEditor } from "./Editors";
+import { AccountEditor, ContactEditor, ConvertDialog, LeadEditor, OpportunityEditor, PartnerEditor } from "./Editors";
 import { Confirm, Modal } from "./Modal";
+import { ReferralTable, Totals, rewardTerms } from "./Referrals";
 import { Avatar, Badge, Facts, type AppCtx } from "./shared";
 import { SharePanel } from "./Sharing";
 import { Timeline } from "./Timeline";
@@ -201,6 +202,7 @@ export function OpportunityDetail({ app, id, onChange }: DetailProps) {
       <section className="panel">
         <Facts items={[
           ["Amount", formatMoney(o.amount)], ["Weighted", o.amount ? formatMoney((Number(o.amount) * p) / 100) : ""], ["Expected close", o.closeDate ? formatDate(o.closeDate) : ""],
+          ["Referred by", <RelatedLink key="p" app={app} view="partners" id={o.referralPartnerId}>{o.referralPartnerName}</RelatedLink>],
           ["Owner", o.ownerName], ["Created", formatDate(o.createdAt)], ["Updated", formatDate(o.updatedAt)],
         ]} />
       </section>
@@ -321,7 +323,7 @@ export function LeadDetail({ app, id, onChange }: DetailProps) {
         </div>
       ) : null}
       <section className="panel">
-        <Facts items={[["Company", l.company], ["Email", mail(l.email)], ["Phone", tel(l.phone)], ["Source", label(l.source)], ["Owner", l.ownerName], ["Created", formatDate(l.createdAt)]]} />
+        <Facts items={[["Company", l.company], ["Email", mail(l.email)], ["Phone", tel(l.phone)], ["Source", label(l.source)], ["Referred by", <RelatedLink key="p" app={app} view="partners" id={l.referralPartnerId}>{l.referralPartnerName}</RelatedLink>], ["Owner", l.ownerName], ["Created", formatDate(l.createdAt)]]} />
       </section>
       <ScoreCard app={app} lead={l} onChange={refresh} />
       {l.utmSource || l.utmMedium || l.utmCampaign || l.landingPath ? (
@@ -346,6 +348,42 @@ export function LeadDetail({ app, id, onChange }: DetailProps) {
           }}
         />
       ) : null}
+      {del}
+    </div>
+  );
+}
+
+export function PartnerDetail({ app, id, onChange }: DetailProps) {
+  const [p, reload, error] = useRecord<Partner & { referrals: Referral[]; totals: ReferralTotals }>(`/api/partners/${id}`, app);
+  const [editing, setEditing] = useState(false);
+  const [del, askDelete] = useDelete(app, "partners", "this partner", `/api/partners/${id}`, onChange);
+  if (!p) return <Missing error={error} />;
+  return (
+    <div className="card">
+      <Header
+        app={app} view="partners" name={p.name} sub={p.company} square={p.kind === "company"}
+        badges={<><Badge value={p.status} /><span className="badge">{label(p.kind)}</span></>}
+        editable={p.editable} onEdit={() => setEditing(true)} onDelete={askDelete}
+      />
+      <section className="panel">
+        <Facts items={[
+          ["Email", mail(p.email)], ["Phone", tel(p.phone)], ["Default reward", rewardTerms(p)], ["Partner code", p.code ? <code key="c">{p.code}</code> : ""],
+          ["Contact", <RelatedLink key="c" app={app} view="contacts" id={p.contactId}>{p.contactName}</RelatedLink>],
+          ["Account", <RelatedLink key="a" app={app} view="accounts" id={p.accountId}>{p.accountName}</RelatedLink>],
+          ["Owner", p.ownerName], ["Created", formatDate(p.createdAt)],
+        ]} />
+        {p.notes ? <p className="pre" style={{ marginBottom: 0 }}>{p.notes}</p> : null}
+      </section>
+      <section className="panel">
+        <h3>Referrals</h3>
+        <Totals t={p.totals} />
+        <div style={{ marginTop: 10 }}>
+          <ReferralTable app={app} rows={p.referrals} showPartner={false} onChange={() => { void reload(); onChange(); }} />
+        </div>
+      </section>
+      <SharePanel app={app} kind="partner" id={p.id} canShare={p.editable} />
+      <Timeline app={app} relatedType="partner" relatedId={p.id} />
+      {editing ? <PartnerEditor app={app} record={p} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void reload(); onChange(); }} /> : null}
       {del}
     </div>
   );

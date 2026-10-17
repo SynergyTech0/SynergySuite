@@ -2,17 +2,18 @@
 // The CRM: navigation on the left, the chosen view on the right. Where you are lives in the
 // address (#/leads/<id>) so reloading and the back button work.
 import {
-  Building2, CalendarCheck, ChevronDown, Columns3, Contact as ContactIcon, Gauge, Plus, Target, UserPlus, Users,
+  Building2, CalendarCheck, ChevronDown, Columns3, Contact as ContactIcon, Gauge, HandCoins, Handshake, Plus, Target, UserPlus, Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Account, Contact, Ctx, Lead, Member, Opportunity } from "@/lib/types";
+import type { Account, Contact, Ctx, Lead, Member, Opportunity, Partner } from "@/lib/types";
 import { label } from "@/lib/types";
 import { api, useRoute, type View } from "./client";
 import { Dashboard } from "./Dashboard";
-import { AccountEditor, ContactEditor, LeadEditor, OpportunityEditor } from "./Editors";
+import { AccountEditor, ContactEditor, LeadEditor, OpportunityEditor, PartnerEditor } from "./Editors";
 import { MyDay } from "./MyDay";
 import { Pipeline } from "./Pipeline";
 import { RecordsView } from "./Records";
+import { ReferralsView } from "./Referrals";
 import type { AppCtx } from "./shared";
 import { Team } from "./Team";
 
@@ -24,9 +25,12 @@ const NAV: { view: View; text: string; icon: React.ReactNode }[] = [
   { view: "contacts", text: "Contacts", icon: <ContactIcon size={18} /> },
   { view: "opportunities", text: "Opportunities", icon: <Target size={18} /> },
   { view: "pipeline", text: "Pipeline", icon: <Columns3 size={18} /> },
+  { view: "partners", text: "Partners", icon: <Handshake size={18} /> },
+  { view: "referrals", text: "Referrals", icon: <HandCoins size={18} /> },
 ];
 
-type NewKind = "leads" | "accounts" | "contacts" | "opportunities";
+type NewKind = "leads" | "accounts" | "contacts" | "opportunities" | "partners";
+const SINGULAR: Record<NewKind, string> = { leads: "Lead", accounts: "Account", contacts: "Contact", opportunities: "Opportunity", partners: "Referral partner" };
 
 export function CrmApp({ me: initialMe }: { me: Ctx }) {
   const [route, go] = useRoute();
@@ -67,8 +71,8 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
   }), [me, members, ai, repRead, version, say, go]);
 
   const Editor = creating
-    ? ({ leads: LeadEditor, accounts: AccountEditor, contacts: ContactEditor, opportunities: OpportunityEditor }[creating] as
-        (p: { app: AppCtx; onClose: () => void; onSaved: (r: Lead | Account | Contact | Opportunity) => void }) => React.ReactNode)
+    ? ({ leads: LeadEditor, accounts: AccountEditor, contacts: ContactEditor, opportunities: OpportunityEditor, partners: PartnerEditor }[creating] as
+        (p: { app: AppCtx; onClose: () => void; onSaved: (r: Lead | Account | Contact | Opportunity | Partner) => void }) => React.ReactNode)
     : null;
 
   return (
@@ -80,9 +84,9 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
           </button>
           {menu ? (
             <div className="menu newmenu" role="menu" onMouseLeave={() => setMenu(false)}>
-              {(["leads", "accounts", "contacts", "opportunities"] as NewKind[]).map((k) => (
+              {(["leads", "accounts", "contacts", "opportunities", "partners"] as NewKind[]).map((k) => (
                 <button key={k} role="menuitem" onClick={() => { setMenu(false); setCreating(k); }}>
-                  {NAV.find((n) => n.view === k)!.icon} {label(k === "leads" ? "lead" : k === "accounts" ? "account" : k === "contacts" ? "contact" : "opportunity")}
+                  {NAV.find((n) => n.view === k)!.icon} {SINGULAR[k]}
                 </button>
               ))}
             </div>
@@ -113,6 +117,7 @@ export function CrmApp({ me: initialMe }: { me: Ctx }) {
         {route.view === "dashboard" ? <Dashboard app={app} />
           : route.view === "myday" ? <MyDay app={app} />
           : route.view === "pipeline" ? <Pipeline app={app} />
+          : route.view === "referrals" ? <ReferralsView app={app} />
           : route.view === "team" ? <Team app={app} onMembers={(m) => { setMembers(m); setMe((cur) => ({ ...cur, role: m.find((x) => x.email === cur.email)?.role ?? cur.role })); }} />
           : <RecordsView app={app} kind={route.view} id={route.id} />}
       </main>

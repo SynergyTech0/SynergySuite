@@ -1,22 +1,23 @@
 "use client";
-// The four record lists (leads, accounts, contacts, opportunities): search and filters on the
-// left, the selected record on the right.
+// The record lists (leads, accounts, contacts, opportunities, referral partners): search and
+// filters on the left, the selected record on the right.
 import { Download, Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ACCOUNT_TYPES, LEAD_SOURCES, LEAD_STATUSES, STAGES, label,
-  type Account, type Contact, type Lead, type Opportunity,
+  ACCOUNT_TYPES, LEAD_SOURCES, LEAD_STATUSES, PARTNER_STATUSES, STAGES, label,
+  type Account, type Contact, type Lead, type Opportunity, type Partner,
 } from "@/lib/types";
 import { api, formatDate, formatMoney } from "./client";
-import { AccountDetail, ContactDetail, LeadDetail, OpportunityDetail } from "./Details";
-import { AccountEditor, ContactEditor, LeadEditor, OpportunityEditor } from "./Editors";
+import { AccountDetail, ContactDetail, LeadDetail, OpportunityDetail, PartnerDetail } from "./Details";
+import { AccountEditor, ContactEditor, LeadEditor, OpportunityEditor, PartnerEditor } from "./Editors";
+import { rewardTerms } from "./Referrals";
 import { Avatar, Badge, Score, type AppCtx } from "./shared";
 
-export type Kind = "leads" | "accounts" | "contacts" | "opportunities";
-type AnyRecord = Lead | Account | Contact | Opportunity;
+export type Kind = "leads" | "accounts" | "contacts" | "opportunities" | "partners";
+type AnyRecord = Lead | Account | Contact | Opportunity | Partner;
 
-const TITLES: Record<Kind, string> = { leads: "Leads", accounts: "Accounts", contacts: "Contacts", opportunities: "Opportunities" };
-const SINGULAR: Record<Kind, string> = { leads: "lead", accounts: "account", contacts: "contact", opportunities: "opportunity" };
+const TITLES: Record<Kind, string> = { leads: "Leads", accounts: "Accounts", contacts: "Contacts", opportunities: "Opportunities", partners: "Referral partners" };
+const SINGULAR: Record<Kind, string> = { leads: "lead", accounts: "account", contacts: "contact", opportunities: "opportunity", partners: "partner" };
 
 /** The filter dropdown each list offers: [query parameter, choices]. */
 const FILTER: Record<Kind, [string, string, readonly string[]][]> = {
@@ -24,6 +25,7 @@ const FILTER: Record<Kind, [string, string, readonly string[]][]> = {
   accounts: [["type", "Any type", ACCOUNT_TYPES]],
   contacts: [],
   opportunities: [["stage", "Any stage", ["open", ...STAGES]]],
+  partners: [["status", "Any status", PARTNER_STATUSES]],
 };
 
 function Row({ kind, r }: { kind: Kind; r: AnyRecord }) {
@@ -50,6 +52,19 @@ function Row({ kind, r }: { kind: Kind; r: AnyRecord }) {
           <span className="rsub">{[a.industry, a.ownerName].filter(Boolean).join(" · ")}</span>
         </div>
         <div className="rside"><Badge value={a.type} /></div>
+      </>
+    );
+  }
+  if (kind === "partners") {
+    const p = r as Partner;
+    return (
+      <>
+        <Avatar name={p.name} square={p.kind === "company"} />
+        <div className="grow">
+          <span className="rname">{p.name}</span>
+          <span className="rsub">{[p.company, rewardTerms(p)].filter(Boolean).join(" · ")}</span>
+        </div>
+        <div className="rside"><Badge value={p.status} /></div>
       </>
     );
   }
@@ -117,7 +132,7 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
     app.go(kind, r.id);
   };
 
-  const Editor = { leads: LeadEditor, accounts: AccountEditor, contacts: ContactEditor, opportunities: OpportunityEditor }[kind] as
+  const Editor = { leads: LeadEditor, accounts: AccountEditor, contacts: ContactEditor, opportunities: OpportunityEditor, partners: PartnerEditor }[kind] as
     (p: { app: AppCtx; onClose: () => void; onSaved: (r: AnyRecord) => void }) => React.ReactNode;
 
   return (
@@ -168,6 +183,7 @@ export function RecordsView({ app, kind, id }: { app: AppCtx; kind: Kind; id: st
           kind === "leads" ? <LeadDetail key={id} app={app} id={id} onChange={load} />
           : kind === "accounts" ? <AccountDetail key={id} app={app} id={id} onChange={load} />
           : kind === "contacts" ? <ContactDetail key={id} app={app} id={id} onChange={load} />
+          : kind === "partners" ? <PartnerDetail key={id} app={app} id={id} onChange={load} />
           : <OpportunityDetail key={id} app={app} id={id} onChange={load} />
         ) : (
           <div className="empty">

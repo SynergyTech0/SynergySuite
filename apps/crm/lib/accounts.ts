@@ -6,6 +6,7 @@ import { OWNER_NAME, audit, merged, ownerFor, type AuditRow } from "./records";
 import { contactRow, type ContactRow } from "./contacts";
 import { keepHeld } from "./ediscovery";
 import { oppRow, OPP_SELECT, type OppRow } from "./opportunities";
+import * as referrals from "./referrals";
 import { ACCOUNT_TYPES, type Account, type Contact, type Ctx, type Opportunity } from "./types";
 import { UserError, likeTerm, oneOf, optionalUrl, required, text } from "./util";
 
@@ -113,6 +114,7 @@ export async function remove(ctx: Ctx, id: string): Promise<void> {
     await keepHeld(tq, ctx.email, "opportunity", "t.account_id = $1", [id]);
     await keepHeld(tq, ctx.email, "account", "t.id = $1", [id]);
     await tq(`DELETE FROM activities t WHERE ${activities}`, [id]);
+    await referrals.dropWith(tq, "opportunity", "SELECT id FROM opportunities WHERE account_id = $1", [id]);
     await tq("DELETE FROM accounts WHERE id = $1", [id]);
   });
 }
