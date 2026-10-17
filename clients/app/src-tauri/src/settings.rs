@@ -1,6 +1,7 @@
 //! What the app remembers between launches: the server and the last app open.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Url};
@@ -13,8 +14,14 @@ pub struct Settings {
     pub last_app: Option<String>,
 }
 
+/// Found once, at startup. On Android, finding an app folder asks the UI thread, and saving
+/// happens in the navigation handler, which runs on that thread: asking again there would
+/// wait on itself and freeze the app.
+static FILE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
 fn file(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
+    FILE.get_or_init(|| app.path().app_config_dir().ok().map(|d| d.join("settings.json")))
+        .clone()
 }
 
 impl Settings {
