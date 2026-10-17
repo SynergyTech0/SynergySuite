@@ -71,10 +71,8 @@ export function identify(h: HeaderSource, opts: IdentifyOptions = optionsFromEnv
 
   let email = header(h, "x-auth-request-email") || header(h, "x-forwarded-email");
   const subject = header(h, "x-auth-request-user") || header(h, "x-forwarded-user");
-  let name =
-    header(h, "x-auth-request-preferred-username") ||
-    header(h, "x-forwarded-preferred-username") ||
-    subject;
+  // The subject is an account id, never a name to show.
+  let name = header(h, "x-auth-request-preferred-username") || header(h, "x-forwarded-preferred-username");
 
   if (!email && opts.devUser && !opts.production) {
     email = header(h, "x-dev-user") || opts.devOverride || opts.devUser;

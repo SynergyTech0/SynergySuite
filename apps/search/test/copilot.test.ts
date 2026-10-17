@@ -157,7 +157,7 @@ describe("Copilot proposals", () => {
     expect(done.out.url).toBe("https://todo.suite.test/?list=l2&task=t1");
     const w = writes();
     expect(w).toHaveLength(1);
-    expect(w[0]).toMatchObject({ app: "todo", path: "/api/tasks", body: { title: "Send the budget", due: "2026-10-23", listId: "l2", today: "2026-10-16" } });
+    expect(w[0]).toMatchObject({ app: "todo", path: "/api/tasks", body: { title: "Send the budget", due: "2026-10-23", listId: "l2", today: new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()) } });
     expect(w[0].headers["x-auth-request-email"]).toBe("ann@example.com");
     expect(w[0].headers["x-proxy-auth-secret"]).toBe("gw");
 
