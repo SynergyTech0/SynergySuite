@@ -256,7 +256,7 @@ CREATE TABLE IF NOT EXISTS sa_audit (
 CREATE INDEX IF NOT EXISTS sa_audit_at_idx ON sa_audit(at_ms);
 
 CREATE TABLE IF NOT EXISTS sa_settings (
-  key        TEXT PRIMARY KEY, -- device_compliance
+  key        TEXT PRIMARY KEY, -- device_compliance, ai_model
   value      JSONB,
   updated_ms BIGINT
 );

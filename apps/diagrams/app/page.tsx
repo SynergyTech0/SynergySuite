@@ -9,5 +9,5 @@ export default async function Page() {
   // The gateway signs people in before they get here; this only catches a misconfigured deploy.
   const me = await currentUser();
   if (!me) redirect("/signed-out");
-  return <Home me={me.email} aiEnabled={!!aiConfigForDiagrams()} />;
+  return <Home me={me.email} aiEnabled={!!(await aiConfigForDiagrams())} />;
 }

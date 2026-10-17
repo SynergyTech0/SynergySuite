@@ -6,8 +6,13 @@ import { rotateKey } from '@/lib/keys';
 import { sha256hex } from '@/lib/oauth';
 import { audit } from '@/lib/audit';
 import { getCompliance, parseCompliance, setCompliance } from '@/lib/device-access';
+import { clearAiSettings, getAiSettingsView, readAiInput, resolveAiInput, saveAiSettings, testAiModel } from '@/lib/ai-settings';
 
-/* Admin settings: signing-key rotation, SCIM API tokens, SAML SP registry, device compliance. */
+/*
+ * Admin settings: signing-key rotation, SCIM API tokens, SAML SP registry, device compliance and
+ * the suite's AI model. The AI key is write-only here: GET says only whether one is set and its
+ * last 4 characters, and the audit log never records it.
+ */
 
 async function requireAdmin(req: Request) {
   const auth = await currentUser(req);
@@ -33,6 +38,8 @@ export async function GET(req: Request) {
     saml_sps: sps.map((s) => ({ id: String(s.id), entity_id: s.entity_id, acs_url: s.acs_url, slo_url: s.slo_url, name: s.name })),
     device_compliance: await getCompliance(),
     devices_connected: Boolean(process.env.DEVICES_INTERNAL_URL && process.env.DEVICES_SVC_TOKEN),
+    ai_model: await getAiSettingsView(),
+    ai_apps_connected: Boolean(process.env.PROXY_SHARED_SECRET),
   });
 }
 
@@ -98,6 +105,27 @@ export async function POST(req: Request) {
     await setCompliance(c);
     await audit('admin.device_compliance_set', auth.user.email, c, req);
     return json({ ok: true, device_compliance: c });
+  }
+
+  if (action === 'set_ai_model' || action === 'test_ai_model') {
+    const r = await resolveAiInput(readAiInput(body));
+    if ('error' in r) return json({ error: r.error }, 400);
+    const { provider, apiKey, input } = r;
+    const what = { provider, model: input.model, base_url: input.base_url, embedding_model: input.embedding_model, speech_model: input.speech_model };
+    if (action === 'test_ai_model') {
+      const t = await testAiModel(provider, apiKey, input);
+      await audit('admin.ai_model_tested', auth.user.email, { ...what, ok: t.ok }, req);
+      return json(t);
+    }
+    await saveAiSettings(provider, apiKey, input, auth.user.email);
+    await audit('admin.ai_model_set', auth.user.email, { ...what, key_set: !!apiKey, key_changed: r.keyChanged }, req);
+    return json({ ok: true, ai_model: await getAiSettingsView() });
+  }
+
+  if (action === 'clear_ai_model') {
+    await clearAiSettings();
+    await audit('admin.ai_model_cleared', auth.user.email, {}, req);
+    return json({ ok: true });
   }
 
   return json({ error: 'unknown_action' }, 400);

@@ -37,6 +37,8 @@ type SettingsData = {
   saml_sps: { id: string; entity_id: string; acs_url: string; slo_url: string | null; name: string }[];
   device_compliance: { mode: 'off' | 'report' | 'enforce'; no_device: 'allow' | 'block'; exempt: string[] };
   devices_connected: boolean;
+  ai_model: AiModelView | null;
+  ai_apps_connected: boolean;
 };
 
 function Settings() {
@@ -63,6 +65,7 @@ function Settings() {
     <>
       {msg && <div className="error">{msg}</div>}
       <DeviceCompliance key={JSON.stringify(data.device_compliance)} data={data} save={(p) => act({ action: 'set_device_compliance', ...p })} />
+      <AiModel key={JSON.stringify(data.ai_model)} data={data} reload={load} />
 
       <div className="panel">
         <h2>Token signing keys</h2>
@@ -494,6 +497,135 @@ function DeviceCompliance({ data, save }: { data: SettingsData; save: (p: Record
       <button className="inline" style={{ marginTop: 12 }} onClick={() => save({ mode: c.mode, no_device: c.no_device, exempt: c.exempt })}>
         Save
       </button>
+    </div>
+  );
+}
+
+type AiModelView = {
+  provider: 'anthropic' | 'openai' | 'compatible' | 'ollama';
+  model: string;
+  base_url: string;
+  key_set: boolean;
+  key_last4: string;
+  embedding_model: string;
+  speech_model: string;
+  updated_by: string;
+  updated_ms: number;
+};
+
+const AI_PROVIDERS = [
+  ['anthropic', 'Anthropic (Claude)', 'a model ID from the Anthropic console', 'https://api.anthropic.com'],
+  ['openai', 'OpenAI', 'gpt-4.1-mini', 'https://api.openai.com/v1'],
+  ['compatible', 'OpenAI-compatible server', 'the model name on your server', 'https://openrouter.ai/api/v1'],
+  ['ollama', 'Ollama', 'llama3.1', 'http://ollama:11434/v1'],
+] as const;
+
+function AiModel({ data, reload }: { data: SettingsData; reload: () => void }) {
+  const saved = data.ai_model;
+  const [f, setF] = useState({
+    provider: saved?.provider ?? 'anthropic',
+    model: saved?.model ?? '',
+    base_url: saved?.base_url ?? '',
+    api_key: '',
+    remove_key: false,
+    embedding_model: saved?.embedding_model ?? '',
+    speech_model: saved?.speech_model ?? '',
+  });
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const p = AI_PROVIDERS.find(([v]) => v === f.provider) ?? AI_PROVIDERS[0];
+  // Anthropic has no embedding or speech models, so those fields are left out for it.
+  const form = () => ({
+    ...f,
+    remove_key: f.remove_key ? '1' : '',
+    ...(f.provider === 'anthropic' ? { embedding_model: '', speech_model: '' } : {}),
+  });
+
+  const run = async (action: string, payload: Record<string, string>) => {
+    setBusy(true);
+    setResult(null);
+    const r = await post('/api/admin/settings', { action, ...payload });
+    setBusy(false);
+    return r;
+  };
+  const test = async () => {
+    const r = await run('test_ai_model', form());
+    if (r.status !== 200) setResult({ ok: false, text: r.body.error ?? 'failed' });
+    else if (r.body.ok) setResult({ ok: true, text: `It works. The model answered: ${r.body.reply || '(no text)'}` });
+    else setResult({ ok: false, text: r.body.error });
+  };
+  const save = async () => {
+    const r = await run('set_ai_model', form());
+    if (r.status !== 200) return setResult({ ok: false, text: r.body.error ?? 'failed' });
+    reload();
+  };
+  const clear = async () => {
+    if (!confirm('Clear the AI model? Apps go back to the AI_* settings on the server, or AI turns off if there are none.')) return;
+    const r = await run('clear_ai_model', {});
+    if (r.status !== 200) return setResult({ ok: false, text: r.body.error ?? 'failed' });
+    reload();
+  };
+
+  return (
+    <div className="panel">
+      <h2>AI model</h2>
+      <p className="sub">
+        The model every app&apos;s AI features use. Apps pick up a change within a minute, without a restart. Until a
+        model is saved here, they use the server&apos;s AI_* settings (deploy/.env); an app&apos;s own prefixed settings,
+        such as SIGN_AI_MODEL, still apply to that app. The key is stored encrypted and is never shown again.
+      </p>
+      {!data.ai_apps_connected && (
+        <div className="error">PROXY_SHARED_SECRET isn&apos;t set for Auth, so the other apps can&apos;t read these settings (deploy/README.md).</div>
+      )}
+      {saved ? (
+        <div className="notice">
+          In use: <strong>{AI_PROVIDERS.find(([v]) => v === saved.provider)?.[1]}</strong>, <code className="k">{saved.model}</code>
+          {saved.key_set ? <> with the key ending <code className="k">{saved.key_last4}</code></> : ' without a key'}. Saved by {saved.updated_by},{' '}
+          {new Date(saved.updated_ms).toLocaleString()}.
+        </div>
+      ) : (
+        <div className="notice">Nothing saved here: apps use the server&apos;s AI_* settings.</div>
+      )}
+      <div className="grid2">
+        <div>
+          <label>Provider</label>
+          <select value={f.provider} onChange={(e) => setF({ ...f, provider: e.target.value as AiModelView['provider'] })}>
+            {AI_PROVIDERS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+          <label>Model</label>
+          <input value={f.model} placeholder={p[2]} onChange={(e) => setF({ ...f, model: e.target.value })} />
+          <label>Base URL{f.provider === 'compatible' ? '' : ' (optional)'}</label>
+          <input value={f.base_url} placeholder={p[3]} onChange={(e) => setF({ ...f, base_url: e.target.value })} />
+          <label>API key{f.provider === 'ollama' || f.provider === 'compatible' ? ' (if the server needs one)' : ''}</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={f.api_key}
+            placeholder={saved?.key_set && !f.remove_key ? `Saved key ending ${saved.key_last4}; type to replace it` : ''}
+            onChange={(e) => setF({ ...f, api_key: e.target.value })}
+          />
+          {saved?.key_set && (
+            <label style={{ display: 'flex', gap: 8, alignItems: 'baseline', color: 'var(--text)', margin: '6px 0' }}>
+              <input type="checkbox" style={{ width: 'auto' }} checked={f.remove_key} onChange={(e) => setF({ ...f, remove_key: e.target.checked })} />
+              <span>Remove the saved key</span>
+            </label>
+          )}
+        </div>
+        <div>
+          <label>Embedding model (optional, for search)</label>
+          <input value={f.embedding_model} disabled={f.provider === 'anthropic'} placeholder={f.provider === 'anthropic' ? 'Needs an OpenAI-compatible server' : 'text-embedding-3-small'}
+            onChange={(e) => setF({ ...f, embedding_model: e.target.value })} />
+          <label>Speech model (optional, for captions and transcripts)</label>
+          <input value={f.speech_model} disabled={f.provider === 'anthropic'} placeholder={f.provider === 'anthropic' ? 'Needs an OpenAI-compatible server' : 'whisper-1'}
+            onChange={(e) => setF({ ...f, speech_model: e.target.value })} />
+        </div>
+      </div>
+      {result && <div className={result.ok ? 'notice' : 'error'} style={{ marginTop: 12 }}>{result.text}</div>}
+      <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+        <button className="inline" disabled={busy} onClick={save}>Save</button>
+        <button className="inline secondary" disabled={busy} onClick={test}>Test</button>
+        {saved && <button className="inline secondary" disabled={busy} onClick={clear}>Clear</button>}
+      </div>
     </div>
   );
 }

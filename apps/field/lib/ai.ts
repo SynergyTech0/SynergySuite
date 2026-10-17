@@ -1,4 +1,4 @@
-import { AiRequestError, AiUnavailableError, aiConfig, structured } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, loadAiConfig, structured } from "@synergy/ai";
 import { q } from "./db";
 import { requireDispatcher } from "./staff";
 import { UserError, text } from "./util";
@@ -11,16 +11,16 @@ import { access, assertOpen } from "./workorders";
  */
 export const AI_PREFIX = "FIELD_";
 
-function config() {
+async function config() {
   try {
-    return aiConfig({ prefix: AI_PREFIX });
+    return await loadAiConfig({ prefix: AI_PREFIX });
   } catch {
     return null;
   }
 }
 
-export function aiAvailable(): boolean {
-  return !!config();
+export async function aiAvailable(): Promise<boolean> {
+  return !!(await config());
 }
 
 const SCHEMA = {
@@ -39,8 +39,8 @@ export async function draftChecklist(me: string, id: string): Promise<{ steps: s
   await requireDispatcher(me);
   await access(me, id);
   await assertOpen(id);
-  const cfg = config();
-  if (!cfg) throw new UserError("AI is off: set AI_MODEL (or FIELD_AI_MODEL) to draft steps", 503);
+  const cfg = await config();
+  if (!cfg) throw new UserError("AI is off: an administrator can pick a model in the admin console (or set AI_MODEL or FIELD_AI_MODEL) to draft steps", 503);
   const [w] = await q<{ title: string; description: string; kind: string; asset: string | null }>(
     `SELECT w.title, w.description, w.kind, concat_ws(' ', a.name, a.make, a.model) AS asset
      FROM work_orders w LEFT JOIN assets a ON a.id = w.asset_id WHERE w.id = $1`,

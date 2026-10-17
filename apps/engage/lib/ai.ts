@@ -1,4 +1,4 @@
-import { AiUnavailableError, aiConfig, chat } from "@synergy/ai";
+import { AiUnavailableError, chat, isAiAvailable, loadAiConfig } from "@synergy/ai";
 import { feed, getPost, getCommunity } from "./engage";
 import type { Post } from "./types";
 import { UserError } from "./util";
@@ -6,12 +6,8 @@ import { UserError } from "./util";
 /** Engage's AI uses the suite's model, or its own with ENGAGE_AI_* settings. */
 const PREFIX = "ENGAGE_";
 
-export function aiEnabled(): boolean {
-  try {
-    return !!aiConfig({ prefix: PREFIX });
-  } catch {
-    return false;
-  }
+export function aiEnabled(): Promise<boolean> {
+  return isAiAvailable({ prefix: PREFIX });
 }
 
 function asText(p: Post): string {
@@ -28,7 +24,7 @@ function asText(p: Post): string {
 
 async function ask(system: string, prompt: string): Promise<string> {
   try {
-    return (await chat({ system, prompt, maxTokens: 700, temperature: 0.2, config: aiConfig({ prefix: PREFIX }) })).trim();
+    return (await chat({ system, prompt, maxTokens: 700, temperature: 0.2, config: await loadAiConfig({ prefix: PREFIX }) })).trim();
   } catch (e) {
     if (e instanceof AiUnavailableError) throw new UserError("AI is off. An admin can turn it on with the suite's AI settings.", 409);
     throw e;

@@ -10,5 +10,5 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
   const me = await currentUser();
   if (!me) redirect("/signed-out");
   const { id } = await params;
-  return <BoardScreen id={id} me={{ ...me, ai: !!boardAiConfig() }} collabUrl={collabUrl()} />;
+  return <BoardScreen id={id} me={{ ...me, ai: !!(await boardAiConfig()) }} collabUrl={collabUrl()} />;
 }

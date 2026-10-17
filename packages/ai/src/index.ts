@@ -1,6 +1,10 @@
 /**
  * Bring your own AI model. Every suite feature that uses AI goes through this package, so an
- * administrator picks the provider and model once (AI_* settings) and the whole suite follows.
+ * administrator picks the provider and model once and the whole suite follows.
+ *
+ * The normal place to pick it is the sign-in app's admin console (Settings > AI model). Apps fetch
+ * those settings from auth over the internal network (see "Settings from the admin console" below)
+ * and use them ahead of the AI_* environment variables, which remain the fallback:
  *
  *   AI_PROVIDER   openai (default; any OpenAI-compatible server), anthropic, or ollama
  *   AI_BASE_URL   server address. Defaults: https://api.openai.com/v1, https://api.anthropic.com,
@@ -18,6 +22,10 @@
  *
  * Nothing here invents an answer: if no model is configured, calls throw AiUnavailableError and
  * the feature should say AI is off.
+ *
+ * Call loadAiConfig() / isAiAvailable() (async) to decide whether AI is on: they include the
+ * admin console's settings, so a key saved there turns AI on everywhere without a restart. The
+ * sync aiConfig() reads the environment plus whatever admin settings were last fetched.
  */
 
 export type Provider = "openai" | "anthropic" | "ollama";
@@ -56,9 +64,12 @@ const DEFAULT_BASE: Record<Provider, string> = {
 /**
  * Reads the AI settings. Returns null when no model is configured. The older ANTHROPIC_API_KEY /
  * ANTHROPIC_MODEL names are still read so existing sign deployments keep working.
+ *
+ * Without `env`, this is the environment plus the admin console's settings as last fetched (it
+ * never waits for auth, but starts a refresh when they are stale); prefer loadAiConfig().
  */
 export function aiConfig(opts: { prefix?: string; env?: Env } = {}): AiConfig | null {
-  const env = opts.env ?? process.env;
+  const env = opts.env ?? withAdminSettings(process.env, peekAdminSettings(process.env));
   const p = opts.prefix ?? "";
   const get = (k: string) => (p && env[`${p}${k}`]) || env[k] || "";
 
@@ -82,6 +93,149 @@ export function isAiConfigured(opts: { prefix?: string; env?: Env } = {}): boole
   } catch {
     return false;
   }
+}
+
+// ---- settings from the admin console -----------------------------------------------------------
+
+/**
+ * The model an administrator saved in the sign-in app's admin console. Apps fetch it from
+ * GET <AUTH_INTERNAL_URL>/api/internal/ai-settings with PROXY_SHARED_SECRET (the gateway never
+ * passes /api/internal/ through), and keep it for AI_SETTINGS_CACHE_MS (default 60 s). Auth is
+ * http://auth:3500 in production when AUTH_INTERNAL_URL isn't set; without the secret, or outside
+ * production without AUTH_INTERNAL_URL, only the environment is used.
+ *
+ * Saved settings replace the unprefixed AI_* variables as a whole (a saved Anthropic model never
+ * picks up an OpenAI base URL from the environment). Prefixed ones (SIGN_AI_MODEL and so on) still
+ * win for their app. When auth can't be reached, the last settings fetched stay in use; before
+ * the first successful fetch that means the environment.
+ */
+export interface AdminAiSettings {
+  provider: Provider;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  embeddingModel: string;
+  speechModel: string;
+}
+
+type CachedSettings = { settings: AdminAiSettings | null; until: number };
+
+const DEFAULT_SETTINGS_TTL = 60_000;
+/** After a failed fetch, try again sooner than the full TTL so a restarted auth is noticed. */
+const RETRY_AFTER_FAILURE = 10_000;
+const settingsCache = new Map<string, CachedSettings>();
+const settingsInflight = new Map<string, Promise<AdminAiSettings | null>>();
+
+/** Where this app reads the admin settings from, or null when it doesn't. */
+function settingsSource(env: Env): { url: string; secret: string } | null {
+  const secret = env.PROXY_SHARED_SECRET || "";
+  const base = env.AUTH_INTERNAL_URL || (env.NODE_ENV === "production" ? "http://auth:3500" : "");
+  if (!secret || !base) return null;
+  return { url: `${base.replace(/\/+$/, "")}/api/internal/ai-settings`, secret };
+}
+
+function parseAdminSettings(v: unknown): AdminAiSettings | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string).trim() : "");
+  const provider = str("provider").toLowerCase();
+  if (!(provider in DEFAULT_BASE) || !str("model")) return null;
+  return {
+    provider: provider as Provider,
+    baseUrl: str("base_url"),
+    apiKey: str("api_key"),
+    model: str("model"),
+    embeddingModel: str("embedding_model"),
+    speechModel: str("speech_model"),
+  };
+}
+
+async function fetchAdminSettings(src: { url: string; secret: string }, prev: CachedSettings | undefined, ttl: number) {
+  try {
+    const res = await fetch(src.url, { headers: { "x-proxy-auth-secret": src.secret }, signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error(`auth answered ${res.status}`);
+    const body = (await res.json()) as { settings?: unknown };
+    const settings = parseAdminSettings(body?.settings);
+    settingsCache.set(src.url, { settings, until: Date.now() + ttl });
+    return settings;
+  } catch {
+    const settings = prev?.settings ?? null;
+    settingsCache.set(src.url, { settings, until: Date.now() + Math.min(ttl, RETRY_AFTER_FAILURE) });
+    return settings;
+  }
+}
+
+/** The admin console's AI settings, from the cache or auth; null when none are saved or auth can't say. */
+export async function adminAiSettings(opts: { env?: Env } = {}): Promise<AdminAiSettings | null> {
+  const env = opts.env ?? process.env;
+  const src = settingsSource(env);
+  if (!src) return null;
+  const hit = settingsCache.get(src.url);
+  if (hit && hit.until > Date.now()) return hit.settings;
+  let pending = settingsInflight.get(src.url);
+  if (!pending) {
+    const set = Number(env.AI_SETTINGS_CACHE_MS);
+    const ttl = env.AI_SETTINGS_CACHE_MS && set >= 0 ? set : DEFAULT_SETTINGS_TTL;
+    pending = fetchAdminSettings(src, hit, ttl).finally(() => settingsInflight.delete(src.url));
+    settingsInflight.set(src.url, pending);
+  }
+  return pending;
+}
+
+/** The last admin settings fetched, without waiting; refreshes them in the background when stale. */
+function peekAdminSettings(env: Env): AdminAiSettings | null {
+  const src = settingsSource(env);
+  if (!src) return null;
+  const hit = settingsCache.get(src.url);
+  if (!hit || hit.until <= Date.now()) void adminAiSettings({ env }).catch(() => undefined);
+  return hit?.settings ?? null;
+}
+
+/** Forgets fetched admin settings, so the next call asks auth again. */
+export function clearAiSettingsCache(): void {
+  settingsCache.clear();
+}
+
+/** The unprefixed variables saved admin settings replace. */
+const ADMIN_REPLACES = ["AI_PROVIDER", "AI_BASE_URL", "AI_API_KEY", "AI_MODEL", "AI_EMBEDDING_MODEL", "AI_SPEECH_MODEL", "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL"];
+
+/** `env` with the admin settings in place of its unprefixed AI_* variables. */
+export function withAdminSettings(env: Env, s: AdminAiSettings | null): Env {
+  if (!s) return env;
+  const out: Env = { ...env };
+  for (const k of ADMIN_REPLACES) delete out[k];
+  out.AI_PROVIDER = s.provider;
+  out.AI_MODEL = s.model;
+  if (s.baseUrl) out.AI_BASE_URL = s.baseUrl;
+  if (s.apiKey) out.AI_API_KEY = s.apiKey;
+  if (s.embeddingModel) out.AI_EMBEDDING_MODEL = s.embeddingModel;
+  if (s.speechModel) out.AI_SPEECH_MODEL = s.speechModel;
+  return out;
+}
+
+/** The settings to use: `env` (default process.env) with the admin console's settings applied. */
+export async function resolveAiEnv(opts: { env?: Env } = {}): Promise<Env> {
+  const env = opts.env ?? process.env;
+  return withAdminSettings(env, await adminAiSettings({ env }));
+}
+
+/** Like aiConfig, with the admin console's current settings. Null when no model is configured. */
+export async function loadAiConfig(opts: { prefix?: string; env?: Env } = {}): Promise<AiConfig | null> {
+  return aiConfig({ prefix: opts.prefix, env: await resolveAiEnv({ env: opts.env }) });
+}
+
+/** Whether AI is on for this app (admin console settings, else the environment). */
+export async function isAiAvailable(opts: { prefix?: string; env?: Env } = {}): Promise<boolean> {
+  try {
+    return (await loadAiConfig(opts)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Like speechConfig, with the admin console's current settings. */
+export async function loadSpeechConfig(opts: { prefix?: string; env?: Env } = {}): Promise<AiConfig | null> {
+  return speechConfig({ prefix: opts.prefix, env: await resolveAiEnv({ env: opts.env }) });
 }
 
 function requireConfig(cfg: AiConfig | null | undefined): AiConfig {
@@ -108,7 +262,7 @@ export interface ChatOptions {
 
 /** Plain text answer. */
 export async function chat(opts: ChatOptions): Promise<string> {
-  const cfg = requireConfig(opts.config === undefined ? aiConfig() : opts.config);
+  const cfg = requireConfig(opts.config === undefined ? await loadAiConfig() : opts.config);
   if (cfg.provider === "anthropic") {
     const res = await anthropic(cfg, { ...base(cfg, opts), messages: [{ role: "user", content: anthropicContent(opts) }] });
     return res.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("");
@@ -131,7 +285,7 @@ export interface StructuredOptions extends ChatOptions {
  * that still doesn't call the tool may return the JSON as text, which is accepted if it parses.
  */
 export async function structured<T>(opts: StructuredOptions): Promise<T> {
-  const cfg = requireConfig(opts.config === undefined ? aiConfig() : opts.config);
+  const cfg = requireConfig(opts.config === undefined ? await loadAiConfig() : opts.config);
   const key = `${cfg.provider} ${cfg.baseUrl} ${cfg.model}`;
   const ask = `${opts.system ?? ""}\n\nRecord your answer by calling the ${opts.toolName} tool. Do not answer in prose.`.trim();
 
@@ -169,7 +323,7 @@ export async function structured<T>(opts: StructuredOptions): Promise<T> {
  * Uses AI_EMBEDDING_MODEL (or <prefix>AI_EMBEDDING_MODEL) with the same server settings.
  */
 export async function embed(input: string[], opts: { prefix?: string; env?: Env; config?: AiConfig | null } = {}): Promise<number[][]> {
-  const env = opts.env ?? process.env;
+  const env = await resolveAiEnv({ env: opts.env });
   const p = opts.prefix ?? "";
   const model = (p && env[`${p}AI_EMBEDDING_MODEL`]) || env.AI_EMBEDDING_MODEL || "";
   const cfg = opts.config === undefined ? aiConfig({ prefix: p, env: { ...env, AI_MODEL: model || undefined } }) : opts.config;
@@ -209,7 +363,7 @@ export async function transcribe(
   audio: Blob | Uint8Array,
   opts: { mime?: string; filename?: string; language?: string; prompt?: string; prefix?: string; env?: Env; config?: AiConfig | null } = {},
 ): Promise<string> {
-  const cfg = opts.config === undefined ? speechConfig({ prefix: opts.prefix, env: opts.env }) : opts.config;
+  const cfg = opts.config === undefined ? await loadSpeechConfig({ prefix: opts.prefix, env: opts.env }) : opts.config;
   if (!cfg) throw new AiUnavailableError("No speech model is configured. Set AI_SPEECH_MODEL on an OpenAI-compatible server.");
   if (cfg.provider === "anthropic") throw new AiUnavailableError("Speech to text needs an OpenAI-compatible server (AI_PROVIDER openai or ollama).");
   const mime = opts.mime || (audio instanceof Blob ? audio.type : "") || "audio/webm";
@@ -269,7 +423,7 @@ export interface RelayOptions {
  * streaming included; `AI_TIMEOUT_MS` bounds the wait for it to start.
  */
 export async function relay(body: Record<string, unknown>, opts: RelayOptions): Promise<Response> {
-  const cfg = requireConfig(opts.config === undefined ? aiConfig() : opts.config);
+  const cfg = requireConfig(opts.config === undefined ? await loadAiConfig() : opts.config);
   if (protocolOf(cfg) !== opts.protocol) {
     throw new AiUnavailableError(`The configured AI server speaks the ${protocolOf(cfg)} protocol, not ${opts.protocol}.`);
   }

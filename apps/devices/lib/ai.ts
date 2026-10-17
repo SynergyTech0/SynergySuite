@@ -1,4 +1,4 @@
-import { AiUnavailableError, aiConfig, chat } from "@synergy/ai";
+import { AiUnavailableError, chat, isAiAvailable, loadAiConfig } from "@synergy/ai";
 import { getAlert } from "./alerts";
 import { DETECTIONS } from "./detections";
 import { q } from "./db";
@@ -7,12 +7,8 @@ import { UserError } from "./util";
 /** The suite's own AI model (AI_*), or one for Devices only (DEVICES_AI_*). */
 const PREFIX = "DEVICES_";
 
-export function aiEnabled(): boolean {
-  try {
-    return !!aiConfig({ prefix: PREFIX });
-  } catch {
-    return false;
-  }
+export function aiEnabled(): Promise<boolean> {
+  return isAiAvailable({ prefix: PREFIX });
 }
 
 /**
@@ -26,7 +22,7 @@ export async function explainAlert(id: string): Promise<string> {
   const info = DETECTIONS.find((x) => x.id === a.detection);
   try {
     return await chat({
-      config: aiConfig({ prefix: PREFIX }),
+      config: await loadAiConfig({ prefix: PREFIX }),
       system:
         "You help an IT administrator triage endpoint security alerts. Be concrete and brief: at most 180 words, in three short parts titled " +
         "'What this probably is', 'How to check' and 'What to do'. Give commands for the device's operating system. Say plainly when an alert " +

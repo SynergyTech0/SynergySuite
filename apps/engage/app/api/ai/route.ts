@@ -2,7 +2,7 @@ import { aiEnabled, catchUp, summarizePost } from "@/lib/ai";
 import { body, route } from "@/lib/api";
 import { UserError } from "@/lib/util";
 
-export const GET = route(async () => ({ enabled: aiEnabled() }));
+export const GET = route(async () => ({ enabled: await aiEnabled() }));
 
 /** { action: "summarize", postId } or { action: "catchup", community? }. */
 export const POST = route(async (me, req) => {

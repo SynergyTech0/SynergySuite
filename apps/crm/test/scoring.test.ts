@@ -68,12 +68,12 @@ describe("leadPrompt", () => {
 });
 
 describe("AI configuration", () => {
-  it("is off with no model, and CRM_AI_* overrides the suite settings", () => {
-    expect(crmAiConfig({})).toBeNull();
-    const cfg = crmAiConfig({ AI_PROVIDER: "openai", AI_API_KEY: "k", AI_MODEL: "suite-model", CRM_AI_MODEL: "crm-model" });
+  it("is off with no model, and CRM_AI_* overrides the suite settings", async () => {
+    expect(await crmAiConfig({})).toBeNull();
+    const cfg = await crmAiConfig({ AI_PROVIDER: "openai", AI_API_KEY: "k", AI_MODEL: "suite-model", CRM_AI_MODEL: "crm-model" });
     expect(cfg?.model).toBe("crm-model");
-    expect(crmAiConfig({ AI_PROVIDER: "openai", AI_API_KEY: "k", AI_MODEL: "suite-model" })?.model).toBe("suite-model");
-    expect(crmAiConfig({ AI_PROVIDER: "nonsense", AI_MODEL: "m" })).toBeNull();
+    expect((await crmAiConfig({ AI_PROVIDER: "openai", AI_API_KEY: "k", AI_MODEL: "suite-model" }))?.model).toBe("suite-model");
+    expect(await crmAiConfig({ AI_PROVIDER: "nonsense", AI_MODEL: "m" })).toBeNull();
   });
 });
 

@@ -163,9 +163,9 @@ describe("POST /api/ask", () => {
 
   it("lets SEARCH_AI_* override AI_*", async () => {
     const { searchAiConfig } = await import("../lib/ask");
-    expect(searchAiConfig({ AI_MODEL: "a", AI_BASE_URL: "http://x", SEARCH_AI_MODEL: "b" })?.model).toBe("b");
-    expect(searchAiConfig({ AI_MODEL: "a", AI_BASE_URL: "http://x" })?.model).toBe("a");
-    expect(searchAiConfig({})).toBeNull();
+    expect((await searchAiConfig({ AI_MODEL: "a", AI_BASE_URL: "http://x", SEARCH_AI_MODEL: "b" }))?.model).toBe("b");
+    expect((await searchAiConfig({ AI_MODEL: "a", AI_BASE_URL: "http://x" }))?.model).toBe("a");
+    expect(await searchAiConfig({})).toBeNull();
   });
 
   it("allows one question in flight per person", async () => {

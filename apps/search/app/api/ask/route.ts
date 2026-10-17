@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** POST { question, history? } → { answer, sources } from the signed-in person's own content. */
 export const POST = route(async (me, req) => {
-  if (!searchAiConfig()) return NextResponse.json({ error: AI_OFF_MESSAGE, aiOff: true }, { status: 503 });
+  if (!(await searchAiConfig())) return NextResponse.json({ error: AI_OFF_MESSAGE, aiOff: true }, { status: 503 });
   const input = readAsk(await body(req));
   const done = begin(me.email);
   try {

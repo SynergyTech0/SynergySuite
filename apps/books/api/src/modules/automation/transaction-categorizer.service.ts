@@ -1,4 +1,4 @@
-import { aiConfig, chat } from '@synergy/ai';
+import { chat, loadAiConfig } from '@synergy/ai';
 import { Injectable, Logger } from '@nestjs/common';
 import { ExpenseCategory } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -128,7 +128,7 @@ Respond ONLY in valid JSON format (no other text):
    */
   private async callModel(prompt: string): Promise<string> {
     try {
-      return await chat({ prompt, temperature: 0.2, config: aiConfig({ prefix: 'BOOKS_' }) });
+      return await chat({ prompt, temperature: 0.2, config: await loadAiConfig({ prefix: 'BOOKS_' }) });
     } catch (error) {
       this.logger.error('AI call failed:', error);
       throw error;

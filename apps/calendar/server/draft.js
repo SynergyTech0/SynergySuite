@@ -1,14 +1,14 @@
 // "Draft with Copilot" for an event's notes: writes or tidies the agenda from the event's title,
 // attendees and the person's instructions. Uses the suite's AI_* model, or CALENDAR_AI_* to give
 // Calendar its own. It only returns text for the editor; nothing is saved until the person saves.
-const { aiConfig, chat, AiUnavailableError, AiRequestError } = require('@synergy/ai');
+const { loadAiConfig, chat, AiUnavailableError, AiRequestError } = require('@synergy/ai');
 
 const AI_PREFIX = 'CALENDAR_';
-const AI_OFF = 'Drafting is off because no AI model is configured. An administrator can set AI_MODEL (or CALENDAR_AI_MODEL).';
+const AI_OFF = 'Drafting is off because no AI model is configured. An administrator can pick one in the admin console (or set AI_MODEL or CALENDAR_AI_MODEL).';
 const MAX_NOTES = 2000; // the events.description limit
 
-function calendarAiConfig(env) {
-  try { return aiConfig({ prefix: AI_PREFIX, env }); } catch { return null; }
+async function calendarAiConfig(env) {
+  try { return await loadAiConfig({ prefix: AI_PREFIX, env }); } catch { return null; }
 }
 
 function clean(v, max) {
@@ -71,7 +71,7 @@ function sameOrigin(req) {
 /** POST /api/draft { mode, instructions?, title?, description?, attendees?, location?, when? } → { text }. */
 async function draftHandler(req, res) {
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Cross-site request refused' });
-  const config = calendarAiConfig();
+  const config = await calendarAiConfig();
   if (!config) return res.status(503).json({ error: AI_OFF, aiOff: true });
   let d;
   try { d = readDraft(req.body); } catch (e) {

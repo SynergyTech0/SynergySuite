@@ -1,5 +1,5 @@
 import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
-import { aiConfig, chat, isAiConfigured } from '@synergy/ai';
+import { chat, loadAiConfig } from '@synergy/ai';
 import { PrismaService } from '../../prisma/prisma.service';
 
 // Bring your own model: the suite-wide AI_* settings, overridable with BOOKS_AI_*.
@@ -35,9 +35,10 @@ export class TaxAiService {
   }
 
   private async callModel(system: string, user: string, maxTokens = 1200): Promise<string> {
-    if (!isAiConfigured(AI)) throw new ServiceUnavailableException('Tax AI is off: no AI model is configured.');
+    const config = await loadAiConfig(AI).catch(() => null);
+    if (!config) throw new ServiceUnavailableException('Tax AI is off: no AI model is configured.');
     try {
-      return await chat({ system, prompt: user, maxTokens, config: aiConfig(AI) });
+      return await chat({ system, prompt: user, maxTokens, config });
     } catch (e) {
       const msg = (e as Error).message;
       this.logger.error(`AI call failed: ${msg}`);
@@ -91,6 +92,7 @@ export class TaxAiService {
     const rows = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
       `SELECT count(*)::bigint as count FROM "TaxSection" WHERE "documentId" = 'ircdoc_t26'`,
     );
-    return { ircSections: Number(rows?.[0]?.count ?? 0), model: aiConfig(AI)?.model ?? null, configured: isAiConfigured(AI) };
+    const config = await loadAiConfig(AI).catch(() => null);
+    return { ircSections: Number(rows?.[0]?.count ?? 0), model: config?.model ?? null, configured: !!config };
   }
 }

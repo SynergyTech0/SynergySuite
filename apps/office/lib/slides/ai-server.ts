@@ -1,12 +1,12 @@
 // Server side of the Slides AI tools, through the suite's bring-your-own
 // model (@synergy/ai): AI_* settings, or SLIDES_AI_* to give Slides its own.
-import { AiRequestError, AiUnavailableError, aiConfig, structured, type AiConfig } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 import { AI_IDEAS_SCHEMA, DRAFT_SCHEMA, cleanDraft, describeSlide, type Draft } from "./designer";
 import type { Slide } from "./model";
 
-export function slidesAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function slidesAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: "SLIDES_", env });
+    return await loadAiConfig({ prefix: "SLIDES_", env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }

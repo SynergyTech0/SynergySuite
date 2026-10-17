@@ -5,6 +5,6 @@ import { companySites } from "@/lib/suite";
 
 /** Everything the intranet home page shows, with the published sites from Sites. */
 export const GET = route(async (me) => {
-  const [h, sites] = await Promise.all([home(me), companySites(me)]);
-  return { ...h, sites: sites.sites, sitesAvailable: sites.available, ai: aiEnabled() };
+  const [h, sites, ai] = await Promise.all([home(me), companySites(me), aiEnabled()]);
+  return { ...h, sites: sites.sites, sitesAvailable: sites.available, ai };
 });

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * open item, or proposes actions. Proposing never changes anything: see /api/copilot/confirm.
  */
 export const POST = route(async (me, req) => {
-  if (!searchAiConfig()) return NextResponse.json({ error: AI_OFF_MESSAGE, aiOff: true }, { status: 503 });
+  if (!(await searchAiConfig())) return NextResponse.json({ error: AI_OFF_MESSAGE, aiOff: true }, { status: 503 });
   const input = readCopilot(await body(req));
   const done = begin(me.email);
   try {

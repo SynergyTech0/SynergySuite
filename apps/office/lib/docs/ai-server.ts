@@ -1,13 +1,13 @@
 // Server side of the Docs AI tools, through the suite's bring-your-own model
 // (@synergy/ai): AI_* settings, or DOCS_AI_* to give Docs its own.
-import { AiRequestError, AiUnavailableError, aiConfig, chat, type AiConfig } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, chat, loadAiConfig, type AiConfig } from "@synergy/ai";
 import { aiPrompt, cleanAnswer, type AiTask, type Tone } from "./ai";
 
 export const AI_TASKS: AiTask[] = ["rewrite", "summarize", "draft", "grammar"];
 
-export function docsAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function docsAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: "DOCS_", env });
+    return await loadAiConfig({ prefix: "DOCS_", env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }

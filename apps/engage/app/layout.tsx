@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const who = await currentUser();
+  const ai = who ? await aiEnabled() : false;
   return (
     <html lang="en">
       <body className="suite-body">
@@ -23,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="suite-main">
           {who ? (
             <Suspense>
-              <Shell me={{ ...who, admin: isCompanyAdmin(who.email) }} ai={aiEnabled()}>{children}</Shell>
+              <Shell me={{ ...who, admin: isCompanyAdmin(who.email) }} ai={ai}>{children}</Shell>
             </Suspense>
           ) : (
             children

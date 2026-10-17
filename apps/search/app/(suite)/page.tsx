@@ -18,7 +18,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       initialQuery={one(sp.q).slice(0, 500)}
       initialTab={one(sp.tab) === "ask" ? "ask" : "results"}
       apps={apps}
-      aiOn={searchAiConfig() !== null}
+      aiOn={(await searchAiConfig()) !== null}
       name={who.name}
     />
   );

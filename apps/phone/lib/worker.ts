@@ -1,5 +1,5 @@
 import { AccessToken } from "livekit-server-sdk";
-import { AiUnavailableError, speechConfig, transcribe } from "@synergy/ai";
+import { AiUnavailableError, loadSpeechConfig, transcribe } from "@synergy/ai";
 import { type Pcm, beep, concat, decodeWav, durationMs, encodeWav, level, resample, ringbackCycle, silence, speak } from "./audio";
 import { type CallRow, finish, getCall, toVoicemail } from "./calls";
 import { q } from "./db";
@@ -253,7 +253,7 @@ async function greetingFor(owner: string): Promise<Int16Array | null> {
 }
 
 export async function transcribeVoicemail(id: string, wav: Buffer): Promise<void> {
-  if (!speechConfig({ prefix: "PHONE_" })) return;
+  if (!(await loadSpeechConfig({ prefix: "PHONE_" }).catch(() => null))) return;
   try {
     const text = await transcribe(new Uint8Array(wav), { mime: "audio/wav", filename: "voicemail.wav", prefix: "PHONE_" });
     await q("UPDATE voicemails SET transcript = $2, transcript_error = NULL WHERE id = $1", [id, text]);

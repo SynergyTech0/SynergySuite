@@ -1,4 +1,4 @@
-import { aiConfig, chat, type AiConfig } from "@synergy/ai";
+import { chat, loadAiConfig, type AiConfig } from "@synergy/ai";
 import { UserError } from "./accounts";
 
 /**
@@ -10,9 +10,9 @@ import { UserError } from "./accounts";
 export const AI_PREFIX = "MAIL_";
 export const AI_OFF = "Drafting is off because no AI model is configured. An administrator can set AI_MODEL (or MAIL_AI_MODEL).";
 
-export function mailAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function mailAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: AI_PREFIX, env });
+    return await loadAiConfig({ prefix: AI_PREFIX, env });
   } catch {
     return null;
   }

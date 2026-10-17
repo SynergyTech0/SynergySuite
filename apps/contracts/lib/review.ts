@@ -1,4 +1,4 @@
-import { AiRequestError, AiUnavailableError, aiConfig, structured } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, isAiAvailable, loadAiConfig, structured } from "@synergy/ai";
 import type { Me } from "./api";
 import { access, logEvent } from "./contracts";
 import { q, tx } from "./db";
@@ -12,12 +12,8 @@ import { UserError } from "./util";
  */
 export const AI_PREFIX = "CONTRACTS_";
 
-export function reviewAvailable(): boolean {
-  try {
-    return !!aiConfig({ prefix: AI_PREFIX });
-  } catch {
-    return false;
-  }
+export function reviewAvailable(): Promise<boolean> {
+  return isAiAvailable({ prefix: AI_PREFIX });
 }
 
 export type Review = {
@@ -75,13 +71,9 @@ const MAX_CHARS = 120_000;
 export async function reviewContract(me: Me, id: string): Promise<Review> {
   const { c, role } = await access(me.email, id);
   if (role === "viewer") throw new UserError("Ask the owner for edit access to run a review", 403);
-  const cfg = (() => {
-    try {
-      return aiConfig({ prefix: AI_PREFIX });
-    } catch (e) {
-      throw new UserError((e as Error).message, 503);
-    }
-  })();
+  const cfg = await loadAiConfig({ prefix: AI_PREFIX }).catch((e) => {
+    throw new UserError((e as Error).message, 503);
+  });
   if (!cfg) throw new UserError("AI is off. An administrator can turn it on with the AI settings.", 503);
   const [{ body }] = await q<{ body: string }>(`SELECT body FROM contracts WHERE id = $1`, [id]);
   if (!body.trim()) throw new UserError("There's no contract text to review yet", 400);

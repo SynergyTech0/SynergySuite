@@ -23,9 +23,9 @@ describe("diagrams AI", () => {
     delete process.env.AI_MODEL;
   });
 
-  it("points draw.io's AI window at this app only when a model is set", () => {
-    expect(editorAiSettings({})).toEqual({ enableAi: false });
-    const s = editorAiSettings(ON) as Record<string, any>;
+  it("points draw.io's AI window at this app only when a model is set", async () => {
+    expect(await editorAiSettings({})).toEqual({ enableAi: false });
+    const s = (await editorAiSettings(ON)) as Record<string, any>;
     expect(s.enableAi).toBe(true);
     expect(s.aiConfigs.synergy.endpoint).toBe("/api/ai/chat");
     expect(s.aiConfigs.synergy.requestHeaders).toEqual({});

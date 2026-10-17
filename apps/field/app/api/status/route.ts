@@ -8,7 +8,7 @@ import { getSettings, requireStaff } from "@/lib/staff";
 export const GET = route(async (me) => {
   await requireStaff(me.email);
   return {
-    ai: aiAvailable(),
+    ai: await aiAvailable(),
     links: { books: linked("books"), commerce: linked("commerce"), desk: linked("desk"), ops: linked("ops") },
     urls: openUrls(),
     parts: await partsLink(),

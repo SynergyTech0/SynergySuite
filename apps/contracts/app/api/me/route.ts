@@ -8,7 +8,7 @@ export const GET = route(async (me) => ({
   name: me.name,
   legal: isAdmin(me.email),
   library: canKeepLibrary(me.email),
-  ai: reviewAvailable(),
+  ai: await reviewAvailable(),
   signing: signingConfigured(),
   signApp: process.env.SUITE_DOMAIN ? `https://sign.${process.env.SUITE_DOMAIN}` : "",
   types: TYPES,

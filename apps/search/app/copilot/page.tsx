@@ -24,7 +24,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
       initialApp={app}
       appNames={Object.fromEntries(apps.map((a) => [a.id, a.name]))}
       initialContext={one(sp.context).slice(0, 500)}
-      aiOn={searchAiConfig() !== null}
+      aiOn={(await searchAiConfig()) !== null}
       name={who.name}
       domain={process.env.SUITE_DOMAIN ?? ""}
     />

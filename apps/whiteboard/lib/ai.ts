@@ -3,14 +3,14 @@
  * WHITEBOARD_AI_* to give Whiteboard a model of its own. Only the prompt and the words already
  * on the board are sent; nothing is drawn until the person adds the notes.
  */
-import { AiRequestError, AiUnavailableError, aiConfig, structured, type AiConfig } from "@synergy/ai";
+import { AiRequestError, AiUnavailableError, loadAiConfig, structured, type AiConfig } from "@synergy/ai";
 import { UserError, text } from "./util";
 
 export const MAX_IDEAS = 12;
 
-export function boardAiConfig(env?: Record<string, string | undefined>): AiConfig | null {
+export async function boardAiConfig(env?: Record<string, string | undefined>): Promise<AiConfig | null> {
   try {
-    return aiConfig({ prefix: "WHITEBOARD_", env });
+    return await loadAiConfig({ prefix: "WHITEBOARD_", env });
   } catch {
     return null; // a misconfigured provider reads as AI off
   }
@@ -33,10 +33,11 @@ const SYSTEM =
   "(at most 12 words, no numbering, no quotes). Don't repeat what is already on the board. Write in the language of the request.";
 
 /** Ideas for `prompt`, given the words already on the board. */
-export async function ideas(prompt: unknown, onBoard: unknown, config: AiConfig | null = boardAiConfig()): Promise<string[]> {
+export async function ideas(prompt: unknown, onBoard: unknown, cfg?: AiConfig | null): Promise<string[]> {
   const ask = text(prompt, 1000);
   if (!ask) throw new UserError("Say what the ideas are for");
-  if (!config) throw new UserError("AI isn't set up for this suite. An administrator can turn it on with the AI_* settings.", 503);
+  const config = cfg === undefined ? await boardAiConfig() : cfg;
+  if (!config) throw new UserError("AI isn't set up for this suite. An administrator can turn it on in the admin console's AI model settings.", 503);
   const existing = text(onBoard, 6000);
   try {
     const answer = await structured<{ ideas?: unknown }>({

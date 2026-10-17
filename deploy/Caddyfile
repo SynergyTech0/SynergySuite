@@ -76,7 +76,8 @@
 }
 
 auth.{$SUITE_DOMAIN} {
-	# App password checks for Calendar and Contacts stay on the compose network.
+	# App password checks for Calendar and Contacts, and the AI model settings (with the key) that
+	# every app reads, stay on the compose network.
 	handle /api/internal/* {
 		respond 404
 	}
