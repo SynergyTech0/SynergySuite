@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, Database, Info, PenSquare, Plus } from "lucide-react";
+import { BarChart3, Database, Gauge, Info, PenSquare, Plus } from "lucide-react";
 import { currentUser } from "@/lib/api";
 import { isAdmin, isAnalyst } from "@/lib/config";
 import { type DashboardSummary, listDashboards } from "@/lib/dashboards";
+import { findExecutive } from "@/lib/executive";
 import { metabase } from "@/lib/metabase";
 
 export const dynamic = "force-dynamic";
@@ -32,10 +33,17 @@ export default async function Home() {
         : (err as Error).message;
   }
   const author = isAnalyst(mb.c, me.email);
+  // Shown only to people who can open it: admins, unless an admin shared its collection.
+  const executive = findExecutive(dashboards);
   return (
     <div className="page">
       <div className="head">
         <h1 className="grow">Insights</h1>
+        {executive && (
+          <Link className="btn" href={`/d/${executive.id}`}>
+            <Gauge size={16} /> Executive overview
+          </Link>
+        )}
         {author && (
           <a className="btn" href={`${studio}/question/notebook`}>
             <Plus size={16} /> New report

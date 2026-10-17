@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 type Source = { source: string; name: string; status: "ok" | "missing" | "error"; tables: number; hiddenColumns: string[]; detail?: string };
-type Report = { at: string; ok: boolean; error?: string; sources: Source[] };
+type Executive = { status: "ok" | "skipped" | "error"; dashboardId?: number; cards: number; detail?: string };
+type Report = { at: string; ok: boolean; error?: string; sources: Source[]; executive?: Executive };
 type State = { sources: string[]; names: Record<string, string>; last: Report | null };
 
 export function SourcesPanel() {
@@ -64,6 +65,19 @@ export function SourcesPanel() {
           })}
         </tbody>
       </table>
+      {last?.executive && (
+        <p className={last.executive.status === "error" ? "error" : "muted"}>
+          Executive overview:{" "}
+          {last.executive.status === "ok" && last.executive.dashboardId ? (
+            <a href={`/d/${last.executive.dashboardId}`}>ready, {last.executive.cards} cards</a>
+          ) : last.executive.status === "skipped" ? (
+            "not set up yet"
+          ) : (
+            "failed"
+          )}
+          {last.executive.detail && ` (${last.executive.detail})`}
+        </p>
+      )}
     </div>
   );
 }
