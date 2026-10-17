@@ -53,8 +53,31 @@
 	}
 }
 
+# Phone and desktop calendar and address book apps (CalDAV, CardDAV) sign in with Basic auth
+# and an app password, which the app checks with the account service; they can't follow the
+# gateway's browser sign-in, so these paths skip it. No identity header from outside gets
+# through, and no proxy secret is added: the app trusts only the app password here. Wrong
+# passwords are rate limited and locked out by the apps and the account service.
+(dav_app) {
+	request_header -X-Auth-Request-Email
+	request_header -X-Auth-Request-User
+	request_header -X-Auth-Request-Preferred-Username
+	request_header -X-Forwarded-Email
+	request_header -X-Forwarded-User
+	request_header -X-Forwarded-Preferred-Username
+	request_header -X-Dev-User
+	request_header -X-Proxy-Auth-Secret
+	reverse_proxy {args[0]}
+}
+
 auth.{$SUITE_DOMAIN} {
-	reverse_proxy auth:3500
+	# App password checks for Calendar and Contacts stay on the compose network.
+	handle /api/internal/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy auth:3500
+	}
 }
 
 sso.{$SUITE_DOMAIN} {
@@ -65,6 +88,11 @@ calendar.{$SUITE_DOMAIN} {
 	# Machine API, authenticated by bearer token inside the app.
 	handle /api/svc/* {
 		import to_app calendar:3130
+	}
+	# CalDAV (see dav_app).
+	@dav expression path('/dav', '/dav/*', '/.well-known/caldav') || (path('/') && method('PROPFIND', 'REPORT'))
+	handle @dav {
+		import dav_app calendar:3130
 	}
 	handle {
 		import signed_in
@@ -246,8 +274,15 @@ stream.{$SUITE_DOMAIN} {
 }
 
 contacts.{$SUITE_DOMAIN} {
-	import signed_in
-	import to_app contacts:3190
+	# CardDAV (see dav_app).
+	@dav expression path('/dav', '/dav/*', '/.well-known/carddav') || (path('/') && method('PROPFIND', 'REPORT'))
+	handle @dav {
+		import dav_app contacts:3190
+	}
+	handle {
+		import signed_in
+		import to_app contacts:3190
+	}
 }
 
 admin.{$SUITE_DOMAIN} {

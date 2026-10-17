@@ -111,6 +111,7 @@ try {
   await page.locator('.range-title', { hasText: 'Monday, November 2, 2026' }).waitFor();
   assert.match(await page.locator('.event').first().innerText(), /Team sync/);
   await page.getByRole('tab', { name: 'Agenda' }).click();
+  await page.locator('.agenda').getByText('Offsite').first().waitFor();
   const agenda = await page.locator('.agenda').innerText();
   assert.match(agenda, /Monday, November 2\n10:00 AM – 10:30 AM\nTeam sync/);
   assert.match(agenda, /Thursday, November 12\nAll day\nOffsite/);

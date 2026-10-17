@@ -1,7 +1,15 @@
 // The little XML a DAV server needs: read a request body into a namespace-aware tree, and write
 // multistatus answers with fixed prefixes. Request bodies come from the network, so the parser
 // never resolves external entities (xmldom doesn't) and bodies are size-capped by the caller.
-import { DOMParser } from "@xmldom/xmldom";
+
+// @xmldom/xmldom (MIT) is loaded when a request is first parsed, so the suite's Docker images that
+// build every shared package can compile this one without installing it; Calendar and Contacts,
+// which serve DAV, depend on it through this package.
+type Parser = { parseFromString(src: string, type: string): { documentElement: unknown } | null };
+type ParserCtor = new (opts: { onError?: (level: string, msg: string) => void }) => Parser;
+let DOMParser: ParserCtor | undefined;
+const parser = (opts: ConstructorParameters<ParserCtor>[0]) =>
+  new (DOMParser ??= (require("@xmldom/xmldom") as { DOMParser: ParserCtor }).DOMParser)(opts);
 
 export const NS = {
   DAV: "DAV:",
@@ -30,8 +38,7 @@ export function parseXml(body: string): XNode | null {
   let failed = false;
   let doc;
   try {
-    doc = new DOMParser({ onError: (level: string) => { if (level !== "warning") failed = true; } })
-      .parseFromString(body, "application/xml");
+    doc = parser({ onError: (level: string) => { if (level !== "warning") failed = true; } }).parseFromString(body, "application/xml");
   } catch {
     return null;
   }

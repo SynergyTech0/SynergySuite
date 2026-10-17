@@ -65,6 +65,62 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 -- Deleted while the owner was on legal hold: kept, hidden, still found by eDiscovery.
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
+
+-- CardDAV (lib/dav.ts): each card's UID and file name on the phone, what the phone sent that
+-- isn't modeled here, and a change counter. Every insert or update stamps the next modseq; a
+-- card removed leaves a tombstone so a phone's next sync learns it is gone. Joining or leaving
+-- a group, or the group being renamed, changes the card (its CATEGORIES).
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS uid TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS dav_name TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS vcard_extra TEXT NOT NULL DEFAULT '';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS modseq BIGINT NOT NULL DEFAULT 0;
+CREATE SEQUENCE IF NOT EXISTS contact_modseq;
+CREATE TABLE IF NOT EXISTS contact_tombstones (
+  id         BIGSERIAL PRIMARY KEY,
+  owner      TEXT NOT NULL,
+  dav_name   TEXT NOT NULL,
+  modseq     BIGINT NOT NULL,
+  removed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS contact_tombstones_owner_idx ON contact_tombstones (owner, modseq);
+CREATE OR REPLACE FUNCTION contacts_stamp() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.modseq := nextval('contact_modseq');
+  IF NEW.uid IS NULL THEN NEW.uid := NEW.id::text; END IF;
+  IF NEW.dav_name IS NULL THEN NEW.dav_name := NEW.uid || '.vcf'; END IF;
+  IF TG_OP = 'UPDATE' AND OLD.held_deleted_at IS NULL AND OLD.dav_name IS NOT NULL
+     AND (NEW.held_deleted_at IS NOT NULL OR NEW.dav_name <> OLD.dav_name) THEN
+    INSERT INTO contact_tombstones (owner, dav_name, modseq) VALUES (OLD.owner, OLD.dav_name, NEW.modseq);
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION contacts_gone() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.held_deleted_at IS NULL AND OLD.dav_name IS NOT NULL THEN
+    INSERT INTO contact_tombstones (owner, dav_name, modseq) VALUES (OLD.owner, OLD.dav_name, nextval('contact_modseq'));
+  END IF;
+  RETURN OLD;
+END $$;
+CREATE OR REPLACE FUNCTION contacts_touch_member() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE contacts SET modseq = 0 WHERE id = (CASE WHEN TG_OP = 'DELETE' THEN OLD.contact_id ELSE NEW.contact_id END);
+  RETURN NULL;
+END $$;
+CREATE OR REPLACE FUNCTION contacts_touch_group() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE contacts SET modseq = 0 WHERE id IN (SELECT contact_id FROM group_members WHERE group_id = NEW.id);
+  RETURN NULL;
+END $$;
+DROP TRIGGER IF EXISTS contacts_stamp ON contacts;
+CREATE TRIGGER contacts_stamp BEFORE INSERT OR UPDATE ON contacts FOR EACH ROW EXECUTE FUNCTION contacts_stamp();
+DROP TRIGGER IF EXISTS contacts_gone ON contacts;
+CREATE TRIGGER contacts_gone AFTER DELETE ON contacts FOR EACH ROW EXECUTE FUNCTION contacts_gone();
+DROP TRIGGER IF EXISTS contacts_touch_member ON group_members;
+CREATE TRIGGER contacts_touch_member AFTER INSERT OR DELETE ON group_members FOR EACH ROW EXECUTE FUNCTION contacts_touch_member();
+DROP TRIGGER IF EXISTS contacts_touch_group ON groups;
+CREATE TRIGGER contacts_touch_group AFTER UPDATE OF name ON groups FOR EACH ROW EXECUTE FUNCTION contacts_touch_group();
+UPDATE contacts SET modseq = 0 WHERE uid IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS contacts_dav_name_idx ON contacts (owner, dav_name) WHERE held_deleted_at IS NULL;
 `;
 
 type Db = ReturnType<typeof createDb>;

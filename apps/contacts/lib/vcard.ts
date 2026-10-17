@@ -1,9 +1,16 @@
 // vCard 2.1, 3.0 and 4.0 in (RFC 2426, RFC 6350); 3.0 out, which every address book reads.
 import { EMPTY_CONTACT, type Address, type ContactInput, type Labeled } from "./types";
 
-export type ParsedContact = ContactInput & { groups: string[]; photo?: { mime: string; data: Buffer } };
+export type ParsedContact = ContactInput & {
+  groups: string[];
+  photo?: { mime: string; data: Buffer };
+  /** The card's UID, when it has one. */
+  uid?: string;
+  /** Properties this address book doesn't model, as the lines that came in (kept for CardDAV). */
+  extra?: string;
+};
 
-type Prop = { name: string; params: Record<string, string[]>; value: string };
+type Prop = { name: string; params: Record<string, string[]>; value: string; raw?: string };
 
 /** Joins folded lines (a line starting with a space or tab continues the one before). */
 function unfold(src: string): string[] {
@@ -82,7 +89,7 @@ function parseLine(line: string): Prop | null {
   }
   let value = line.slice(colon + 1);
   if (params.ENCODING?.some((e) => /quoted-printable/i.test(e))) value = decodeQP(value);
-  return { name, params, value };
+  return { name, params, value, raw: line };
 }
 
 const TYPES = ["home", "work", "mobile", "cell", "fax", "pager", "main", "iphone", "other"];
@@ -148,12 +155,22 @@ export function parseVCards(src: string): ParsedContact[] {
   return out;
 }
 
+// Written by toVCard from the contact itself, so not kept as extra.
+const MAPPED = new Set(["VERSION", "N", "FN", "NICKNAME", "ORG", "TITLE", "EMAIL", "TEL", "ADR", "URL", "BDAY", "NOTE", "CATEGORIES", "PHOTO", "UID", "REV", "PRODID", "KIND"]);
+const MAX_EXTRA = 20000;
+
 function fromProps(props: Prop[]): ParsedContact {
   const c: ParsedContact = { ...EMPTY_CONTACT, emails: [], phones: [], addresses: [], websites: [], groups: [] };
   let fn = "";
+  const extra: string[] = [];
   for (const p of props) {
     const parts = () => splitUnescaped(p.value, ";").map(unescape);
+    // Grouped labels (item1.X-ABLabel) belong to a property that is rewritten, so they go too.
+    if (!MAPPED.has(p.name) && p.raw && !/^item\d+\./i.test(p.raw)) extra.push(p.raw);
     switch (p.name) {
+      case "UID":
+        c.uid = unescape(p.value).trim().replace(/^urn:uuid:/i, "").slice(0, 255) || undefined;
+        break;
       case "N": {
         const [last = "", first = "", middle = ""] = parts();
         c.lastName = last.trim();
@@ -207,6 +224,8 @@ function fromProps(props: Prop[]): ParsedContact {
       }
     }
   }
+  const kept = extra.join("\n");
+  if (kept && kept.length <= MAX_EXTRA) c.extra = kept;
   // A card with only FN: split it into first and last name.
   if (!c.firstName && !c.lastName && fn && fn !== c.company) {
     const words = fn.split(/\s+/);
@@ -237,7 +256,11 @@ function fold(line: string): string {
   return out.join("\r\n ");
 }
 
-export type CardOut = ContactInput & { displayName: string; groups: string[]; photo?: { mime: string; data: Buffer } | null; uid?: string; modifiedAt?: string };
+export type CardOut = ContactInput & {
+  displayName: string; groups: string[]; photo?: { mime: string; data: Buffer } | null; uid?: string; modifiedAt?: string;
+  /** Lines kept from a card a phone sent (see ParsedContact.extra). */
+  extra?: string;
+};
 
 export function toVCard(c: CardOut): string {
   const lines = ["BEGIN:VCARD", "VERSION:3.0"];
@@ -258,6 +281,7 @@ export function toVCard(c: CardOut): string {
   if (c.groups.length) lines.push(`CATEGORIES:${c.groups.map(escape).join(",")}`);
   if (c.photo) lines.push(`PHOTO;ENCODING=b;TYPE=${c.photo.mime.split("/")[1]?.toUpperCase() || "JPEG"}:${c.photo.data.toString("base64")}`);
   if (c.modifiedAt) lines.push(`REV:${new Date(c.modifiedAt).toISOString().replace(/[-:]|\.\d+/g, "")}`);
+  if (c.extra) lines.push(...c.extra.split("\n").filter((l) => l && !/^(BEGIN|END):/i.test(l)));
   lines.push("END:VCARD");
   return lines.map(fold).join("\r\n") + "\r\n";
 }

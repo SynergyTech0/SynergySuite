@@ -64,7 +64,7 @@ To turn demo mode off, clear `DEMO_MODE` and `up` again: the `demo` service exit
 
 ## Public paths
 
-These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Ops' demand and purchase-request feeds (`ops.<domain>/api/svc/*`, which check `OPS_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`), and the flow engine's webhook triggers (`flow-studio.<domain>/api/v1/webhooks/*` and `/api/v1/app-events/*`, which only start a flow whose owner published a webhook trigger).
+These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Ops' demand and purchase-request feeds (`ops.<domain>/api/svc/*`, which check `OPS_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`), and the flow engine's webhook triggers (`flow-studio.<domain>/api/v1/webhooks/*` and `/api/v1/app-events/*`, which only start a flow whose owner published a webhook trigger), and phone sync for Calendar and Contacts (`/dav/*`, `/.well-known/caldav` or `/.well-known/carddav`, and `PROPFIND`/`REPORT` on `/`, which check an app password; see below).
 
 ## Flow
 
@@ -89,6 +89,35 @@ These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), publi
 - Stalwart publishes 25 (incoming mail), 465 (sending from desktop and phone clients) and 993 (reading from them). Many cloud hosts block port 25; ask yours to open it or relay through a smarthost.
 - To receive mail from the internet you need: an MX record for your domain pointing at `mx.<domain>`, SPF and DKIM records (Stalwart's admin UI shows the DKIM record to publish), and reverse DNS for the host's IP set to `mx.<domain>`.
 - Stalwart starts with a self-signed certificate. Give it a real one in its admin UI (ACME/Let's Encrypt is built in) before pointing desktop clients at it, then set `MAIL_SUITE_TLS_INSECURE=false`.
+
+## Phone and desktop sync (CalDAV and CardDAV)
+
+People can add their suite calendar and contacts to the calendar and contacts apps on iPhone, iPad, Mac, Android (with DAVx5) and Thunderbird, and changes go both ways. Calendar serves CalDAV at `calendar.<domain>` and Contacts serves CardDAV at `contacts.<domain>`. Repeating events, their exceptions and alarms set on the phone sync too.
+
+These apps can't do the suite's browser sign-in, so each person makes an **app password** on their Account page (`auth.<domain>/account`, "App passwords"): a name such as "My iPhone", then a 16-letter password shown once. They sign in with their email address and that password. App passwords are stored hashed, can be revoked one by one, show when they were last used, and are all revoked when the account password is reset. They skip two-step verification, which is why they are random, separate from the account password, and revocable.
+
+**iPhone and iPad:** Settings > Apps > Calendar > Calendar Accounts > Add Account > Other > Add CalDAV Account. Server `calendar.<domain>`, User Name your email, Password the app password. For contacts: Settings > Apps > Contacts > Contacts Accounts > Add Account > Other > Add CardDAV Account, server `contacts.<domain>`. (On older iOS: Settings > Calendar or Contacts > Accounts.)
+
+**Mac:** Calendar > Settings > Accounts > + > Other CalDAV Account, account type Manual, server `calendar.<domain>`. Contacts > Settings > Accounts > + > Other Contacts Account, CardDAV, server `contacts.<domain>`.
+
+**Android:** install DAVx5 (free and open source, from F-Droid or Google Play). Add account > Login with URL and user name: base URL `https://calendar.<domain>`, your email and the app password; then add a second account with `https://contacts.<domain>`. Pick what to sync; events and contacts appear in the phone's own Calendar and Contacts apps.
+
+**Thunderbird:** New Calendar > On the Network, location `calendar.<domain>`, your email; for contacts, New Address Book > Add CardDAV Address Book with `https://contacts.<domain>`.
+
+What each person sees:
+
+- Calendar: **Calendar** (their own events, read and write), **Company** (the company calendar; anyone can add, only the organizer changes an event) and **Invitations** (other people's events they're invited to, read only).
+- Contacts: **Contacts**, their own address book, read and write. Groups sync as vCard categories. The organization directory isn't offered over CardDAV yet.
+
+Wrong passwords: the account service locks a person's app passwords for 15 minutes after 10 wrong tries, and an address for 15 minutes after 30; Calendar and Contacts each also stop asking for an address after 20 wrong tries in 10 minutes. Correct sign-ins are remembered for a minute, so a revoked app password can keep working for up to a minute. The account service's check (`/api/internal/*`) is reachable only on the compose network, with `PROXY_SHARED_SECRET`.
+
+Not included:
+
+- **Exchange ActiveSync** is not implemented: it is Microsoft's protocol and licensed under patents. Every current phone and desktop app speaks CalDAV and CardDAV instead.
+- Meeting invitations aren't sent from a phone (no CalDAV scheduling, RFC 6638): an event with attendees made on a phone shows in their Invitations, without an email.
+- Time zones are sent as IANA names without VTIMEZONE blocks, which all the clients above read.
+
+**Why not Stalwart's CalDAV and CardDAV?** Stalwart, the bundled mail server (v0.16), does serve CalDAV and CardDAV. It isn't used for this because its calendars and address books are a separate store with its own accounts (mail principals): events made there wouldn't show in Calendar, free/busy, Bookings, suite search or eDiscovery, and keeping two stores in step both ways would be fragile. Serving the protocols from Calendar and Contacts keeps one copy of the data and the suite's own sign-in, holds and retention.
 
 ## Insights
 
