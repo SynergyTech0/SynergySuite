@@ -227,6 +227,13 @@ export default function App() {
     api.templates().then(setTemplates).catch(() => {});
   }, []); // eslint-disable-line
 
+  // Tell the suite header's Copilot which page is open, so "summarize this" knows.
+  useEffect(() => {
+    const bar = document.querySelector('synergy-app-bar');
+    if (!bar) return;
+    bar.setAttribute('context', page?.id ? new URLSearchParams({ space: String(page.space_id ?? activeSpace ?? ''), page: String(page.id) }).toString() : '');
+  }, [page, activeSpace]);
+
   // Poll notifications so the unread badge stays fresh.
   const loadNotifs = useCallback(() => api.notifications().then(setNotifs).catch(() => {}), []);
   useEffect(() => { loadNotifs(); const t = setInterval(loadNotifs, 60000); return () => clearInterval(t); }, [loadNotifs]);

@@ -1,7 +1,7 @@
 // API endpoint for marking an individual notification as read
 
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { markNotificationAsRead } from "@/lib/notifications";
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma as db } from '@/lib/db';
+import { publicBase } from "@/lib/urls";
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +63,7 @@ export async function GET() {
 
     return NextResponse.json({
       referralCode: user.referralCode,
-      referralLink: `${process.env.NEXTAUTH_URL}/auth/signup?ref=${user.referralCode}`,
+      referralLink: `${publicBase()}/dashboard?ref=${user.referralCode}`,
       totalReferrals,
       activeReferrals: activeReferrals.length,
       totalEarnings: user.totalEarnings,

@@ -1,6 +1,7 @@
 // Suite search (POST /api/search, see @synergy/search): the events the signed-in person sees in
 // the app today, by the same rule as GET /api/events: their own calendar, the shared company
-// calendar, and events they are invited to. Events a held organizer deleted (held_deleted_at)
+// calendar, events they are invited to, and events on the group calendars they are a member of
+// (the Groups app pushes those memberships). Events a held organizer deleted (held_deleted_at)
 // and earlier versions kept for a hold never come back; those are for eDiscovery only.
 // A repeating series is one result, dated and linked to its next occurrence (or its last one,
 // once it has ended), with occurrences changed on their own leaving it out.

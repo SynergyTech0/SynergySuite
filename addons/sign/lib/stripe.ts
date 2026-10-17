@@ -1,12 +1,19 @@
 import Stripe from "stripe";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("Missing STRIPE_SECRET_KEY in environment");
+// Paid plans are optional (the hosted product's billing; a suite runs without it). The client is
+// made on first use, so the app starts and builds without STRIPE_SECRET_KEY and only the billing
+// routes fail when it is missing.
+let client: Stripe | null = null;
+
+function stripeClient(): Stripe {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error("Billing is off: STRIPE_SECRET_KEY is not set");
+  return (client ??= new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2024-11-20.acacia" as Stripe.StripeConfig["apiVersion"],
+  }));
 }
 
-// Initialize Stripe with the latest stable API version
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-11-20.acacia",
+export const stripe = new Proxy({} as Stripe, {
+  get: (_target, prop) => Reflect.get(stripeClient() as object, prop),
 });
 
 // Structured pricing configuration for all tiers and billing cycles
@@ -59,7 +66,7 @@ export const getPriceId = (tier: SubscriptionTier, cycle: BillingCycle): string 
       return launchPrice;
     }
   }
-  return STRIPE_PRICING[tier][cycle];
+  return (STRIPE_PRICING[tier] as Record<string, string>)[cycle];
 };
 
 // Backwards compatibility - defaults to monthly

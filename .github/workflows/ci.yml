@@ -83,6 +83,7 @@ jobs:
           npx tsc --noEmit -p apps/bookings
           npx tsc --noEmit -p apps/loop
           npx tsc --noEmit -p apps/crm
+          npx tsc --noEmit -p addons/campaigns
           npx tsc --noEmit -p apps/desk
           npx tsc --noEmit -p apps/diagrams
           npx tsc --noEmit -p apps/devices
@@ -98,6 +99,8 @@ jobs:
           npx tsc --noEmit -p apps/base
           npx tsc --noEmit -p apps/phone
           npx tsc --noEmit -p apps/projects
+          npx tsc --noEmit -p apps/field
+          npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/contracts
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
@@ -163,6 +166,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE bookings_test"
           npm test --workspace apps/bookings
+      - name: Campaigns tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/campaigns_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE campaigns_test"
+          npm test --workspace addons/campaigns
       - name: Loop tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/loop_test
@@ -199,6 +208,18 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE projects_test"
           npm test --workspace apps/projects
+      - name: Field tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/field_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE field_test"
+          npm test --workspace apps/field
+      - name: Groups tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/groups_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE groups_test"
+          npm test --workspace apps/groups
       - name: Contracts tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/contracts_test
@@ -262,6 +283,30 @@ jobs:
         run: |
           npx drizzle-kit migrate
           npx vitest run
+
+  # Sign keeps its own lockfile (Next.js 14 / React 18) and uses the suite packages through file: links.
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            addons/sign/package-lock.json
+      - run: npm ci --workspace packages/shell --workspace packages/search --workspace packages/identity --workspace packages/compliance --workspace packages/ai --include-workspace-root
+      - run: npm run build:packages
+      - name: Install Sign
+        working-directory: addons/sign
+        run: npm ci --legacy-peer-deps && npx prisma generate
+      - name: Typecheck Sign
+        working-directory: addons/sign
+        run: npm run typecheck
+      - name: Sign tests
+        working-directory: addons/sign
+        run: npx jest --ci
 
   books:
     runs-on: ubuntu-latest

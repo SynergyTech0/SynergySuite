@@ -170,6 +170,7 @@ function createCompliance(q) {
         text: r.description,
         metadata: {
           calendar: r.calendar,
+          groupSource: r.group_source,
           location: r.location,
           start: r.start_at,
           end: r.end_at,
@@ -193,8 +194,8 @@ function createCompliance(q) {
     await q(
       `INSERT INTO event_held_versions (event_id, fields)
        SELECT id, jsonb_build_object('title', title, 'description', description, 'location', location,
-                'start', start_at, 'end', end_at, 'allDay', all_day, 'calendar', calendar, 'attendees', attendees,
-                'timeZone', tzid, 'repeat', rrule, 'skipped', exdates)
+                'start', start_at, 'end', end_at, 'allDay', all_day, 'calendar', calendar, 'groupSource', group_source,
+                'attendees', attendees, 'timeZone', tzid, 'repeat', rrule, 'skipped', exdates)
          FROM events WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL`, [id, owner]);
   }
 

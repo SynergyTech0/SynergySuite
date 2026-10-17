@@ -12,10 +12,32 @@ type App = (typeof apps)[number];
  *
  * With a `domain` and a signed-in `user`, it also listens to Phone, so a call rings on whichever
  * suite page you have open (calls="off" turns that off; Phone's own pages ring by themselves).
+ *
+ * The Copilot button opens a side panel with the Search app's /copilot page in a frame, told which
+ * app the person is in and what they have open: the `context` attribute when the app sets one
+ * (e.g. Mail sets "account=…&folder=…&uid=…" for the open message), else the page's path and query.
+ * Changing `context` while the panel is open tells the panel without reloading it.
  */
 const ICONS: Record<string, string> = {
   grid: "M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z",
+  spark: "M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9z",
 };
+
+/** Apps that never show Copilot: Search has it built in, and Account's sign-in pages may not frame anything. */
+const NO_COPILOT = new Set(["search", "auth"]);
+const MAX_CONTEXT = 500;
+
+/** What the person has open, as the panel receives it. */
+export function copilotContext(attr: string | null, loc: { pathname: string; search: string } | null): string {
+  const raw = attr ?? (loc ? `${loc.pathname}${loc.search}` : "");
+  return raw.replace(/[\u0000-\u001F\u007F]/g, "").slice(0, MAX_CONTEXT);
+}
+
+/** The panel's address: Search's /copilot with the app and context. */
+export function copilotUrl(searchUrl: string, app: string, context: string): string {
+  const q = new URLSearchParams({ app, context });
+  return `${searchUrl}/copilot?${q}`;
+}
 
 function urlFor(app: App, domain: string | null): string {
   return domain ? `https://${app.id}.${domain}` : `http://localhost:${app.port}`;
@@ -26,8 +48,10 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 type Ring = { id: string; fromName: string; via: string | null };
 
 export class SynergyAppBar extends HTMLElement {
-  static observedAttributes = ["app", "user", "domain", "calls"];
+  static observedAttributes = ["app", "user", "domain", "calls", "context"];
   private open = false;
+  private copilotOpen = false;
+  private panel: HTMLElement | null = null;
   private events: EventSource | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private backoff = 15_000;
@@ -42,6 +66,7 @@ export class SynergyAppBar extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.closeCopilot();
     document.removeEventListener("keydown", this.onKeydown);
     document.removeEventListener("click", this.onDocumentClick);
     this.stopListening();
@@ -116,6 +141,8 @@ export class SynergyAppBar extends HTMLElement {
 
   attributeChangedCallback(name: string) {
     if (!this.shadowRoot) return;
+    // A new context goes to the open panel; the bar itself doesn't change.
+    if (name === "context") return this.sendContext();
     this.render();
     if (name !== "calls" && name !== "domain" && name !== "user" && name !== "app") return;
     if (this.isConnected) this.listenForCalls();
@@ -128,7 +155,71 @@ export class SynergyAppBar extends HTMLElement {
     this.shadowRoot?.querySelector("nav")?.toggleAttribute("hidden", !open);
   }
 
+  private searchUrl(): string | null {
+    const search = apps.find((a) => a.id === "search");
+    return search ? urlFor(search, this.getAttribute("domain")) : null;
+  }
+
+  private hasCopilot(): boolean {
+    return !NO_COPILOT.has(this.getAttribute("app") ?? "") && this.searchUrl() !== null;
+  }
+
+  private context(): string {
+    return copilotContext(this.getAttribute("context"), typeof location === "undefined" ? null : location);
+  }
+
+  /** Tells the open panel what the person has open now, only ever to Search's own origin. */
+  private sendContext() {
+    const frame = this.panel?.querySelector("iframe");
+    const base = this.searchUrl();
+    if (!frame?.contentWindow || !base) return;
+    frame.contentWindow.postMessage({ type: "synergy-copilot-context", app: this.getAttribute("app") ?? "", context: this.context() }, new URL(base).origin);
+  }
+
+  private toggleCopilot() {
+    if (this.copilotOpen) this.closeCopilot();
+    else this.openCopilot();
+  }
+
+  private openCopilot() {
+    const base = this.searchUrl();
+    if (!base || !this.shadowRoot) return;
+    this.copilotOpen = true;
+    if (!this.panel) {
+      const src = copilotUrl(base, this.getAttribute("app") ?? "", this.context());
+      const panel = document.createElement("aside");
+      panel.className = "copilot";
+      panel.setAttribute("aria-label", "Copilot");
+      panel.innerHTML = `<div class="cp-head"><strong>Copilot</strong>
+          <a class="cp-pop" href="${esc(src)}" target="_blank" rel="noopener">Open in a new tab</a>
+          <button class="cp-close" aria-label="Close Copilot">×</button></div>
+        <iframe title="Copilot" src="${esc(src)}" allow="clipboard-write"></iframe>`;
+      panel.querySelector(".cp-close")!.addEventListener("click", () => this.closeCopilot());
+      // Keep the pop-out link on the current context.
+      panel.querySelector(".cp-pop")!.addEventListener("click", (e) => {
+        (e.currentTarget as HTMLAnchorElement).href = copilotUrl(base, this.getAttribute("app") ?? "", this.context());
+      });
+      this.panel = panel;
+    } else {
+      this.sendContext();
+    }
+    this.panel.hidden = false;
+    if (!this.panel.isConnected) this.shadowRoot.appendChild(this.panel);
+    this.shadowRoot.querySelector(".cp-btn")?.setAttribute("aria-expanded", "true");
+  }
+
+  private closeCopilot() {
+    this.copilotOpen = false;
+    if (this.panel) this.panel.hidden = true;
+    this.shadowRoot?.querySelector(".cp-btn")?.setAttribute("aria-expanded", "false");
+  }
+
   private onKeydown = (e: KeyboardEvent) => {
+    if (e.key === "Escape" && this.copilotOpen && this.shadowRoot?.activeElement != null && !this.open) {
+      this.closeCopilot();
+      (this.shadowRoot.querySelector(".cp-btn") as HTMLElement | null)?.focus();
+      return;
+    }
     if (e.key !== "Escape" || !this.open) return;
     const focusInside = this.shadowRoot?.activeElement != null;
     this.setOpen(false);
@@ -149,7 +240,14 @@ export class SynergyAppBar extends HTMLElement {
     const searchApp = current === "search" ? undefined : apps.find((a) => a.id === "search");
     const searchUrl = searchApp ? urlFor(searchApp, domain) : "";
 
-    this.shadowRoot!.innerHTML = `
+    // The bar lives in its own box so re-rendering it never moves (and so reloads) the panel's frame.
+    let root = this.shadowRoot!.querySelector<HTMLElement>(".bar-root");
+    if (!root) {
+      root = document.createElement("div");
+      root.className = "bar-root";
+      this.shadowRoot!.prepend(root);
+    }
+    root.innerHTML = `
       <style>
         :host { display: block; font: 14px/1.4 system-ui, sans-serif;
                 --bar-bg: #ffffff; --bar-fg: #011b3e; --bar-line: #e3e8f1; --bar-hover: rgba(1,27,62,.07);
@@ -186,11 +284,23 @@ export class SynergyAppBar extends HTMLElement {
                 box-shadow: 0 10px 30px rgba(0,0,0,.22); border-left: 4px solid #107c41; }
         .ring a { background: #107c41; color: #fff; text-decoration: none; padding: 7px 12px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
         .ring button { width: 26px; height: 26px; font-size: 18px; }
+        .cp-btn { width: auto; padding: 0 10px; gap: 6px; display: inline-flex; align-items: center; font-weight: 600; flex: none; margin-left: auto; }
+        form + .cp-btn, .cp-btn + .user { margin-left: 0; }
+        .cp-btn[aria-expanded="true"] { background: var(--bar-hover); }
+        @media (max-width: 640px) { .cp-btn span { display: none; } form + .cp-btn { margin-left: auto; } }
+        .copilot { position: fixed; top: 48px; right: 0; bottom: 0; z-index: 999; width: min(420px, 100vw); display: flex; flex-direction: column;
+                   background: var(--bar-bg); color: var(--bar-fg); border-left: 1px solid var(--bar-line); box-shadow: -8px 0 24px rgba(0,0,0,.12); }
+        .copilot[hidden] { display: none; }
+        .cp-head { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--bar-line); }
+        .cp-pop { margin-left: auto; color: inherit; opacity: .8; font-size: 12px; }
+        .cp-close { width: 28px; height: 28px; font-size: 20px; }
+        .copilot iframe { flex: 1; width: 100%; border: 0; background: transparent; }
       </style>
       <header>
         <button aria-label="App launcher" aria-expanded="${this.open}"><svg viewBox="0 0 24 24"><path d="${ICONS.grid}"/></svg></button>
         <span class="brand"><img src="${MARK_DATA_URI}" alt=""><span class="name">Synergy${here ? ` <span>${esc(here.name)}</span>` : ""}</span></span>
         ${searchApp ? `<form role="search" action="${esc(searchUrl)}/" method="get"><input type="search" name="q" aria-label="Search the suite" placeholder="Search" maxlength="500" autocomplete="off"></form>` : ""}
+        ${this.hasCopilot() ? `<button class="cp-btn" aria-label="Copilot" aria-expanded="${this.copilotOpen}" title="Copilot"><svg viewBox="0 0 24 24"><path d="${ICONS.spark}"/></svg><span>Copilot</span></button>` : ""}
         <span class="user">${esc(user)}</span>
       </header>
       <nav aria-label="Apps" ${this.open ? "" : "hidden"}>
@@ -201,6 +311,13 @@ export class SynergyAppBar extends HTMLElement {
       <div class="rings"></div>`;
 
     this.shadowRoot!.querySelector("button")!.addEventListener("click", () => this.setOpen(!this.open));
+    this.shadowRoot!.querySelector(".cp-btn")?.addEventListener("click", () => this.toggleCopilot());
+    // The panel survives a re-render, so a conversation isn't lost when the bar's attributes change.
+    if (this.panel && !this.hasCopilot()) {
+      this.panel.remove();
+      this.panel = null;
+      this.copilotOpen = false;
+    }
     const form = this.shadowRoot!.querySelector("form");
     form?.addEventListener("submit", (e) => {
       e.preventDefault();

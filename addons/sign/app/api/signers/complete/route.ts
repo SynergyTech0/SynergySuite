@@ -10,6 +10,7 @@ import {
   renderDocumentCompletion,
 } from "@/lib/email-templates";
 import { enqueueContractEventSafe, signerRoleForOrder } from "@/lib/contract-events";
+import { publicBase } from "@/lib/urls";
 
 export const dynamic = 'force-dynamic';
 
@@ -139,7 +140,7 @@ export async function POST(req: Request) {
 
         // Send email to next signer using professional template
         try {
-          const signLink = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/sign/${nextSigner.token}`;
+          const signLink = `${publicBase()}/sign/${nextSigner.token}`;
           
           const emailHtml = renderNextSignerNotification({
             signerName: nextSigner.name || nextSigner.email,

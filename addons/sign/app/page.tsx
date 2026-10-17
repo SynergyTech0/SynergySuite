@@ -1,16 +1,6 @@
+import { redirect } from "next/navigation";
 
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { redirect } from 'next/navigation';
-import { LandingPage } from '@/components/landing/landing-page';
-
-export default async function HomePage() {
-  const session = await getServerSession(authOptions);
-
-  if (session) {
-    redirect('/dashboard');
-  }
-
-  return <LandingPage />;
+/** Sign is part of the suite: people go straight to their documents (the gateway has signed them in). */
+export default function HomePage() {
+  redirect("/dashboard");
 }
-

@@ -12,6 +12,7 @@
   "dependencies": {
     "@synergy/ai": "*",
     "@synergy/compliance": "*",
+    "@synergy/config": "*",
     "@synergy/db": "*",
     "@synergy/identity": "*",
     "@synergy/search": "*",

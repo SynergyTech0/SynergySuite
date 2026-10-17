@@ -57,7 +57,7 @@ export function MonthView({ cursor, events, me, onOpen, onNew, onDay }) {
 }
 
 /** Day and week: a 24-hour grid, scrolled to the morning, all-day events on top. */
-export function TimeGrid({ days, events, me, onOpen, onNew }) {
+export function TimeGrid({ days, events, me, onOpen, onNew, calendarName }) {
   const scroller = useRef(null);
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = 7 * HOUR_PX; }, [days.length]);
   const today = new Date();
@@ -101,6 +101,7 @@ export function TimeGrid({ days, events, me, onOpen, onNew }) {
                       style={{ top, height, left: `calc(${(lane / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)` }}
                       onClick={() => onOpen(e)}>
                       <span className="ev-title">{e.title}<Repeat e={e} /></span>
+                      {e.calendar === 'group' && calendarName && <span className="ev-cal">{calendarName(e)}</span>}
                       <span className="ev-time">{fmtTime(e.start_at)}{e.location ? ` · ${e.location}` : ''}</span>
                     </button>
                   );

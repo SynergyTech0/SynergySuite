@@ -47,9 +47,11 @@ body { font: 14.5px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; backgroun
 }
 .event.company { background: #7c3aed; }
 .event.booking { background: #0e9f6e; }
+.event.group, .allday-chip.group { background: #c2410c; }
 .event.other { opacity: .72; outline: 1px dashed rgba(255,255,255,.6); }
 .ev-title { display: block; font-weight: 700; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-time { display: block; font-size: 11px; opacity: .85; }
+.ev-cal { display: block; font-size: 11px; opacity: .9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 button { font: inherit; }
 .event:focus-visible, .allday-chip:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
@@ -73,6 +75,7 @@ button { font: inherit; }
 
 .repeat { margin-left: 4px; font-size: 11px; opacity: .85; }
 .allday-chip.company, .month-chip.allday.company { background: #7c3aed; }
+.allday-chip.group, .month-chip.allday.group { background: #c2410c; }
 .allday-chip.booking, .month-chip.allday.booking { background: #0e9f6e; }
 .allday-chip.other { opacity: .72; }
 
@@ -87,6 +90,7 @@ button { font: inherit; }
 .month-chip { display: flex; gap: 4px; align-items: baseline; width: 100%; border: none; text-align: left; font: inherit; font-size: 12px; padding: 1px 5px; border-radius: 5px; cursor: pointer; overflow: hidden; white-space: nowrap; color: inherit; background: none; }
 .month-chip.timed::before { content: ''; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); align-self: center; }
 .month-chip.timed.company::before { background: #7c3aed; }
+.month-chip.timed.group::before { background: #c2410c; }
 .month-chip.timed.booking::before { background: #0e9f6e; }
 .month-chip.timed:hover { background: var(--bg-alt); }
 .month-chip.allday { background: var(--accent); color: #fff; }
@@ -106,6 +110,7 @@ button { font: inherit; }
 .agenda-time { width: 150px; flex-shrink: 0; color: var(--muted); font-size: 13px; }
 .agenda-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
 .agenda-row.company .agenda-dot { background: #7c3aed; }
+.agenda-row.group .agenda-dot { background: #c2410c; }
 .agenda-row.booking .agenda-dot { background: #0e9f6e; }
 .agenda-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 560px) { .agenda-time { width: 92px; } }
@@ -124,6 +129,7 @@ button { font: inherit; }
 .legend { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; font-size: 12.5px; color: var(--muted); }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-right: 6px; }
 .dot.company { background: #7c3aed; }
+.dot.group { background: #c2410c; }
 .dot.booking { background: #0e9f6e; }
 
 /* Editor */
@@ -145,3 +151,10 @@ button { font: inherit; }
   .month-chip { padding: 1px 3px; font-size: 11px; }
   .month-cell { padding: 2px; }
 }
+.modal textarea { width: 100%; margin-top: 4px; font: inherit; font-weight: 400; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); outline: none; resize: vertical; box-sizing: border-box; }
+.modal textarea:focus { border-color: var(--accent); }
+.assist { margin: -4px 0 10px; display: flex; flex-direction: column; gap: 6px; }
+.assist > button, .assist-actions button:not(.primary) { align-self: flex-start; background: var(--bg-alt); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; color: inherit; font: inherit; }
+.assist-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.assist .hint { margin: 0; }
+.bad-text { color: var(--bad); }

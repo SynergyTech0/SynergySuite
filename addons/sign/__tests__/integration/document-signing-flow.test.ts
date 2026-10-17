@@ -1,5 +1,7 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals'
-import { prismaMock } from '../setup/prisma-mock'
+import { prismaMock as typedPrismaMock } from '../setup/prisma-mock'
+// These cases describe the data flow against a bare mock (older field names included), not the real schema.
+const prismaMock = typedPrismaMock as any
 
 jest.mock('@/lib/db')
 

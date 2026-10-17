@@ -101,8 +101,14 @@ calendar.{$SUITE_DOMAIN} {
 }
 
 chat.{$SUITE_DOMAIN} {
-	import signed_in
-	import to_app chat:3080
+	# Groups sets up team workspaces on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app chat:3080
+	}
 }
 
 forms.{$SUITE_DOMAIN} {
@@ -159,8 +165,14 @@ portal.{$SUITE_DOMAIN} {
 }
 
 mail.{$SUITE_DOMAIN} {
-	import signed_in
-	import to_app mail:3200
+	# Groups sets up shared mailboxes and lists on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app mail:3200
+	}
 }
 
 meet.{$SUITE_DOMAIN} {
@@ -443,6 +455,17 @@ engage.{$SUITE_DOMAIN} {
 	import to_app engage:3740
 }
 
+groups.{$SUITE_DOMAIN} {
+	# Other suite apps ask who is in which group on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	handle {
+		import signed_in
+		import to_app groups:3830
+	}
+}
+
 contracts.{$SUITE_DOMAIN} {
 	# The signing service reports progress on the internal network; never from outside.
 	handle /api/svc/* {
@@ -455,6 +478,11 @@ contracts.{$SUITE_DOMAIN} {
 projects.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app projects:3820
+}
+
+field.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app field:3850
 }
 
 whiteboard.{$SUITE_DOMAIN} {
@@ -486,6 +514,41 @@ bookings.{$SUITE_DOMAIN} {
 	}
 }
 
+sign.{$SUITE_DOMAIN} {
+	# Signers outside the organization sign from their emailed link without a suite account: the
+	# signing page, its token-checked API, the short-lived signed file links its PDF viewer loads,
+	# and the build assets. Everything else (sending, templates, the dashboard) needs a sign-in.
+	@signer path /sign/* /api/signers/access* /api/signers/secure-url* /api/signers/verify* /api/signers/fields* /api/signers/complete* /api/files/* /_next/* /favicon.png /pdf.worker.min.mjs /pdf.worker.min.js /pdfjs/*
+	handle @signer {
+		import maybe_signed_in
+		import to_app sign:3300
+	}
+	handle {
+		import signed_in
+		import to_app sign:3300
+	}
+}
+
+campaigns.{$SUITE_DOMAIN} {
+	# What recipients open from an email needs no suite account: open and click tracking,
+	# unsubscribe, the browser copy and the signup form. Everything else is for staff.
+	@public path /t/* /u/* /v/* /f/*
+	handle @public {
+		# These pages never need to know who is visiting, so no identity reaches the app.
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Dev-User
+		import to_app campaigns:3400
+	}
+	handle {
+		import signed_in
+		import to_app campaigns:3400
+	}
+}
+
 drive.{$SUITE_DOMAIN} {
 	# View links open without an account: the link page, its API and the build assets the page
 	# loads. A signed-in viewer is still known; everything else needs a suite sign-in.
@@ -493,6 +556,10 @@ drive.{$SUITE_DOMAIN} {
 	handle @shared {
 		import maybe_signed_in
 		import to_app drive:3180
+	}
+	# Groups sets up team libraries on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
 	}
 	handle {
 		import signed_in

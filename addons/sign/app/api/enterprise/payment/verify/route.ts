@@ -4,6 +4,7 @@ import { stripe, ENTERPRISE_PRICING } from "@/lib/stripe";
 import { generateInvitationToken } from "@/lib/invitation-tokens";
 import { sendEmail } from "@/lib/email";
 import { renderEnterprisePaymentConfirmation } from "@/lib/email-templates/enterprise-payment-confirmation";
+import { publicBase } from "@/lib/urls";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		const passwordSetupUrl = passwordSetupToken
-			? `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/enterprise/setup-password?token=${passwordSetupToken}`
+			? `${publicBase()}/dashboard`
 			: undefined;
 
 		// Send confirmation email with password setup link

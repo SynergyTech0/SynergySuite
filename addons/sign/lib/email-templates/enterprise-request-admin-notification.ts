@@ -4,6 +4,7 @@
  */
 
 import { renderBaseEmailLayout } from "./base-layout";
+import { publicBase } from "@/lib/urls";
 
 export interface EnterpriseRequestAdminNotificationData {
   customerRequestId: string;
@@ -36,7 +37,7 @@ export function renderEnterpriseRequestAdminNotification(
     timeZoneName: "short",
   });
 
-  const redirectUrl = `${process.env.NEXTAUTH_URL || ""}/admin/enterprises`;
+  const redirectUrl = `${publicBase()}/admin/enterprises`;
 
   const content = `
               <p style="margin:0 0 24px; font-size:16px; line-height:1.7; color:#374151;">

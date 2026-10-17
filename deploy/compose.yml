@@ -41,6 +41,8 @@ x-app-env: &app-env
   # Without COMPLIANCE_TOKEN there is no Admin center link: no holds, no retention, no searches.
   COMPLIANCE_TOKEN: ${COMPLIANCE_TOKEN:-}
   ADMIN_INTERNAL_URL: ${COMPLIANCE_TOKEN:+http://admin:3700}
+  # Groups (teams, lists, shared mailboxes): apps ask it who is in what through @synergy/groups.
+  GROUPS_INTERNAL_URL: http://groups:3830
 
 # Demo mode's shared login, read by auth (shown on the sign-in page) and the demo service.
 x-demo-env: &demo-env
@@ -195,6 +197,11 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/calendar
       CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
       AUTH_INTERNAL_URL: http://auth:3500
+      # Draft with Copilot for event notes: the AI_* model, or these to give Calendar its own.
+      CALENDAR_AI_PROVIDER: ${CALENDAR_AI_PROVIDER:-}
+      CALENDAR_AI_BASE_URL: ${CALENDAR_AI_BASE_URL:-}
+      CALENDAR_AI_API_KEY: ${CALENDAR_AI_API_KEY:-}
+      CALENDAR_AI_MODEL: ${CALENDAR_AI_MODEL:-}
 
   # Microsoft Bookings equivalent: public booking pages, services, staff availability from
   # Calendar, Meet links, and confirmations and reminders sent from each page's suite mailbox.
@@ -270,6 +277,9 @@ services:
       # The Booking block embeds pages from Bookings.
       SITES_BOOKING_URL: ${SITES_BOOKING_URL:-https://bookings.${SUITE_DOMAIN}}
       SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
+      # Each site's document library is a Drive library whose people Sites keeps (DRIVE_SVC_TOKEN on both).
+      SITES_DRIVE_URL: http://drive:3180
+      DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
 
   # ---- add-ons ----
   portal:
@@ -286,6 +296,179 @@ services:
       DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
       DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
+  # E-signatures (DocuSign equivalent): templates, multi-party signing, audit trail. People sign in
+  # with their suite account; signers outside the organization sign from emailed links without one.
+  sign:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-sign:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deploy/sign.Dockerfile
+    environment:
+      <<: *app-env
+      # The database is created on first start if postgres-init.sql didn't make it.
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sign
+      SIGN_PUBLIC_URL: https://sign.${SUITE_DOMAIN}
+      SIGN_ADMIN_EMAILS: ${SIGN_ADMIN_EMAILS:-${SEED_ADMIN_EMAIL:-}}
+      # Signs the short-lived links a signer's PDF viewer loads the document through.
+      SIGN_LINK_SECRET: ${SIGN_LINK_SECRET:-${PROXY_SHARED_SECRET}}
+      # Documents on the volume below; STORAGE_MODE=s3 with AWS_* (or any S3-compatible store) instead.
+      STORAGE_MODE: ${SIGN_STORAGE_MODE:-local}
+      ENABLE_S3_BACKUP: ${SIGN_S3_BACKUP:-false}
+      LOCAL_STORAGE_PATH: /data/files
+      AWS_REGION: ${SIGN_S3_REGION:-}
+      AWS_ENDPOINT_URL: ${SIGN_S3_ENDPOINT:-}
+      AWS_BUCKET_NAME: ${SIGN_S3_BUCKET:-}
+      AWS_FOLDER_PREFIX: ${SIGN_S3_PREFIX:-}
+      AWS_ACCESS_KEY_ID: ${SIGN_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${SIGN_S3_SECRET_ACCESS_KEY:-}
+      # Signing requests go out from the suite mailbox sign@MAIL_DOMAIN through Stalwart, as
+      # Bookings does. SIGN_SMTP_* sends through one outside mailbox instead.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+      SIGN_MAIL_FROM: ${SIGN_MAIL_FROM:-}
+      SIGN_SMTP_HOST: ${SIGN_SMTP_HOST:-}
+      SIGN_SMTP_PORT: ${SIGN_SMTP_PORT:-}
+      SIGN_SMTP_USER: ${SIGN_SMTP_USER:-}
+      SIGN_SMTP_PASSWORD: ${SIGN_SMTP_PASSWORD:-}
+      SIGN_SMTP_FROM: ${SIGN_SMTP_FROM:-}
+      SIGN_DEV_MAIL_DIR: /data/files/.unsent-mail
+      # Its own AI model for field detection, if it should differ from the suite's (needs one that reads images).
+      SIGN_AI_PROVIDER: ${SIGN_AI_PROVIDER:-}
+      SIGN_AI_BASE_URL: ${SIGN_AI_BASE_URL:-}
+      SIGN_AI_API_KEY: ${SIGN_AI_API_KEY:-}
+      SIGN_AI_MODEL: ${SIGN_AI_MODEL:-}
+    volumes:
+      - sign-files:/data/files
+
+  # Email marketing (Dynamics Marketing / Mailchimp equivalent): audiences from CRM, Contacts,
+  # spreadsheets and a signup form; campaigns, automations, open and click tracking, one-click
+  # unsubscribe and bounce handling. Sends as its From mailbox through Stalwart, the way
+  # Bookings does; CAMPAIGNS_SMTP_* sends through an outside relay instead.
+  campaigns:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-campaigns:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: campaigns, APP_DIR: addons/campaigns } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      campaigns-db: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/campaigns
+      # Imports and keeps lists in sync from CRM contacts and leads and Contacts groups, as the person.
+      CRM_INTERNAL_URL: http://crm:3095
+      CONTACTS_INTERNAL_URL: http://contacts:3190
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-}
+      MAIL_SMTP_HOST: stalwart
+      MAIL_SMTP_PORT: "465"
+      # Bounce and spam reports come back to the From mailbox; Campaigns reads them over IMAP.
+      MAIL_IMAP_HOST: stalwart
+      MAIL_IMAP_PORT: "993"
+      MAIL_SUITE_TLS_INSECURE: ${MAIL_SUITE_TLS_INSECURE:-true}
+      MAIL_MASTER_USER: webmail@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_MASTER_PASSWORD: ${MAIL_MASTER_PASSWORD:-}
+      MAIL_ADMIN_URL: http://stalwart:8080
+      MAIL_ADMIN_USER: postmaster@${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      MAIL_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD:-}
+      CAMPAIGNS_FROM_EMAIL: ${CAMPAIGNS_FROM_EMAIL:-}
+      CAMPAIGNS_FROM_NAME: ${CAMPAIGNS_FROM_NAME:-}
+      CAMPAIGNS_ORG_NAME: ${CAMPAIGNS_ORG_NAME:-}
+      CAMPAIGNS_POSTAL_ADDRESS: ${CAMPAIGNS_POSTAL_ADDRESS:-}
+      CAMPAIGNS_PER_MINUTE: ${CAMPAIGNS_PER_MINUTE:-}
+      CAMPAIGNS_SMTP_HOST: ${CAMPAIGNS_SMTP_HOST:-}
+      CAMPAIGNS_SMTP_PORT: ${CAMPAIGNS_SMTP_PORT:-}
+      CAMPAIGNS_SMTP_USER: ${CAMPAIGNS_SMTP_USER:-}
+      CAMPAIGNS_SMTP_PASSWORD: ${CAMPAIGNS_SMTP_PASSWORD:-}
+      CAMPAIGNS_BOUNCE_IMAP_HOST: ${CAMPAIGNS_BOUNCE_IMAP_HOST:-}
+      CAMPAIGNS_BOUNCE_IMAP_PORT: ${CAMPAIGNS_BOUNCE_IMAP_PORT:-}
+      CAMPAIGNS_BOUNCE_IMAP_USER: ${CAMPAIGNS_BOUNCE_IMAP_USER:-}
+      CAMPAIGNS_BOUNCE_IMAP_PASSWORD: ${CAMPAIGNS_BOUNCE_IMAP_PASSWORD:-}
+
+  # Makes the campaigns database on installs that started before Campaigns joined. Runs once per `up`.
+  campaigns-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'campaigns'\" | grep -q 1 || psql -c 'CREATE DATABASE campaigns'"]
+
+  # Meet's and Phone's media server: LiveKit (Apache-2.0, headless; people only ever see Meet and
+  # Phone). Browsers reach its signalling through the gateway (wss://meet.SUITE_DOMAIN/rtc, see
+  # LIVEKIT_UPSTREAM in the Caddyfile) and send media straight to it:
+  #   7881/tcp  media over TCP, for networks that block UDP (LIVEKIT_TCP_PUBLISH)
+  #   7882/udp  media over UDP, every call on this one port (LIVEKIT_UDP_PUBLISH)
+  # It tells browsers to send media to LIVEKIT_NODE_IP, or with that empty, to the public IP it
+  # finds over STUN. Keys: LIVEKIT_API_KEY / LIVEKIT_API_SECRET (quickstart generates them).
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    ports:
+      - "${LIVEKIT_TCP_PUBLISH:-7881}:7881/tcp"
+      - "${LIVEKIT_UDP_PUBLISH:-7882}:7882/udp"
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-}: ${LIVEKIT_API_SECRET:-}"
+      NODE_IP: ${LIVEKIT_NODE_IP:-}
+      # Tells Phone who joined and left each call. With the sip profile, LIVEKIT_REDIS_ADDRESS=sip-valkey:6379
+      # links it to the SIP service.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        log_level: info
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+        webhook:
+          api_key: "${LIVEKIT_API_KEY:-}"
+          urls: ["${LIVEKIT_WEBHOOK_URL:-http://phone:3440/api/livekit/webhook}"]
+        redis:
+          address: "${LIVEKIT_REDIS_ADDRESS:-}"
+
+  # Phone's link to real phone numbers (optional): LiveKit's SIP service (Apache-2.0, headless) and
+  # the Valkey (BSD) store it shares with the media server. Start them with the sip profile:
+  #   COMPOSE_PROFILES=sip and LIVEKIT_REDIS_ADDRESS=sip-valkey:6379 in .env, then up -d
+  #   5060/udp+tcp     SIP signalling   -> open to your SIP trunk provider or PBX (SIP_PUBLISH)
+  #   10000-10099/udp  call audio (RTP) -> open to the same (100 ports: about 100 calls at once)
+  sip-valkey:
+    image: valkey/valkey:8.1-alpine
+    profiles: [sip]
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1"]
+    volumes:
+      - sip-valkey-data:/data
+
+  sip:
+    image: livekit/sip:v1.19
+    profiles: [sip]
+    restart: unless-stopped
+    depends_on: [sip-valkey, livekit]
+    ports:
+      - "${SIP_PUBLISH:-5060}:5060/udp"
+      - "${SIP_PUBLISH:-5060}:5060/tcp"
+      - "10000-10099:10000-10099/udp"
+    environment:
+      SIP_CONFIG_BODY: |
+        api_key: "${LIVEKIT_API_KEY:-}"
+        api_secret: "${LIVEKIT_API_SECRET:-}"
+        ws_url: ws://livekit:7880
+        redis:
+          address: sip-valkey:6379
+        sip_port: 5060
+        rtp_port: 10000-10099
+        use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP:-true}
+        nat_1_to_1_ip: "${LIVEKIT_NODE_IP:-}"
+        log_level: info
+
   # Word, Excel and PowerPoint equivalents, plus their real-time co-editing server.
   meet:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-meet:${SYNERGY_IMAGE_TAG:-latest}
@@ -299,10 +482,10 @@ services:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/meet
       NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
-      # The LiveKit media server itself runs from apps/meet/deploy; these must match its keys.
+      # The media server (the livekit service above, or your own: LIVEKIT_UPSTREAM) and its keys.
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
-      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_URL: http://${LIVEKIT_UPSTREAM:-livekit:7880}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
       # Hosts call phone numbers into meetings through Phone.
@@ -310,7 +493,7 @@ services:
 
   # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
   # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through
-  # LiveKit's SIP service and the SIP trunks set up in Phone admin (see apps/phone/deploy).
+  # LiveKit's SIP service (the sip profile above) and the SIP trunks set up in Phone admin.
   phone:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-phone:${SYNERGY_IMAGE_TAG:-latest}
     <<: *next
@@ -321,7 +504,7 @@ services:
       NEXT_PUBLIC_LIVEKIT_URL: wss://meet.${SUITE_DOMAIN}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
-      LIVEKIT_API_URL: https://meet.${SUITE_DOMAIN}
+      LIVEKIT_API_URL: http://${LIVEKIT_UPSTREAM:-livekit:7880}
       TURN_HOST: ${TURN_HOST:-}
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
       PHONE_ADMIN_EMAILS: ${PHONE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
@@ -558,6 +741,8 @@ services:
       DRIVE_MAX_FILE_MB: ${DRIVE_MAX_FILE_MB:-}
       DRIVE_TRASH_DAYS: ${DRIVE_TRASH_DAYS:-}
       DRIVE_VERSIONS: ${DRIVE_VERSIONS:-}
+      # Sites makes and staffs its sites' document libraries through /api/svc/managed-libraries.
+      DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
     volumes:
       - drive-files:/data/drive
 
@@ -610,6 +795,7 @@ services:
       DEVICES_MDM_WEBHOOK_KEY: ${DEVICES_MDM_WEBHOOK_KEY:-}
       DEVICES_SCEP_CHALLENGE: ${DEVICES_SCEP_CHALLENGE:-}
       DEVICES_ORG_NAME: ${DEVICES_ORG_NAME:-}
+      DEVICES_ANDROID_SERVICE_ACCOUNT: ${DEVICES_ANDROID_SERVICE_ACCOUNT:-}
 
   # Apple device management for Devices: NanoMDM speaks the MDM protocol to iPhones, iPads and
   # Macs, and the SCEP server issues their identity certificates. Both are MIT (MicroMDM project).
@@ -660,6 +846,22 @@ services:
       ENGAGE_AI_API_KEY: ${ENGAGE_AI_API_KEY:-}
       ENGAGE_AI_MODEL: ${ENGAGE_AI_MODEL:-}
 
+  # Microsoft 365 Groups and Teams equivalent: teams that bring their people a Chat workspace with
+  # channels, a Drive library, a group calendar and a shared mailbox; distribution lists; shared
+  # mailboxes; security groups other apps grant access to. Groups pushes membership to Chat, Drive,
+  # Calendar (CAL_SVC_TOKEN) and Mail, and answers the other apps' "who is in what" (@synergy/groups).
+  groups:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-groups:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: groups } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/groups
+      GROUPS_MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
+      GROUPS_ADMIN_EMAILS: ${GROUPS_ADMIN_EMAILS:-}
+      GROUPS_CREATE: ${GROUPS_CREATE:-}
+      CAL_SVC_TOKEN: ${CAL_SVC_TOKEN:-}
+
   # Microsoft Project and Dynamics 365 Project Operations equivalent: plans with a Gantt chart,
   # teams and rates, weekly timesheets, expenses with receipts, approvals, and billing that
   # lands in Books as draft invoices (needs BOOKS_SVC_TOKEN on both). Imports Planner boards.
@@ -677,6 +879,28 @@ services:
       PROJECTS_AI_BASE_URL: ${PROJECTS_AI_BASE_URL:-}
       PROJECTS_AI_API_KEY: ${PROJECTS_AI_API_KEY:-}
       PROJECTS_AI_MODEL: ${PROJECTS_AI_MODEL:-}
+
+  # Dynamics 365 Field Service equivalent: work orders for jobs at customer sites, a schedule
+  # board for dispatchers, a phone view for technicians with sign-off, and customers' equipment.
+  # Each link is on when its token is set: parts come off Commerce stock (COMMERCE_SVC_TOKEN),
+  # finished jobs bill into Books as draft invoices (BOOKS_SVC_TOKEN), Desk cases become work
+  # orders and hear back (DESK_API_TOKEN), and equipment imports from Ops (OPS_API_TOKEN).
+  field:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-field:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: field } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/field
+      COMMERCE_SVC_TOKEN: ${COMMERCE_SVC_TOKEN:-}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      DESK_API_TOKEN: ${DESK_API_TOKEN:-}
+      OPS_API_TOKEN: ${OPS_API_TOKEN:-}
+      FIELD_PARTS_ACCOUNT: ${FIELD_PARTS_ACCOUNT:-}
+      FIELD_AI_PROVIDER: ${FIELD_AI_PROVIDER:-}
+      FIELD_AI_BASE_URL: ${FIELD_AI_BASE_URL:-}
+      FIELD_AI_API_KEY: ${FIELD_AI_API_KEY:-}
+      FIELD_AI_MODEL: ${FIELD_AI_MODEL:-}
 
   # Contract lifecycle (Dynamics 365 and SharePoint Syntex contract management equivalent): templates and
   # a clause library, drafting with versions and redlines, ordered approvals, signatures through Sign,
@@ -757,7 +981,9 @@ services:
 
   # Microsoft Search and Copilot equivalent: one search box across the content apps for the
   # signed-in person (each app answers only with what that person can open), and an assistant
-  # that answers from those results. It uses the suite's AI_* model (SEARCH_AI_* to give it its own).
+  # that answers from those results, and the Copilot panel in every app's header (answers, summaries,
+  # and actions in To Do, Calendar, Chat, Planner and Mail that run only after the person confirms).
+  # It uses the suite's AI_* model (SEARCH_AI_* to give it its own).
   search:
     image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-search:${SYNERGY_IMAGE_TAG:-latest}
     <<: *next
@@ -996,6 +1222,11 @@ services:
     environment:
       <<: *app-env
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/mail
+      # Draft with Copilot in compose: the AI_* model, or these to give Mail its own.
+      MAIL_AI_PROVIDER: ${MAIL_AI_PROVIDER:-}
+      MAIL_AI_BASE_URL: ${MAIL_AI_BASE_URL:-}
+      MAIL_AI_API_KEY: ${MAIL_AI_API_KEY:-}
+      MAIL_AI_MODEL: ${MAIL_AI_MODEL:-}
       # Demo mode only lets mail go to this domain.
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
       # Encrypts the passwords of outside accounts users connect. openssl rand -base64 32
@@ -1081,12 +1312,14 @@ volumes:
   stream-files: {}
   cad-files: {}
   drive-files: {}
+  sign-files: {}
   admin-exports: {}
   caddy-data: {}
   flow-cache: {}
   flow-pgdata: {}
   stalwart-data: {}
   stalwart-plan: {}
+  sip-valkey-data: {}
 
 networks:
   default: {}

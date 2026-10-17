@@ -5,6 +5,8 @@ const { baseApp, requireUser, requireBearer, wrap, errorHandler, serveSpa } = re
 const { portFor } = require('@synergy/config');
 const { createCompliance } = require('./compliance');
 const { createSearch } = require('./search');
+const { calendarAiConfig, draftHandler } = require('./draft');
+const groupCalendars = require('./groups');
 const { SearchInputError } = require('@synergy/search');
 const { SCHEMA: SERIES_SCHEMA, createEvents, inRange, busyBlocks: busyFor } = require('./events');
 const { createCalDav } = require('./dav');
@@ -16,13 +18,14 @@ const SVC_TOKEN = process.env.CAL_SVC_TOKEN || '';
 const db = createDb({ devUrl: 'postgres://dev:dev@127.0.0.1:5475/cal' });
 const q = db.q;
 const compliance = createCompliance(q);
-const store = createEvents({ db, compliance });
+const groups = groupCalendars.createGroups(db);
+const store = createEvents({ db, compliance, groups });
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS events (
     id          BIGSERIAL PRIMARY KEY,
     owner_email TEXT NOT NULL,
-    calendar    TEXT NOT NULL DEFAULT 'personal' CHECK (calendar IN ('personal','company')),
+    calendar    TEXT NOT NULL DEFAULT 'personal' CHECK (calendar IN ('personal','company','group')),
     title       TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     location    TEXT NOT NULL DEFAULT '',
@@ -49,8 +52,10 @@ CREATE INDEX IF NOT EXISTS event_held_versions_event_idx ON event_held_versions 
 `;
 
 
-// events visible to a user: own, company calendar, or where they're an attendee
-const VISIBLE_ROWS = `(owner_email = $1 OR calendar = 'company' OR attendees ? $1)`;
+// events visible to a user: own, company calendar, where they're an attendee, or on a group
+// calendar they're a member of
+const VISIBLE_ROWS = `(owner_email = $1 OR calendar = 'company' OR attendees ? $1
+  OR ${groupCalendars.VISIBLE_GROUP})`;
 const VISIBLE = `${VISIBLE_ROWS} AND held_deleted_at IS NULL`;
 
 // Free/busy: every occurrence of the person's own events and the ones they're invited to,
@@ -73,7 +78,18 @@ function cleanAttendees(list) {
 }
 
 const router = express.Router();
-router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail })));
+router.get('/me', wrap(async (req, res) => res.json({ email: req.userEmail, ai: calendarAiConfig() !== null })));
+
+// Draft with Copilot: notes for the event editor. Returns text only; nothing is saved here.
+router.post('/draft', wrap(draftHandler));
+
+router.get('/calendars', wrap(async (req, res) => {
+  res.json([
+    { id: 'personal', name: 'Personal' },
+    { id: 'company', name: 'Company' },
+    ...(await groups.calendarsFor(req.userEmail)),
+  ]);
+}));
 
 // Every occurrence in the range: single events, each occurrence of a repeating series (with
 // `occurrence`, its original start, and `series_id`), and occurrences changed on their own.
@@ -119,7 +135,7 @@ router.get('/freebusy', wrap(async (req, res) => {
 }));
 
 async function main() {
-  await db.migrate(SCHEMA + SERIES_SCHEMA, 'calendar');
+  await db.migrate(SCHEMA + groupCalendars.SCHEMA + SERIES_SCHEMA, 'calendar');
   const app = express();
   baseApp(app, express, '256kb');
 
@@ -156,6 +172,8 @@ async function main() {
     const ev = await store.create(owner, { ...b, rrule: null }, { source: String(b.source || 'api').slice(0, 20) });
     res.json({ id: ev.id });
   }));
+  // Group calendars, pushed by the Groups app.
+  app.use('/api/svc', svcAuth, groups.svc);
   // A service may move or remove only the events it added, on the organizer's calendar it names
   // (Bookings rescheduling or cancelling an appointment). Held organizers keep what is replaced.
   const svcEvent = (b) => ({

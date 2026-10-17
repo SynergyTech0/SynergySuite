@@ -4,6 +4,7 @@ import { getFileBuffer } from "@/lib/storage";
 import { analyzeDocument } from "@/lib/ai/analyze";
 import { AiUnavailableError, isAiConfigured } from "@/lib/ai/client";
 import { auditHiddenText } from "@/lib/ai/hidden-text-audit";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 /**
  * GET: all fields for a document.
@@ -14,6 +15,8 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params;
+    const __owner = await documentForOwner(id);
+    if (isDenied(__owner)) return __owner.denied;
     const fields = await prisma.documentField.findMany({ where: { documentId: id } });
     return NextResponse.json({ fields });
   } catch (error) {
@@ -39,6 +42,8 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
+  const __owner = await documentForOwner(id);
+  if (isDenied(__owner)) return __owner.denied;
 
   try {
     const document = await prisma.document.findUnique({
@@ -52,8 +57,8 @@ export async function POST(
     if (!isAiConfigured()) {
       return NextResponse.json(
         {
-          error: "Document intelligence is not configured (AI_API_KEY or AI_MODEL missing).",
-          hint: "Set AI_API_KEY and AI_MODEL to enable AI field detection. Fields can still be placed manually.",
+          error: "Document intelligence is not configured (no AI model: set SIGN_AI_MODEL or the suite's AI_MODEL).",
+          hint: "An administrator sets AI_PROVIDER / AI_MODEL (or SIGN_AI_*) to turn on AI field detection. Fields can still be placed manually.",
         },
         { status: 503 },
       );

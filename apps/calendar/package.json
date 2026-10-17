@@ -9,6 +9,7 @@
     "test:e2e": "node e2e/month.e2e.mjs"
   },
   "dependencies": {
+    "@synergy/ai": "*",
     "@synergy/compliance": "*",
     "@synergy/config": "*",
     "@synergy/dav": "*",

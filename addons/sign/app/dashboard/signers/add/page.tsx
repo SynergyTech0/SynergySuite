@@ -14,7 +14,7 @@ import Link from "next/link";
 import { Plus, X, UserPlus, UploadIcon, ChevronLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/session-client";
 import { useToast } from "@/hooks/use-toast";
 
 // -----------------------------
@@ -45,7 +45,7 @@ export default function AddSignerPage() {
     
     useEffect(() => {
         if (status === "unauthenticated") {
-            router.push("/auth/login");
+            window.location.href = "/signin";
         } else if (status === "authenticated") {
             fetchDocuments();
         }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, addMonths, monthGrid, startOfDay, startOfMonth, startOfWeek, eventKey } from './dates.js';
 import { AgendaView, MiniMonth, MonthView, TimeGrid } from './views.jsx';
-import { EventEditor, ScopeDialog } from './editor.jsx';
+import { EventEditor, ScopeDialog, calendarId } from './editor.jsx';
 
 const DEV_AS = new URLSearchParams(location.search).get('as');
 async function req(method, url, body) {
@@ -15,6 +15,8 @@ async function req(method, url, body) {
 }
 const api = {
   me: () => req('GET', '/api/me'),
+  calendars: () => req('GET', '/api/calendars'),
+  draft: d => req('POST', '/api/draft', d),
   events: (from, to) => req('GET', `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`),
   create: e => req('POST', '/api/events', e),
   update: (id, e) => req('PATCH', `/api/events/${id}`, e),
@@ -59,6 +61,7 @@ export default function App() {
   const [cursor, setCursor] = useState(() => startOfDay(link.at || new Date()));
   const [miniMonth, setMiniMonth] = useState(() => startOfMonth(link.at || new Date()));
   const [events, setEvents] = useState([]);
+  const [calendars, setCalendars] = useState([]); // [{id, name, source?, role?}]
   const [editor, setEditor] = useState(null); // { event?, startAt?, endAt?, allDay? }
   const [scope, setScope] = useState(null); // { action, allowThis, run(scope) }
   const [error, setError] = useState('');
@@ -71,6 +74,11 @@ export default function App() {
   }, [range, flash]);
 
   useEffect(() => { api.me().then(setMe).catch(flash); }, []); // eslint-disable-line
+  useEffect(() => { api.calendars().then(setCalendars).catch(flash); }, []); // eslint-disable-line
+  const calendarName = e => calendars.find(c => c.id === calendarId(e))?.name || (e.calendar === 'group' ? 'Group calendar' : e.calendar);
+  // The organizer, or an owner of the group calendar the event is on.
+  const canEdit = e => e.owner_email === me?.email
+    || (e.calendar === 'group' && calendars.some(c => c.id === calendarId(e) && c.role === 'owner'));
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { setMiniMonth(startOfMonth(cursor)); }, [cursor]);
 
@@ -172,6 +180,7 @@ export default function App() {
             <span><i className="dot personal" /> Personal</span>
             <span><i className="dot company" /> Company</span>
             <span><i className="dot booking" /> Bookings</span>
+            {calendars.some(c => c.source) && <span><i className="dot group" /> Groups</span>}
           </div>
         </aside>
         <main className="main">
@@ -181,7 +190,7 @@ export default function App() {
               onDay={d => { setCursor(startOfDay(d)); setView('day'); }} />
           )}
           {(view === 'week' || view === 'day') && (
-            <TimeGrid days={days} events={events} me={me} onOpen={open} onNew={s => newEvent(s)} />
+            <TimeGrid days={days} events={events} me={me} onOpen={open} onNew={s => newEvent(s)} calendarName={calendarName} />
           )}
           {view === 'agenda' && <AgendaView from={range.from} days={AGENDA_DAYS} events={events} me={me} onOpen={open} />}
         </main>
@@ -191,6 +200,10 @@ export default function App() {
         <EventEditor
           key={editor.event ? eventKey(editor.event) : 'new'}
           me={me}
+          calendars={calendars}
+          calendarName={calendarName}
+          canEdit={!editor.event || canEdit(editor.event)}
+          draft={api.draft}
           event={editor.event}
           defaults={editor}
           onClose={() => setEditor(null)}

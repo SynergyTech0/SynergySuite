@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@synergy/ai": "*",
     "@synergy/compliance": "*",
     "@synergy/db": "*",
     "@synergy/identity": "*",

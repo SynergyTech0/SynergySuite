@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { NotificationType } from "@prisma/client";
 import crypto from "crypto";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
-import { verify } from "jsonwebtoken";
 import { createNotification } from "@/lib/notifications";
-import { sendEmail } from "@/lib/email";
+import { mailMode, sendEmail } from "@/lib/email";
 import { renderSignatureRequest } from "@/lib/email-templates";
+import { publicBase } from "@/lib/urls";
 
 export async function POST(req: Request) {
   try {
@@ -24,18 +24,6 @@ export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
     userId = (session?.user as any)?.id || null;
 
-    if (!userId) {
-      const header = req.headers.get("authorization");
-      if (header?.startsWith("Bearer ")) {
-        try {
-          const decoded: any = verify(
-            header.split(" ")[1],
-            process.env.NEXTAUTH_SECRET!
-          );
-          userId = decoded.userId || decoded.id || null;
-        } catch {}
-      }
-    }
 
     if (!userId) {
       return NextResponse.json(
@@ -90,22 +78,9 @@ export async function POST(req: Request) {
       data: { signingOrder: signingOrder as "PARALLEL" | "SEQUENTIAL" },
     });
 
-    // Check if we have ANY email configuration (OAuth OR simple SMTP)
-    const hasOAuth = process.env.GOOGLE_CLIENT_ID && 
-                     process.env.GOOGLE_CLIENT_SECRET && 
-                     process.env.GOOGLE_REFRESH_TOKEN;
-    const hasSimpleSMTP = process.env.EMAIL_USER && process.env.EMAIL_PASS;
-
-    // No hard failure when mail isn't configured: sendEmail() falls back to a dev sink that writes
-    // the message to ./dev-mail/*.eml. Blocking here made the core flow (invite a signer) impossible
-    // to run locally at all. In production, set credentials — the warning below is the signal.
-    if (!hasOAuth && !hasSimpleSMTP) {
-      console.warn(
-        "[invite] No email credentials configured — invitations will be written to ./dev-mail instead of sent.",
-      );
-    }
-    
-    console.log(`Email config: ${hasOAuth ? 'OAuth2' : 'Simple SMTP'} mode enabled`);
+    // No hard failure when mail isn't configured: sendEmail() keeps the message in ./dev-mail (lib/email).
+    const mail = mailMode();
+    if (mail.kind === "sink") console.warn(`[invite] ${mail.reason}: invitations go to ./dev-mail instead of being sent.`);
 
     let signerCount = 0;
     const createdSigners: any[] = [];
@@ -184,7 +159,7 @@ export async function POST(req: Request) {
         const shouldSendEmail = signingOrder === "PARALLEL" || i === 0; // Send to all if parallel, only first if sequential
 
         if (shouldSendEmail) {
-          const signLink = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/sign/${token}`;
+          const signLink = `${publicBase()}/sign/${token}`;
           console.log(`Sending email to ${signer.email} → ${signLink}`);
 
           // Generate professional email using template

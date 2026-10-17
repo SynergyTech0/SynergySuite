@@ -1,6 +1,7 @@
 // Events and repeating series: what every reader of the calendar (the web app, free/busy for
 // Bookings, CalDAV) sees, and the edits that touch one occurrence, this and following, or all.
 const recur = require('./recur');
+const groupCalendars = require('./groups');
 const { isTimeZone } = require('@synergy/dav');
 
 // Repeating events, and the change counter phones sync by. Every insert or update stamps the
@@ -97,6 +98,16 @@ function cleanAttendees(list) {
 const text = (v, max) => String(v ?? '').slice(0, max);
 const zone = tz => (typeof tz === 'string' && isTimeZone(tz) ? tz : null);
 
+/** `calendar` and `group_source` from a body: personal, company, or a group calendar (`groupSource`). */
+function calendarOf(b, fallbackSource = null) {
+  if (b.calendar === 'group') {
+    const source = b.groupSource != null ? String(b.groupSource) : fallbackSource;
+    if (!groupCalendars.isSource(source)) throw bad('groupSource required for a group event');
+    return { calendar: 'group', group_source: source };
+  }
+  return { calendar: b.calendar === 'company' ? 'company' : 'personal', group_source: null };
+}
+
 /** A new event's fields from a request body, or a 400. */
 function cleanNew(b, owner) {
   const s = new Date(b.startAt), e = new Date(b.endAt);
@@ -105,7 +116,7 @@ function cleanNew(b, owner) {
   const tzid = allDay ? 'UTC' : zone(b.tzid) || 'UTC';
   const ev = {
     owner_email: owner,
-    calendar: b.calendar === 'company' ? 'company' : 'personal',
+    ...calendarOf(b),
     title: text(b.title, 300).trim() || '(untitled)',
     description: text(b.description, 2000),
     location: text(b.location, 300),
@@ -117,7 +128,7 @@ function cleanNew(b, owner) {
   return ev;
 }
 
-const COLS = ['owner_email', 'calendar', 'title', 'description', 'location', 'start_at', 'end_at', 'all_day', 'tzid',
+const COLS = ['owner_email', 'calendar', 'group_source', 'title', 'description', 'location', 'start_at', 'end_at', 'all_day', 'tzid',
   'attendees', 'rrule', 'exdates', 'series_end', 'series_id', 'recurrence_id', 'source', 'uid', 'dav_name', 'ical_extra'];
 const JSONB = new Set(['attendees', 'exdates']);
 
@@ -201,10 +212,10 @@ async function busyBlocks(q, email, from, to) {
 
 // ---- writing ----
 
-async function load(q, owner, rawId) {
+async function loadRow(q, rawId) {
   const id = Number(rawId);
   if (!Number.isSafeInteger(id)) throw bad('not found', 404);
-  const { rows } = await q('SELECT * FROM events WHERE id = $1 AND owner_email = $2 AND held_deleted_at IS NULL', [id, owner]);
+  const { rows } = await q('SELECT * FROM events WHERE id = $1 AND held_deleted_at IS NULL', [id]);
   if (!rows.length) throw bad('not found', 404);
   return rows[0];
 }
@@ -222,7 +233,10 @@ function changes(b) {
   if (b.title != null) c.title = text(b.title, 300).trim() || '(untitled)';
   if (b.description != null) c.description = text(b.description, 2000);
   if (b.location != null) c.location = text(b.location, 300);
-  if (b.calendar === 'company' || b.calendar === 'personal') c.calendar = b.calendar;
+  if (['personal', 'company', 'group'].includes(b.calendar)) {
+    c.calendar = b.calendar;
+    c.groupSource = b.groupSource;
+  }
   if (Array.isArray(b.attendees)) c.attendees = cleanAttendees(b.attendees);
   if (b.allDay != null) c.all_day = Boolean(b.allDay);
   if (b.tzid != null) {
@@ -239,8 +253,32 @@ const ms = d => new Date(d).getTime();
 const shiftIso = (list, delta, keep = () => true) =>
   (list || []).filter(keep).map(d => new Date(ms(d) + delta).toISOString());
 
-function createEvents({ db, compliance }) {
+function createEvents({ db, compliance, groups }) {
   const q = db.q;
+
+  /** The event if `user` may change it: its organizer, or an owner of the group calendar it is on. */
+  async function load(qq, user, id) {
+    const row = await loadRow(qq, id);
+    if (row.owner_email === user) return row;
+    if (row.calendar === 'group' && groups && (await groups.roleOf(user, row.group_source)) === 'owner') return row;
+    throw bad('not found', 404);
+  }
+
+  /** A move to another calendar: only the organizer, and onto a group calendar only as its member. */
+  async function checkMove(user, row, c) {
+    if (c.fields.calendar === undefined) return;
+    const next = calendarOf({ calendar: c.fields.calendar, groupSource: c.fields.groupSource }, row.group_source);
+    delete c.fields.groupSource;
+    if (next.calendar === row.calendar && next.group_source === row.group_source) {
+      delete c.fields.calendar;
+      return;
+    }
+    if (row.owner_email !== user) throw bad('only the organizer can move an event to another calendar', 403);
+    if (next.calendar === 'group' && !(groups && (await groups.roleOf(user, next.group_source)))) {
+      throw bad('not a member of that group calendar', 403);
+    }
+    Object.assign(c.fields, next);
+  }
 
   async function tx(fn) {
     const client = await db.pool.connect();
@@ -259,6 +297,9 @@ function createEvents({ db, compliance }) {
 
   async function create(owner, body, extra = {}) {
     const ev = { ...cleanNew(body || {}, owner), ...extra };
+    if (ev.calendar === 'group' && !(groups && (await groups.roleOf(owner, ev.group_source)))) {
+      throw bad('not a member of that group calendar', 403);
+    }
     return pub(await insert(q, ev));
   }
 
@@ -301,8 +342,12 @@ function createEvents({ db, compliance }) {
     if (delta) {
       await tq(`UPDATE events SET recurrence_id = recurrence_id + ($2::bigint * interval '1 millisecond') WHERE series_id = $1`, [master.id, delta]);
     }
-    // Overrides that kept the series' old title, place, notes, calendar or guests follow the change.
-    for (const k of ['title', 'description', 'location', 'calendar', 'attendees']) {
+    // Every occurrence stays on the series' calendar.
+    if (c.fields.calendar !== undefined) {
+      await tq('UPDATE events SET calendar = $2, group_source = $3 WHERE series_id = $1', [master.id, c.fields.calendar, c.fields.group_source]);
+    }
+    // Overrides that kept the series' old title, place, notes or guests follow the change.
+    for (const k of ['title', 'description', 'location', 'attendees']) {
       if (c.fields[k] === undefined) continue;
       const v = JSONB.has(k) ? JSON.stringify(c.fields[k]) : c.fields[k];
       const old = JSONB.has(k) ? JSON.stringify(master[k]) : master[k];
@@ -321,7 +366,7 @@ function createEvents({ db, compliance }) {
     const end = c.end ?? new Date(ms(start) + dur);
     if (!(start < end)) throw bad('startAt must be before endAt');
     return insert(tq, {
-      owner_email: master.owner_email, calendar: master.calendar, title: master.title, description: master.description,
+      owner_email: master.owner_email, calendar: master.calendar, group_source: master.group_source, title: master.title, description: master.description,
       location: master.location, all_day: master.all_day, tzid: master.tzid, attendees: master.attendees, source: master.source,
       uid: master.uid, ...c.fields, start_at: start, end_at: end, series_id: master.id, recurrence_id: at,
     });
@@ -344,7 +389,7 @@ function createEvents({ db, compliance }) {
     // The edited occurrence's own override is replaced by the new series' first occurrence.
     await tq('DELETE FROM events WHERE series_id = $1 AND recurrence_id = $2', [master.id, at]);
     const next = await insert(tq, {
-      owner_email: master.owner_email, calendar: master.calendar, title: master.title, description: master.description,
+      owner_email: master.owner_email, calendar: master.calendar, group_source: master.group_source, title: master.title, description: master.description,
       location: master.location, attendees: master.attendees, source: master.source,
       ...c.fields, all_day: allDay, tzid, start_at: start, end_at: end, rrule,
       exdates: rrule ? shiftIso(master.exdates, delta, d => ms(d) > ms(at)) : [],
@@ -370,18 +415,22 @@ function createEvents({ db, compliance }) {
     const c = changes(b);
     return tx(async tq => {
       let row = await load(tq, owner, id);
+      await checkMove(owner, row, c);
+      const org = row.owner_email; // a held organizer keeps what an edit replaces
       let at = b.occurrence;
       if (row.series_id) {
         if (scope === 'this') {
-          await compliance.keepVersion(owner, row.id);
+          if (c.fields.calendar !== undefined) throw bad('Move the whole series to another calendar, not one occurrence');
+          await compliance.keepVersion(org, row.id);
           return pub(await editSingle(tq, row, { ...c, rrule: undefined }));
         }
         at = row.recurrence_id;
-        row = await load(tq, owner, Number(row.series_id));
+        row = await loadRow(tq, Number(row.series_id));
       }
-      await compliance.keepVersion(owner, row.id);
+      await compliance.keepVersion(org, row.id);
       if (!row.rrule) return pub(await editSingle(tq, row, c));
       const occ = occurrenceOf(row, at);
+      if (scope === 'this' && c.fields.calendar !== undefined) throw bad('Move the whole series to another calendar, not one occurrence');
       if (scope === 'this') return pub(await editOne(tq, row, occ, c));
       if (scope === 'following' && ms(occ) > ms(row.start_at)) return pub(await editFollowing(tq, row, occ, c));
       return pub(await editAll(tq, row, occ, c));
@@ -389,8 +438,10 @@ function createEvents({ db, compliance }) {
   }
 
   /** DELETE with the same scopes. */
-  async function remove(owner, id, { scope = 'all', occurrence } = {}) {
-    let row = await load(q, owner, id);
+  async function remove(user, id, { scope = 'all', occurrence } = {}) {
+    let row = await load(q, user, id);
+    // Deleted as the organizer's event, so the organizer's hold (if any) keeps it.
+    const owner = row.owner_email;
     let at = occurrence;
     if (row.series_id) {
       if (scope === 'this') {
@@ -399,7 +450,7 @@ function createEvents({ db, compliance }) {
         return;
       }
       at = row.recurrence_id;
-      row = await load(q, owner, Number(row.series_id));
+      row = await loadRow(q, Number(row.series_id));
     }
     if (!row.rrule || scope === 'all') {
       await compliance.deleteEvents(owner, [row.id]);
@@ -424,7 +475,7 @@ function createEvents({ db, compliance }) {
   }
 
   async function addExdate(owner, masterId, at) {
-    const master = await load(q, owner, masterId);
+    const master = await loadRow(q, masterId);
     await compliance.keepVersion(owner, master.id);
     const list = [...new Set([...(master.exdates || []), new Date(at).toISOString()])].sort();
     await update(q, master.id, { exdates: list });
