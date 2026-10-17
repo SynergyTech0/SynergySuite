@@ -406,6 +406,47 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'campaigns'\" | grep -q 1 || psql -c 'CREATE DATABASE campaigns'"]
 
+  # Law add-on (law practice management): clients and matters, conflict checks on every new matter,
+  # court deadlines, time and bills, client trust accounts with three-way reconciliation, and case
+  # documents read by the suite's AI. Bills go to Books as draft invoices and trust entries post to
+  # Books as journal entries when BOOKS_SVC_TOKEN is set (the trust accounts must exist in Books).
+  law:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-law:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: law, APP_DIR: addons/law } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      law-db: { condition: service_completed_successfully }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/law
+      LAW_ADMIN_EMAILS: ${LAW_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      LAW_TRUST_EMAILS: ${LAW_TRUST_EMAILS:-}
+      LAW_COURT_HOLIDAYS: ${LAW_COURT_HOLIDAYS:-}
+      BOOKS_INTERNAL_URL: ${BOOKS_INTERNAL_URL:-http://books:3055}
+      BOOKS_SVC_TOKEN: ${BOOKS_SVC_TOKEN:-}
+      LAW_BOOKS_TOKEN: ${LAW_BOOKS_TOKEN:-}
+      LAW_BOOKS_TRUST_BANK: ${LAW_BOOKS_TRUST_BANK:-}
+      LAW_BOOKS_TRUST_LIABILITY: ${LAW_BOOKS_TRUST_LIABILITY:-}
+      LAW_BOOKS_OPERATING: ${LAW_BOOKS_OPERATING:-}
+      LAW_BOOKS_RECEIVABLE: ${LAW_BOOKS_RECEIVABLE:-}
+      LAW_AI_PROVIDER: ${LAW_AI_PROVIDER:-}
+      LAW_AI_BASE_URL: ${LAW_AI_BASE_URL:-}
+      LAW_AI_API_KEY: ${LAW_AI_API_KEY:-}
+      LAW_AI_MODEL: ${LAW_AI_MODEL:-}
+
+  # Makes the law database on installs that started before Law joined. Runs once per `up`.
+  law-db:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'law'\" | grep -q 1 || psql -c 'CREATE DATABASE law'"]
+
   # Meet's and Phone's media server: LiveKit (Apache-2.0, headless; people only ever see Meet and
   # Phone). Browsers reach its signalling through the gateway (wss://meet.SUITE_DOMAIN/rtc, see
   # LIVEKIT_UPSTREAM in the Caddyfile) and send media straight to it:

@@ -41,5 +41,6 @@
   { "id": "commerce",  "name": "Commerce",  "m365": "Dynamics 365 Commerce, Supply Chain", "port": 3730, "icon": "cart", "dir": "apps/commerce", "core": true },
   { "id": "sign",      "name": "Sign",      "m365": "(add-on)",             "port": 3300, "icon": "pen",      "dir": "addons/sign",    "core": false },
   { "id": "campaigns", "name": "Campaigns", "m365": "Dynamics 365 Marketing (Customer Insights - Journeys)", "port": 3400, "icon": "send",     "dir": "addons/campaigns", "core": false },
-  { "id": "portal",    "name": "Portal",    "m365": "(add-on)",             "port": 3155, "icon": "door",     "dir": "addons/portal",  "core": false }
+  { "id": "portal",    "name": "Portal",    "m365": "(add-on)",             "port": 3155, "icon": "door",     "dir": "addons/portal",  "core": false },
+  { "id": "law",       "name": "Law",       "m365": "(add-on) law practice management", "port": 3870, "icon": "scales", "dir": "addons/law", "core": false }
 ]
