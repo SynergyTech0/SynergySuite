@@ -52,6 +52,19 @@ describe.skipIf(!url)("drive", async () => {
     expect(await read(now.sha)).toBe("first draft");
   });
 
+  it("keeps a migrated file's original date, but never one in the future", async () => {
+    const old = new Date("2021-05-04T03:02:01Z");
+    const m = await drive.upload(alice, {}, "migrated.txt", bytes("from the old drive"), undefined, { modifiedAt: old });
+    expect(m.modifiedAt).toBe(old.toISOString());
+    expect((await drive.versions(alice, m.id))[0].createdAt).toBe(old.toISOString());
+    const later = await drive.upload(alice, {}, "migrated.txt", bytes("changed at the source"), undefined, { modifiedAt: new Date("2022-01-01T00:00:00Z") });
+    expect(later.modifiedAt).toBe("2022-01-01T00:00:00.000Z");
+    const future = await drive.upload(alice, {}, "future.txt", bytes("x"), undefined, { modifiedAt: new Date(Date.now() + 86400_000 * 30) });
+    expect(Date.parse(future.modifiedAt)).toBeLessThanOrEqual(Date.now());
+    await drive.moveToTrash(alice, [m.id, future.id]);
+    await drive.deleteForever(alice, [m.id, future.id]);
+  });
+
   it("creates the folders of a folder upload", async () => {
     await drive.upload(alice, {}, "Docs/Sub/b.txt", bytes("quarterly budget numbers"));
     await drive.upload(alice, {}, "Docs/c.md", bytes("# Plan"));

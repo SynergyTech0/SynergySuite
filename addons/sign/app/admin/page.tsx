@@ -1,6 +1,6 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getServerSession } from 'next-auth';
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { Users, Building2, FileText, DollarSign } from 'lucide-react';

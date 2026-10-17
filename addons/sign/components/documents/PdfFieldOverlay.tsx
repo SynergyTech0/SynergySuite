@@ -70,6 +70,8 @@ interface PdfFieldOverlayProps {
   onFieldsUpdate?: () => void;
   fields?: DocumentField[];
   isTemplate?: boolean; // If true, use template API endpoints
+  /** A signer's link token: fields are read and filled through the signer routes, without sign-in. */
+  signerToken?: string;
 }
 
 // Field type colors
@@ -100,6 +102,7 @@ export default function PdfFieldOverlay({
   onFieldsUpdate,
   fields: initialFields,
   isTemplate = false,
+  signerToken,
 }: PdfFieldOverlayProps) {
   // Defensive checks for required props
   if (!documentId) {
@@ -253,14 +256,16 @@ export default function PdfFieldOverlay({
 
     // Otherwise fetch from API
     try {
-      const baseUrl = isTemplate ? `/api/templates/${documentId}/fields` : `/api/documents/${documentId}/fields`;
+      const baseUrl = signerToken
+        ? `/api/signers/fields?token=${encodeURIComponent(signerToken)}`
+        : isTemplate ? `/api/templates/${documentId}/fields` : `/api/documents/${documentId}/fields`;
       const res = await fetch(baseUrl);
       const data = await res.json();
       setFields(data.fields || []);
     } catch (e) {
       console.error('Field load error:', e);
     }
-  }, [documentId, initialFields, isTemplate]);
+  }, [documentId, initialFields, isTemplate, signerToken]);
 
   useEffect(() => {
     loadFields();
@@ -535,11 +540,14 @@ export default function PdfFieldOverlay({
     }
 
     try {
-      const response = await fetch(`/api/documents/${documentId}/fields/${signingField.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value }),
-      });
+      const response = await fetch(
+        signerToken ? `/api/signers/fields/${signingField.id}` : `/api/documents/${documentId}/fields/${signingField.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(signerToken ? { token: signerToken, value } : { value }),
+        },
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

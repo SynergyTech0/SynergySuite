@@ -352,3 +352,4 @@ router.post('/search', wrap(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.messageRow = messageRow; // shared with the team service routes (teams.js)

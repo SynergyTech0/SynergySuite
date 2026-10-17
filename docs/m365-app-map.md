@@ -28,13 +28,14 @@
 | Power Apps | Low-code business apps | `apps/builder` (Synergy Builder, on Base data) | Have |
 | Power BI | Dashboards, reports | `apps/insights` (Synergy Insights, on Metabase) | Have |
 | Microsoft Search | One search across mail, files, chats, sites | `apps/search` (fans out to each app's `/api/search` as the signed-in person) + search box in the suite header | Have |
-| Copilot | AI assistant across apps | `apps/search` Ask tab: answers from the person's own search results with citations, on your own model; no in-app drafting or actions | Partial |
+| Copilot | AI assistant across apps | `apps/search`: the Ask tab, and a Copilot side panel in every app's header (Search's `/copilot` in a frame, told which app and item is open). It answers from the person's own content with citations, summarizes the open email, chat channel or Notes page, and proposes actions (To Do task, Calendar event with attendees, Mail draft opened in compose, Chat post to a channel or DM the person is in, Planner card) that run through each app's own API as the person only after they press Confirm; action kinds come from the person's own words, never from content. Draft with Copilot in Mail compose and Calendar event notes. On your own model. Not yet: proposals don't search across apps first, no Word/Excel/PowerPoint Copilot outside what Office has, Mail drafts aren't saved to the Drafts folder, no Teams meeting recap | Partial |
 | Dynamics 365 Sales | Accounts, leads, opportunity pipeline | `apps/crm` | Have |
 | Dynamics 365 Customer Service | Help desk tickets, knowledge base | `apps/desk` | Have |
 | Dynamics 365 Business Central | Accounting, quotes, invoices | `apps/books` | Have |
 | Dynamics 365 Supply Chain Management | Manufacturing (BOMs, routings, work orders, MRP), asset management and maintenance | `apps/ops` | Have |
 | Entra ID | Sign-in, SSO, MFA, directory | synergyauth | Have, strongest piece |
 | Admin center | Users, licences, settings | `apps/admin` + synergyauth admin console | Have |
+| Migration (FastTrack, Migration Manager, Exchange IMAP migration) | Move mailboxes, OneDrive and SharePoint into the suite | `apps/admin` "Move from Microsoft 365": Graph (read-only Entra app) into Mail, Drive, Calendar, Contacts and To Do, delta re-runs for cutover, IMAP-to-IMAP for other hosts; no Teams chats, OneNote or Planner yet | Partial |
 | Intune | Device inventory, compliance policies, enrollment | `apps/devices` (osquery agents); no lock, wipe, settings or app push yet | Partial |
 | Defender for Endpoint | Threat detection, vulnerabilities, hunting | `apps/devices` detections, indicators, OSV vulnerabilities, live queries; detects and alerts, doesn't block | Partial |
 | Purview / eDiscovery | Retention, legal hold, search | `apps/admin` Compliance, `@synergy/compliance` in each app | Have |
@@ -42,4 +43,4 @@
 
 ## Synergy apps that are not part of M365
 
-synergysign (DocuSign-style), synergymail (Mailchimp-style), synergyportal (customer portal), synergypeople (HR / PTO), synergy-ui (Android UI library). These can stay as optional add-ons rather than core suite apps.
+synergysign (DocuSign-style; now `addons/sign`, on the suite sign-in and in the Docker deploy, with outside signers signing from emailed links), synergymail (Mailchimp-style), synergyportal (customer portal), synergypeople (HR / PTO), synergy-ui (Android UI library). These can stay as optional add-ons rather than core suite apps.

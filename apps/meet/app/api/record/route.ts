@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EgressClient, EncodedFileOutput, EncodedFileType } from "livekit-server-sdk";
 import { getServerSession } from "@/lib/session";
+import { livekitApiUrl } from "@/lib/livekit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
  * GET returns whether the room is currently being recorded (so the button reflects real state, not
  * just local optimism).
  */
-const LIVEKIT_URL = process.env.LIVEKIT_API_URL || `https://meet.${process.env.SUITE_DOMAIN}`;
+const LIVEKIT_URL = livekitApiUrl();
 
 function client() {
   return new EgressClient(LIVEKIT_URL, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);

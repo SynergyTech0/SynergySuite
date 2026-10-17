@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { isDenied, templateFor } from "@/lib/access";
 
 // Note: Doesn't make a deep copy of files in storage, just DB entries which allows for different fields added ontop
 export async function POST(
@@ -7,6 +8,8 @@ export async function POST(
 	{ params }: { params: { id: string } }
 ) {
 	const { id } = params;
+	const access = await templateFor(id, { read: true });
+	if (isDenied(access)) return access.denied;
 
 	try {
 		// Fetch the original template
@@ -29,7 +32,8 @@ export async function POST(
 				fileSize: originalTemplate.fileSize,
 				cloudProvider: originalTemplate.cloudProvider,
 				isPublic: originalTemplate.isPublic,
-				creatorId: originalTemplate.creatorId,
+				// The copy belongs to whoever made it.
+				creatorId: access.session.user.id,
 			},
 		});
 

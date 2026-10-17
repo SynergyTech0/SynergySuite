@@ -13,7 +13,13 @@ async function req(method, url, body) {
 const api = {
   me: () => req('GET', '/api/me'),
   sites: () => req('GET', '/api/sites'),
-  createSite: name => req('POST', '/api/sites', { name }),
+  groups: () => req('GET', '/api/groups'),
+  createSite: body => req('POST', '/api/sites', body),
+  members: id => req('GET', `/api/sites/${id}/members`),
+  setMember: (id, principal, role) => req('PUT', `/api/sites/${id}/members`, { principal, role }),
+  removeMember: (id, principal) => req('DELETE', `/api/sites/${id}/members?principal=${encodeURIComponent(principal)}`),
+  library: (id, folder) => req('GET', `/api/sites/${id}/library${folder ? `?folder=${folder}` : ''}`),
+  makeLibrary: id => req('POST', `/api/sites/${id}/library`),
   site: id => req('GET', `/api/sites/${id}`),
   updateSite: (id, p) => req('PATCH', `/api/sites/${id}`, p),
   deleteSite: id => req('DELETE', `/api/sites/${id}`),
@@ -44,7 +50,8 @@ const MULTILINE = new Set(['text', 'subheading']);
 export default function App() {
   const [me, setMe] = useState(null);
   const [sites, setSites] = useState([]);
-  const [editing, setEditing] = useState(null); // { site, pages }
+  const [open, setOpen] = useState(null); // { site, pages, role, library, startPage, edit }
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const flash = useCallback(e => { setError(String(e.message || e)); setTimeout(() => setError(''), 5000); }, []);
 
@@ -54,10 +61,13 @@ export default function App() {
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     const id = p.get('site');
-    if (id) api.site(id).then(d => setEditing({ ...d, startPage: p.get('page') })).catch(flash);
+    if (id) api.site(id).then(d => setOpen({ ...d, startPage: p.get('page') })).catch(flash);
   }, []); // eslint-disable-line
+  const openSite = async (id, edit = false) => { try { setOpen({ ...(await api.site(id)), edit }); } catch (e) { flash(e); } };
+  const home = () => { setOpen(null); refresh(); };
 
-  if (editing) return <Editor initial={editing} onBack={() => { setEditing(null); refresh(); }} flash={flash} />;
+  if (open?.edit) return <Editor initial={open} onBack={() => openSite(open.site.id)} flash={flash} />;
+  if (open) return <SiteView initial={open} me={me} onBack={home} onEdit={startPage => setOpen({ ...open, startPage, edit: true })} flash={flash} />;
 
   return (
     <div className="wrap-app">
@@ -67,28 +77,30 @@ export default function App() {
       </header>
       <div className="page-head">
         <h2>Sites</h2>
-        <button className="primary" onClick={async () => {
-          const name = prompt('Site name?'); if (!name) return;
-          try { const s = await api.createSite(name); setEditing(await api.site(s.id)); } catch (e) { flash(e); }
-        }}>+ New site</button>
+        <button className="primary" onClick={() => setCreating(true)}>+ New site</button>
       </div>
       <div className="site-grid">
         {sites.map(s => (
           <div key={s.id} className="site-card">
             <div className="sc-top">
-              <b>{s.name}</b>
-              <span className={`badge ${s.published ? 'pub' : ''}`}>{s.published ? '🟢 live' : 'draft'}</span>
+              <b className="sc-name" onClick={() => openSite(s.id)}>{s.name}</b>
+              <SiteBadge site={s} />
             </div>
-            <div className="sc-url mono">/s/{s.slug} · {s.page_count} page{s.page_count === 1 ? '' : 's'}</div>
+            <div className="sc-url mono">
+              {s.private ? 'Private team site' : `/s/${s.slug}`} · {s.page_count} page{s.page_count === 1 ? '' : 's'} · {ROLE_LABEL[s.role]}
+            </div>
             <div className="sc-actions">
-              <button className="mini" onClick={async () => { try { setEditing(await api.site(s.id)); } catch (e) { flash(e); } }}>edit</button>
-              {s.published && <a className="mini" href={`/s/${s.slug}`} target="_blank" rel="noreferrer">view ↗</a>}
-              <button className="mini danger" onClick={async () => { if (confirm(`Delete "${s.name}"?`)) { await api.deleteSite(s.id).catch(flash); refresh(); } }}>delete</button>
+              <button className="mini" onClick={() => openSite(s.id)}>open</button>
+              {s.role !== 'visitor' && <button className="mini" onClick={() => openSite(s.id, true)}>edit</button>}
+              {s.published && !s.private && <a className="mini" href={`/s/${s.slug}`} target="_blank" rel="noreferrer">view ↗</a>}
+              {s.role === 'owner' && <button className="mini danger" onClick={async () => { if (confirm(`Delete "${s.name}"?`)) { await api.deleteSite(s.id).catch(flash); refresh(); } }}>delete</button>}
             </div>
           </div>
         ))}
         {sites.length === 0 && <p className="hint">No sites yet — create one.</p>}
       </div>
+      {creating && <NewSiteDialog onClose={() => setCreating(false)} flash={flash}
+        onCreated={s => { setCreating(false); openSite(s.id); }} />}
       {error && <div className="toast">{error}</div>}
     </div>
   );
@@ -106,6 +118,7 @@ function Editor({ initial, onBack, flash }) {
   const iframeRef = useRef(null);
 
   const page = pages.find(p => p.id === activePage);
+  const isOwner = initial.role === 'owner';
 
   const switchPage = useCallback(pid => {
     setActivePage(pid);
@@ -136,17 +149,17 @@ function Editor({ initial, onBack, flash }) {
     <div className="editor">
       <header className="topbar">
         <div className="tb-left">
-          <button className="mini" onClick={onBack}>← Sites</button>
+          <button className="mini" onClick={onBack}>← Done editing</button>
           <b>{site.name}</b>
-          <span className={`badge ${site.published ? 'pub' : ''}`}>{site.published ? 'live' : 'draft'}</span>
+          <SiteBadge site={site} />
         </div>
         <div className="tb-right">
-          <button className="mini" onClick={async () => {
+          {isOwner && !site.private && <button className="mini" onClick={async () => {
             const p = await api.updateSite(site.id, { published: !site.published }).catch(flash);
             if (p) setSite(p);
-          }}>{site.published ? 'Unpublish' : 'Publish'}</button>
-          {site.published && <a className="mini" href={`/s/${site.slug}`} target="_blank" rel="noreferrer">view live ↗</a>}
-          <SettingsButton site={site} setSite={setSite} flash={flash} onChanged={() => setPreviewKey(k => k + 1)} />
+          }}>{site.published ? 'Unpublish' : 'Publish'}</button>}
+          {site.published && !site.private && <a className="mini" href={`/s/${site.slug}`} target="_blank" rel="noreferrer">view live ↗</a>}
+          {isOwner && <SettingsButton site={site} setSite={setSite} flash={flash} onChanged={() => setPreviewKey(k => k + 1)} />}
         </div>
       </header>
 
@@ -236,13 +249,13 @@ function SettingsButton({ site, setSite, flash, onChanged }) {
   const [f, setF] = useState({
     name: site.name, description: site.description,
     primary: site.theme?.primary || '#4f46e5', font: site.theme?.font || 'sans',
-    livechatKey: site.livechat_key || '',
+    livechatKey: site.livechat_key || '', private: !!site.private,
   });
   const save = async () => {
     try {
       const p = await api.updateSite(site.id, {
         name: f.name, description: f.description,
-        theme: { primary: f.primary, font: f.font }, livechatKey: f.livechatKey,
+        theme: { primary: f.primary, font: f.font }, livechatKey: f.livechatKey, private: f.private,
       });
       setSite(p); onChanged(); setOpen(false);
     } catch (e) { flash(e); }
@@ -255,6 +268,12 @@ function SettingsButton({ site, setSite, flash, onChanged }) {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Site settings</h3>
             <label className="fld">Name<input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></label>
+            <label className="fld">Who can see it
+              <select value={f.private ? 'private' : 'org'} onChange={e => setF({ ...f, private: e.target.value === 'private' })}>
+                <option value="private">Private: only the site's owners, members and visitors</option>
+                <option value="org">Everyone in the organization (and the web, once published)</option>
+              </select>
+            </label>
             <label className="fld">Description (SEO)<input value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></label>
             <label className="fld">Primary color<input type="color" value={f.primary} onChange={e => setF({ ...f, primary: e.target.value })} /></label>
             <label className="fld">Font
@@ -269,5 +288,206 @@ function SettingsButton({ site, setSite, flash, onChanged }) {
         </div>
       )}
     </>
+  );
+}
+
+const ROLE_LABEL = { owner: 'Owner', member: 'Member', visitor: 'Visitor' };
+
+function SiteBadge({ site }) {
+  if (site.private) return <span className="badge team">🔒 private</span>;
+  return <span className={`badge ${site.published ? 'pub' : ''}`}>{site.published ? '🟢 live' : 'draft'}</span>;
+}
+
+// A team site (private, for a group or for the people you add) or a communication site
+// (everyone in the organization can read it, and it can be published to the web).
+function NewSiteDialog({ onClose, onCreated, flash }) {
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState('team');
+  const [groupId, setGroupId] = useState('');
+  const [groups, setGroups] = useState([]);
+  useEffect(() => { api.groups().then(setGroups).catch(() => setGroups([])); }, []);
+  const mine = groups.filter(g => g.role === 'owner' && !g.siteId);
+  const create = async () => {
+    try {
+      const body = { name, private: kind === 'team' };
+      if (kind === 'team' && groupId) body.groupId = groupId;
+      onCreated(await api.createSite(body));
+    } catch (e) { flash(e); }
+  };
+  return (
+    <div className="backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h3>New site</h3>
+        <div className="choice">
+          <label className={kind === 'team' ? 'on' : ''}>
+            <input type="radio" checked={kind === 'team'} onChange={() => setKind('team')} />
+            <b>Team site</b><span className="hint">Private. Pages and documents for a team or project.</span>
+          </label>
+          <label className={kind === 'comm' ? 'on' : ''}>
+            <input type="radio" checked={kind === 'comm'} onChange={() => { setKind('comm'); setGroupId(''); }} />
+            <b>Communication site</b><span className="hint">Everyone in the organization can read it, and you can publish it to the web.</span>
+          </label>
+        </div>
+        {kind === 'team' && mine.length > 0 && (
+          <label className="fld">For a group
+            <select value={groupId} onChange={e => {
+              setGroupId(e.target.value);
+              const g = mine.find(x => x.id === e.target.value);
+              if (g && !name) setName(g.name);
+            }}>
+              <option value="">No group: I'll add people myself</option>
+              {mine.map(g => <option key={g.id} value={g.id}>{g.name}{g.kind ? ` (${g.kind.replace('_', ' ')})` : ''}</option>)}
+            </select>
+          </label>
+        )}
+        {kind === 'team' && groupId && <p className="hint">The group's owners own the site and its members are site members, as the group changes.</p>}
+        <label className="fld">Name<input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && name && create()} /></label>
+        <div className="modal-actions"><button onClick={onClose}>Cancel</button><button className="primary" disabled={!name.trim()} onClick={create}>Create</button></div>
+      </div>
+    </div>
+  );
+}
+
+// A site as its people see it: its pages, its document library and who has access.
+function SiteView({ initial, me, onBack, onEdit, flash }) {
+  const { site, pages, role } = initial;
+  const startPage = pages.find(p => initial.startPage && String(p.id) === String(initial.startPage)) || pages[0];
+  const [pageId, setPageId] = useState(startPage?.id);
+  const [tab, setTab] = useState('pages');
+  const canEdit = role === 'owner' || role === 'member';
+  return (
+    <div className="editor">
+      <header className="topbar">
+        <div className="tb-left">
+          <button className="mini" onClick={onBack}>← Sites</button>
+          <b>{site.name}</b>
+          <SiteBadge site={site} />
+          <span className="hint">{ROLE_LABEL[role]}</span>
+        </div>
+        <div className="tb-right">
+          {canEdit && <button className="mini" onClick={() => onEdit(pageId)}>✎ Edit pages</button>}
+          {site.published && !site.private && <a className="mini" href={`/s/${site.slug}`} target="_blank" rel="noreferrer">view live ↗</a>}
+        </div>
+      </header>
+      <div className="pagebar">
+        {pages.map(p => (
+          <button key={p.id} className={`ptab ${tab === 'pages' && p.id === pageId ? 'on' : ''}`} onClick={() => { setTab('pages'); setPageId(p.id); }}>
+            {p.is_home ? '🏠 ' : ''}{p.title}
+          </button>
+        ))}
+        <span className="pagebar-gap" />
+        <button className={`ptab ${tab === 'docs' ? 'on' : ''}`} onClick={() => setTab('docs')}>📁 Documents</button>
+        <button className={`ptab ${tab === 'people' ? 'on' : ''}`} onClick={() => setTab('people')}>👥 Access</button>
+      </div>
+      {tab === 'pages' && (
+        <iframe className="preview-frame" src={`/api/pages/${pageId}/preview${DEV_AS ? `?as=${DEV_AS}` : ''}`} title={site.name} />
+      )}
+      {tab === 'docs' && <Documents site={site} role={role} flash={flash} />}
+      {tab === 'people' && <Access site={site} me={me} flash={flash} />}
+    </div>
+  );
+}
+
+const size = n => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+
+function Documents({ site, role, flash }) {
+  const [folder, setFolder] = useState('');
+  const [lib, setLib] = useState(null);
+  const load = useCallback(() => api.library(site.id, folder).then(setLib).catch(flash), [site.id, folder, flash]);
+  useEffect(() => { load(); }, [load]);
+  if (!lib) return <div className="panel"><p className="hint">Loading…</p></div>;
+  if (!lib.id) {
+    return (
+      <div className="panel">
+        <h3>Documents</h3>
+        {!lib.linked && <p className="hint">Document libraries live in Drive, which isn't linked to Sites here (set SITES_DRIVE_URL and DRIVE_SVC_TOKEN).</p>}
+        {lib.linked && role !== 'owner' && <p className="hint">This site has no document library yet. Its owners can add one.</p>}
+        {lib.linked && role === 'owner' && (
+          <button className="primary" onClick={async () => { await api.makeLibrary(site.id).catch(flash); load(); }}>Add a document library</button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="panel">
+      <div className="panel-head">
+        <div className="crumbs">
+          {lib.crumbs.map((c, i) => (
+            <span key={c.id || 'top'}>{i > 0 && ' › '}
+              {i < lib.crumbs.length - 1 ? <a href="#" onClick={e => { e.preventDefault(); setFolder(c.id || ''); }}>{c.name}</a> : <b>{c.name}</b>}
+            </span>
+          ))}
+        </div>
+        {lib.url && <a className="mini" href={lib.url} target="_blank" rel="noreferrer">{lib.canEdit ? 'Upload and manage in Drive ↗' : 'Open in Drive ↗'}</a>}
+      </div>
+      <table className="files">
+        <thead><tr><th>Name</th><th>Modified</th><th>By</th><th>Size</th></tr></thead>
+        <tbody>
+          {lib.items.map(i => (
+            <tr key={i.id}>
+              <td>{i.kind === 'folder'
+                ? <a href="#" onClick={e => { e.preventDefault(); setFolder(i.id); }}>📁 {i.name}</a>
+                : <a href={i.url || '#'} target="_blank" rel="noreferrer">📄 {i.name}</a>}</td>
+              <td>{new Date(i.modifiedAt).toLocaleDateString()}</td>
+              <td className="hint">{i.modifiedBy}</td>
+              <td className="hint">{i.kind === 'folder' ? '' : size(i.size)}</td>
+            </tr>
+          ))}
+          {lib.items.length === 0 && <tr><td colSpan={4} className="hint">Nothing here yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Access({ site, me, flash }) {
+  const [data, setData] = useState(null);
+  const [who, setWho] = useState('');
+  const [role, setRole] = useState('member');
+  const [groups, setGroups] = useState([]);
+  const load = useCallback(() => api.members(site.id).then(setData).catch(flash), [site.id, flash]);
+  useEffect(() => { load(); api.groups().then(setGroups).catch(() => {}); }, [load]);
+  if (!data) return <div className="panel"><p className="hint">Loading…</p></div>;
+  const run = async p => { try { await p; load(); } catch (e) { flash(e); } };
+  return (
+    <div className="panel">
+      <h3>Who has access</h3>
+      <p className="hint">
+        {site.private ? 'Private: only the people and groups below can open this site.' : 'Everyone in the organization can read this site. The people below can also edit or manage it.'}
+        {' '}Owners manage settings and access, members edit pages and documents, visitors read.
+      </p>
+      {data.team && (
+        <div className="member team-row">
+          <span className="avatar">👥</span>
+          <span className="grow"><b>{data.team.name || 'Its team'}</b> <span className="hint">team: its owners are site owners, its members are site members</span></span>
+        </div>
+      )}
+      {data.canManage && (
+        <form className="add-member" onSubmit={e => { e.preventDefault(); run(api.setMember(site.id, who, role).then(() => setWho(''))); }}>
+          <input list="site-groups" placeholder="Email address, or pick a group" value={who} onChange={e => setWho(e.target.value)} required />
+          <datalist id="site-groups">{groups.map(g => <option key={g.id} value={`group:${g.id}`}>{g.name}</option>)}</datalist>
+          <select value={role} onChange={e => setRole(e.target.value)}>
+            <option value="owner">Owner</option><option value="member">Member</option><option value="visitor">Visitor</option>
+          </select>
+          <button className="primary">Add</button>
+        </form>
+      )}
+      {data.members.map(m => (
+        <div key={m.principal} className="member">
+          <span className="avatar">{m.kind === 'group' ? '👥' : (m.principal[0] || '?').toUpperCase()}</span>
+          <span className="grow">
+            {m.kind === 'group' ? <><b>{m.name || 'Group'}</b> <span className="hint mono">{m.principal}</span></> : <>{m.principal === me?.email ? 'You' : m.principal}</>}
+          </span>
+          {data.canManage ? (
+            <>
+              <select value={m.role} onChange={e => run(api.setMember(site.id, m.principal, e.target.value))}>
+                <option value="owner">Owner</option><option value="member">Member</option><option value="visitor">Visitor</option>
+              </select>
+              <button className="mini danger" onClick={() => run(api.removeMember(site.id, m.principal))}>remove</button>
+            </>
+          ) : <span className="hint">{ROLE_LABEL[m.role]}</span>}
+        </div>
+      ))}
+    </div>
   );
 }

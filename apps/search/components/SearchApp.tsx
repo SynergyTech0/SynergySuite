@@ -9,14 +9,14 @@ type Tab = "results" | "ask";
 type Results = { query: string; results: Omit<Hit, "text">[]; apps: AppOutcome[] };
 type Turn = { role: "user" | "assistant"; content: string; sources?: Source[]; error?: boolean; missing?: AppOutcome[] };
 
-async function post<T>(path: string, json: unknown, signal?: AbortSignal): Promise<T> {
+export async function post<T>(path: string, json: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json), signal });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || `Request failed (${res.status})`), { status: res.status });
   return data as T;
 }
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -238,7 +238,7 @@ function ResultsView({ data, loading, error, filter, setFilter, apps }: { data: 
 }
 
 /** The answer's text with [n] turned into links to source n. */
-function withCitations(text: string, sources: Source[]): ReactNode[] {
+export function withCitations(text: string, sources: Source[], target?: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /\[(\d{1,2})\]/g;
   let last = 0;
@@ -247,7 +247,7 @@ function withCitations(text: string, sources: Source[]): ReactNode[] {
     if (!s) continue;
     if (m.index > last) out.push(text.slice(last, m.index));
     out.push(
-      <a key={`${m.index}`} className="cite" href={s.url} title={`${s.appName}: ${s.title}`} aria-label={`Source ${s.n}: ${s.title} (${s.appName})`}>
+      <a key={`${m.index}`} className="cite" href={s.url} target={target} rel={target ? "noopener" : undefined} title={`${s.appName}: ${s.title}`} aria-label={`Source ${s.n}: ${s.title} (${s.appName})`}>
         {s.n}
       </a>,
     );

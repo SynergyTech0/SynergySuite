@@ -16,3 +16,5 @@ apps/cad/engine/.chili3d
 apps/diagrams/public/drawio
 apps/diagrams/engine/.drawio
 apps/whiteboard/public/fonts
+addons/sign/android-app
+addons/sign/dev-mail

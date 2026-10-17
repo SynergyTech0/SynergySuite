@@ -1,6 +1,6 @@
 # Self-hosting
 
-`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, builder, bookings, cad, calendar, chat, commerce, contacts, contracts, crm, desk, devices, diagrams, drive, engage, flow (with the Activepieces flow engine), forms, insights, loop, mail, meet, notes, office, ops, photo, planner, projects, search, sites, stream, todo, trust, hr (which took over the People add-on's database) and the portal add-on) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
+`compose.yml` runs the suite apps that are on the shared packages (admin, base, books, builder, bookings, cad, calendar, chat, commerce, contacts, contracts, crm, desk, devices, diagrams, drive, engage, field, flow (with the Activepieces flow engine), forms, groups, insights, loop, mail, meet, notes, office, ops, photo, planner, projects, search, sites, stream, todo, trust, hr (which took over the People add-on's database) and the portal, campaigns and sign add-ons) plus the Stalwart mail server, Metabase (for Insights), the identity provider, a sign-in gateway and one Postgres. Other apps join as they move onto the shared packages.
 
 ```
 browser ─► caddy ─► oauth2-proxy (checks the SynergyAuth session) ─► app
@@ -31,7 +31,8 @@ How the local domain works, and the trade-offs:
 - **Certificates**: with `local_certs`, Caddy signs certificates with its own CA instead of asking Let's Encrypt (which cannot reach your machine). Until you trust `deploy/local-ca.crt`, the browser shows a certificate warning on each subdomain. The CA's key stays in the `caddy-data` volume.
 - **Containers**: nothing inside the compose network needs to resolve the suite domain or trust Caddy's CA. The gateway (oauth2-proxy) sends the browser to `https://auth.<domain>` to sign in, but redeems codes and fetches signing keys from `http://auth:3500` directly, and checks ID tokens against the public issuer. The same holds on a server, where it also avoids hairpin NAT.
 - **Ports**: Caddy must be on 443 (and 80) of `127.0.0.1`, because sign-in redirects go to `https://<host>/` without a port. Stop whatever else holds 443 first.
-- **Not covered locally**: meetings need the LiveKit media server from `apps/meet/deploy`, and mail stays on this machine (nothing can deliver to `suite.lvh.me`).
+- **Meetings**: the `livekit` media server starts with Meet and Phone (`deploy/quickstart.sh meet` adds it). The script binds its media ports to `127.0.0.1` (7881/tcp, 7882/udp) and tells browsers to send media there, so calls work between browsers on this machine. To join from other machines on your network, see Meet and Phone media below.
+- **Not covered locally**: mail stays on this machine (nothing can deliver to `suite.lvh.me`).
 
 Stop with `docker compose -f deploy/compose.yml --env-file deploy/.env down`; add `-v` and delete `deploy/.env` to start over.
 
@@ -43,7 +44,7 @@ The images are public, so no login is needed. If they can't be downloaded, quick
 
 ## First start on a server
 
-1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `builder`, `bookings`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `contracts`, `crm`, `desk`, `devices`, `devices-windows`, `diagrams`, `drive`, `engage`, `flow`, `flow-studio`, `forms`, `insights`, `loop`, `mail`, `meet`, `notes`, `office`, `ops`, `people`, `hr`, `photo`, `planner`, `portal`, `projects`, `search`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
+1. Point DNS for `auth`, `sso`, `admin`, `base`, `books`, `builder`, `bookings`, `campaigns`, `cad`, `calendar`, `chat`, `commerce`, `contacts`, `contracts`, `crm`, `desk`, `devices`, `devices-windows`, `diagrams`, `drive`, `engage`, `field`, `flow`, `flow-studio`, `forms`, `groups`, `insights`, `loop`, `mail`, `meet`, `notes`, `office`, `ops`, `people`, `hr`, `photo`, `planner`, `portal`, `projects`, `search`, `sign`, `sites`, `todo` and `trust` under your domain at the host. For mail, also add an A record for `mx` and an MX record for the domain pointing at `mx.<domain>` (see Mail below).
 2. `cp deploy/.env.example deploy/.env` and fill it in. For the gateway, choose `OIDC_CLIENT_ID` (e.g. `suite-gateway`) and a random `OIDC_CLIENT_SECRET`; leave `CADDY_GLOBAL_OPTIONS` empty so Caddy gets Let's Encrypt certificates.
 3. Start everything: `docker compose -f deploy/compose.yml --env-file deploy/.env up -d --build`.
 4. Sign in at `https://auth.<domain>/admin` as `SEED_ADMIN_EMAIL` (default `admin@<domain>`). With `SEED_ADMIN_PASSWORD` empty, the password is printed once by `docker compose -f deploy/compose.yml --env-file deploy/.env logs auth-init`; change it after signing in.
@@ -64,7 +65,11 @@ To turn demo mode off, clear `DEMO_MODE` and `up` again: the `demo` service exit
 
 ## Public paths
 
-These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Ops' demand and purchase-request feeds (`ops.<domain>/api/svc/*`, which check `OPS_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`), and the flow engine's webhook triggers (`flow-studio.<domain>/api/v1/webhooks/*` and `/api/v1/app-events/*`, which only start a flow whose owner published a webhook trigger).
+These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), published sites (`sites.<domain>/s/*`) calendar's machine API (`calendar.<domain>/api/svc/*`, which checks `CAL_SVC_TOKEN` itself), planner's automation API (`planner.<domain>/api/mind`, which checks `MIND_TOKEN`), Trust's public trust centre pages (`trust.<domain>/trust/*`) and collector-agent API (`trust.<domain>/api/agent/*`, which checks each agent's token), Drive's view links (`drive.<domain>/s/*` and `/api/shared/*`, which check the link's token), CRM's web-to-lead endpoint (`crm.<domain>/api/intake/lead`, which checks `CRM_API_TOKEN`), Desk's help center (`desk.<domain>/kb`), ticket intake (`/api/intake`) and Portal feed (`/api/svc/*`, both checking `DESK_API_TOKEN`), Ops' demand and purchase-request feeds (`ops.<domain>/api/svc/*`, which check `OPS_API_TOKEN`), Base's data links (`base.<domain>/api/feed/*`, which check the link's token), and Commerce's online store (`commerce.<domain>/store/*` and `/api/store/*`; the payment provider's callback checks `COMMERCE_CHECKOUT_TOKEN`) and its stock API for other apps (`commerce.<domain>/api/svc/*`, which checks `COMMERCE_SVC_TOKEN`), and the flow engine's webhook triggers (`flow-studio.<domain>/api/v1/webhooks/*` and `/api/v1/app-events/*`, which only start a flow whose owner published a webhook trigger), and Sign's signing pages for outside signers (`sign.<domain>/sign/*`, `/api/signers/*` and `/api/files/*`, which check the signer's emailed token or a signed, expiring file link).
+
+## Copilot
+
+Every app's header has a Copilot button that opens Search's `/copilot` page in a side panel frame. It works with no extra setup: the apps share the session cookie on `.SUITE_DOMAIN` (same site, so it reaches the frame), and Search allows only `https://*.SUITE_DOMAIN` to frame `/copilot` (`Content-Security-Policy: frame-ancestors`; its other pages can't be framed at all). The Account app's pages refuse frames, so if the session has expired the panel can't show the sign-in page: use its "Open in a new tab" link. Copilot uses the `AI_*` model (or `SEARCH_AI_*`); Draft with Copilot in Mail and Calendar uses `MAIL_AI_*` and `CALENDAR_AI_*` when set. When the person confirms an action, Search calls To Do, Calendar, Chat or Planner on the compose network as that person (the gateway headers plus `PROXY_SHARED_SECRET`, as it does for search), so those apps' own permission checks apply.
 
 ## Flow
 
@@ -79,6 +84,22 @@ These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), publi
 - Polling triggers check every `FLOW_POLL_MINUTES` (default 5).
 - Known gaps: a person removed from the suite keeps their running flows until an admin turns them off in the designer; flows are not yet covered by Admin center holds and searches.
 
+## Meet and Phone media
+
+Meet's video rooms and Phone's calls run on the `livekit` service: the [LiveKit](https://github.com/livekit/livekit) media server (Apache-2.0, headless, so people only ever see Meet and Phone). The apps sign join tokens with `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (quickstart generates them; on a server pick a short key and `openssl rand -hex 32` as the secret) and manage rooms over the internal network (`http://livekit:7880`).
+
+```
+browser ─► caddy  wss://meet.<domain>/rtc ─► livekit:7880   (signalling, through the gateway)
+browser ─────────────── 7882/udp or 7881/tcp ─► livekit       (audio and video, straight to it)
+```
+
+- **Ports**: open 7881/tcp and 7882/udp on the host. Every call shares the one UDP port; browsers whose network blocks UDP fall back to TCP 7881. `LIVEKIT_TCP_PUBLISH` and `LIVEKIT_UDP_PUBLISH` change what is published (e.g. `127.0.0.1:7881`); the port numbers inside must stay the same, since LiveKit announces them to browsers.
+- **The address browsers send media to**: on a server, leave `LIVEKIT_NODE_IP` empty and LiveKit finds its public IP over STUN. If that fails (no outbound STUN: the `livekit` log then says `could not resolve external IP` and it keeps restarting; or a server behind 1:1 NAT), set `LIVEKIT_NODE_IP` to the public IP and `LIVEKIT_USE_EXTERNAL_IP=false`. Locally, quickstart sets `127.0.0.1`; for other machines on your LAN, set the machine's LAN IP, publish the two ports on it (`LIVEKIT_TCP_PUBLISH=7881`, `LIVEKIT_UDP_PUBLISH=7882`) and run `up -d livekit` again (they also need the suite's names to resolve to that IP and to trust `local-ca.crt`).
+- **TURN**: there is no TURN relay in the compose file. TCP 7881 covers networks that block UDP. For networks that only allow web traffic, run coturn (BSD) on a different public IP with `use-auth-secret` and set `TURN_HOST` and `TURN_STATIC_SECRET`; Meet and Phone then hand browsers short-lived TURN logins.
+- **Phone**: LiveKit sends its webhooks (who joined and left) to Phone at `http://phone:3440/api/livekit/webhook` (`LIVEKIT_WEBHOOK_URL`). Calls between colleagues need nothing more. Real phone numbers need LiveKit SIP: set `COMPOSE_PROFILES=sip` and `LIVEKIT_REDIS_ADDRESS=sip-valkey:6379` in `.env`, run `up -d` again, and open 5060/udp+tcp and 10000-10099/udp to your SIP provider (see `apps/phone/README.md`).
+- **Recording** needs LiveKit Egress and Redis, which are not in this file yet (see `apps/meet/deploy`).
+- **Your own media server**: to keep LiveKit on its own host (`apps/meet/deploy`), point `LIVEKIT_UPSTREAM` at it (host:port), use its keys, and leave the `livekit` service out (`up -d --scale livekit=0`). An existing host-network LiveKit on the same machine holds 7881, so stop it before starting this one.
+
 ## Mail
 
 `mail.<domain>` is the web mailbox. It reads and sends through Stalwart, the mail server in the same compose file, and users can also connect outside IMAP accounts (Gmail, Outlook.com, anything with IMAP/SMTP) next to their suite mailbox.
@@ -89,6 +110,79 @@ These skip sign-in at the gateway: published forms (`forms.<domain>/f/*`), publi
 - Stalwart publishes 25 (incoming mail), 465 (sending from desktop and phone clients) and 993 (reading from them). Many cloud hosts block port 25; ask yours to open it or relay through a smarthost.
 - To receive mail from the internet you need: an MX record for your domain pointing at `mx.<domain>`, SPF and DKIM records (Stalwart's admin UI shows the DKIM record to publish), and reverse DNS for the host's IP set to `mx.<domain>`.
 - Stalwart starts with a self-signed certificate. Give it a real one in its admin UI (ACME/Let's Encrypt is built in) before pointing desktop clients at it, then set `MAIL_SUITE_TLS_INSECURE=false`.
+
+## Sign
+
+- Sign (e-signatures) is an add-on with its own database (`sign`) and a `sign-files` volume for uploaded and signed PDFs. People in the suite sign in as everywhere else; a Sign account from before is matched by email. Signers outside the organization need no account: they open the link in their email.
+- `SIGN_ADMIN_EMAILS` (default `SEED_ADMIN_EMAIL`) get Sign's admin pages. Signing requests and completed documents go out from `sign@<MAIL_DOMAIN>` through Stalwart, which Sign creates on first use; `SIGN_SMTP_*` sends through one outside mailbox instead. Signers outside your domain only receive mail once Stalwart can deliver to the internet (see Mail).
+- Field detection uses `@synergy/ai` (`SIGN_AI_*`, else the suite's `AI_*`); it needs a model that reads images.
+- Known gaps: the Android app and the hosted product's billing, affiliate and enterprise-invitation pages are not wired to the suite (billing pages are hidden); deleting a document under legal hold hides it but keeps it for the hold.
+
+## Groups
+
+`groups.<domain>` holds the suite's groups. A team gets a workspace in Chat with a channel per team channel, a library in Drive, a group calendar in Calendar and, with an address, a shared mailbox in Mail; a distribution list becomes a Stalwart mailing list (outside addresses allowed); a shared mailbox becomes a Stalwart group account its members open in Mail.
+
+- Groups pushes each change to Chat, Drive, Calendar and Mail on the compose network, and again every 15 minutes for every group, so an app that was down catches up. A team's Settings tab shows whether each app took the last change.
+- Team calendars need `CAL_SVC_TOKEN` on Groups and Calendar (quickstart sets it). Mailboxes need Mail's Stalwart admin login, which compose already gives it.
+- `/api/svc/*` on groups, chat, drive and mail is answered only on the compose network (with `PROXY_SHARED_SECRET`); the gateway returns 404 for it.
+- `GROUPS_ADMIN_EMAILS` may manage and restore every group; `GROUPS_CREATE=admins` keeps creating groups to them.
+
+## Moving from Microsoft 365
+
+The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.
+
+Before the first source, set `MIGRATION_ENCRYPTION_KEY` in `deploy/.env` (`openssl rand -base64 32`; quickstart does it) and restart `admin`. The tenant's client secret and any IMAP passwords are stored encrypted with it and never shown again or logged. Changing the key means entering the secrets again. The Admin center also needs `ADMIN_SCIM_TOKEN` to create the accounts people move into (see People), and the apps need `PROXY_SHARED_SECRET` as usual: the Admin center writes into Mail, Drive, Calendar, Contacts and To Do through their normal APIs as each person, so quotas, legal holds and audit apply as if they had done it themselves.
+
+### Register the app in Microsoft Entra
+
+The customer's Global Administrator does this once, in about five minutes:
+
+1. Sign in to [entra.microsoft.com](https://entra.microsoft.com), open **Applications > App registrations > New registration**. Name it "Synergy migration", keep **Accounts in this organizational directory only**, leave the redirect URI empty, and register.
+2. On the overview page copy the **Application (client) ID** and the **Directory (tenant) ID**.
+3. **API permissions > Add a permission > Microsoft Graph > Application permissions**, add (all read-only):
+
+   | Permission | Why |
+   | --- | --- |
+   | `User.Read.All` | list the tenant's people |
+   | `Mail.Read` | read every mailbox, as raw messages |
+   | `Calendars.Read` | read calendars |
+   | `Contacts.Read` | read contacts |
+   | `Files.Read.All` | read OneDrive files |
+   | `Sites.Read.All` | read SharePoint sites and their document libraries |
+   | `Tasks.Read.All` | read To Do lists and tasks |
+   | `GroupMember.Read.All` | optional: bring a group site's owners and members across as library members |
+   | `Reports.Read.All` | optional: mailbox sizes in discovery (also turn off "Display concealed user, group, and site names in all reports" under Settings > Org settings > Reports in the Microsoft 365 admin center, or the sizes can't be matched to people) |
+
+4. Choose **Grant admin consent for &lt;organization&gt;** and confirm; each permission shows a green tick.
+5. **Certificates & secrets > New client secret**, with an expiry that covers the project. Copy its **Value** (not the Secret ID); it is shown once.
+6. In the Admin center: **Move from Microsoft 365 > Connect Microsoft 365**, paste the tenant ID, client ID and secret. They are tested before they are saved.
+
+Only plain HTTPS to `login.microsoftonline.com` and `graph.microsoft.com` is used (client-credentials token, Graph v1.0); no Microsoft code or SDK. `M365_LOGIN_URL` and `M365_GRAPH_URL` point it at a national cloud. Delete the app registration when the move is finished.
+
+### Discover, map, copy
+
+- **Discover** lists the tenant's people (guests left out) with mailbox and OneDrive sizes, and its SharePoint sites with their size and, for group sites, owners and members.
+- **Map** each person to a suite account: type it in, or fill a domain and choose **Map unmapped** to give everyone `name@that-domain`. **Create missing accounts** creates the accounts in the sign-in service (people set their password with "Forgot password") and their mailboxes.
+- **Copy** queues one background job per person (two run at a time, `MIGRATION_CONCURRENCY` for more). Jobs survive restarts: one interrupted by a crash or a deploy carries on where it stopped. Microsoft's throttling (429 with Retry-After) is waited out as asked; a run that fails as a whole (Microsoft or a suite app unreachable) is tried again later, up to five times. Each person gets a report (counts copied, updated, deleted, skipped with the reason, errors, and the CSV to download).
+- **SharePoint sites** become Drive shared libraries named after the site, created and owned by the admin who starts the copy, with the site's owners as owners and members as editors when they have suite accounts.
+- Messages over 45 MB (`MIGRATION_MAX_MESSAGE_MB`) and files over Drive's limit are skipped and listed. Calendar events from three years back to three years ahead are copied (`MIGRATION_CALENDAR_PAST_DAYS`, `MIGRATION_CALENDAR_FUTURE_DAYS`).
+
+### Cutover checklist
+
+1. A week or so before: connect, discover, map, create accounts, and copy everyone. Check the reports and copy again anyone with errors.
+2. Lower the TTL of the domain's MX record (say to 5 minutes) a day ahead.
+3. At cutover: add the domain to the suite's mail server if it isn't `MAIL_DOMAIN`, then change the MX record (and SPF, DKIM, autodiscover) to the suite (see [Mail](#mail)).
+4. Wait until new mail arrives in the suite (send a test from outside), then choose **Copy** again for everyone (or **Sync changes** on each copy): only what changed since the last copy comes across (new and moved mail, read and flag changes, new, edited, renamed and deleted files, calendar, contact and task changes).
+5. Tell people to sign in to the suite, and to set up phones and desktop clients against it.
+6. Keep the Microsoft 365 tenant read-only for a while, run one last sync a day or two later for stragglers, then remove the source and delete the Entra app registration.
+
+### Other IMAP servers
+
+**Another IMAP server** copies mail from anything with IMAP (Google Workspace, another host, an old on-premises server): give the server, then each mailbox's login and password (an app password for accounts with two-step sign-in) and the suite account it moves into. Folders, read and flag state and dates come across; a re-run copies new mail and flag changes. Servers on a private network are refused unless `MIGRATION_ALLOW_PRIVATE_HOSTS=1`.
+
+### What is not copied
+
+Teams chats and channel messages, OneNote notebooks (listed as skipped), Planner plans, mailbox rules, signatures and automatic replies, shared and group mailboxes (copy one as a user), and sharing on individual OneDrive files. Recurring meetings arrive as their single occurrences (Calendar has no recurrence yet); each series' pattern is kept with the migration so it can be brought across as a series later. To Do repeats that Synergy has no match for (every two weeks, say) arrive without the repeat. Contacts from other contact folders arrive in the main list. Files keep their original date; the copy's author is the person (or, for libraries, the admin).
 
 ## Insights
 

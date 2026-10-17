@@ -102,12 +102,12 @@ export async function POST(req: Request) {
 
     // Calculate period dates from Stripe subscription
     const currentPeriodStart =
-      stripeSubscription.current_period_start
-        ? new Date(stripeSubscription.current_period_start * 1000)
+      (stripeSubscription as any).current_period_start
+        ? new Date((stripeSubscription as any).current_period_start * 1000)
         : new Date();
     const currentPeriodEnd =
-      stripeSubscription.current_period_end
-        ? new Date(stripeSubscription.current_period_end * 1000)
+      (stripeSubscription as any).current_period_end
+        ? new Date((stripeSubscription as any).current_period_end * 1000)
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days
 
     // Check if there's a pending tier and apply it if we're at period end

@@ -45,7 +45,7 @@ export function fail(err: unknown): Response {
   return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
 }
 
-export type Need = "people" | "apps" | "roles" | "audit" | "retention.edit" | "protection" | "compliance";
+export type Need = "people" | "apps" | "roles" | "audit" | "retention.edit" | "protection" | "compliance" | "migrate";
 
 /** Wraps a route: requires a signed-in admin (or, for `compliance`, an eDiscovery manager) and turns errors into JSON. */
 export function route<A extends unknown[]>(need: Need, fn: (me: Me, req: Request, ...rest: A) => Promise<Response | unknown>) {

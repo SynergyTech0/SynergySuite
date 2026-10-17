@@ -2,7 +2,7 @@
   "name": "synergy-admin",
   "version": "0.1.0",
   "private": true,
-  "description": "Synergy Admin - the admin center: people, app health, audit, and eDiscovery with legal holds and retention across the suite",
+  "description": "Synergy Admin - the admin center: people, app health, audit, and eDiscovery with legal holds and retention across the suite, and moving in from Microsoft 365 or IMAP",
   "scripts": {
     "dev": "next dev -p 3700",
     "build": "next build",
@@ -16,6 +16,7 @@
     "@synergy/identity": "*",
     "@synergy/shell": "*",
     "fflate": "^0.8.2",
+    "imapflow": "^2.4.3",
     "lucide-react": "^0.475.0",
     "next": "16.3.5",
     "react": "19.2.4",

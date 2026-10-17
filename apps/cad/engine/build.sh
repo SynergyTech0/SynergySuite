@@ -17,6 +17,8 @@ git -C "$src" apply "$here/dwg-wasm.patch"
 # The editor is upstream's web build with Synergy CAD's name (cadcraft-brand.patch); its host
 # bridge (?host=parent) already hands files to and from this page.
 git -C "$src" apply "$here/cadcraft-brand.patch"
+# Saving keeps 3D meshes as meshes and the arrowhead blocks leaders name (cadcraft-save-fidelity.patch).
+git -C "$src" apply "$here/cadcraft-save-fidelity.patch"
 (cd "$src/apps/cadcraft-web" && trunk build --release --locked)
 # The DWG converter: CADCraft's DWG crate with the patch's `wasm` feature, in its own module.
 (cd "$here/dwg" && cargo build --release --locked --target wasm32-unknown-unknown)

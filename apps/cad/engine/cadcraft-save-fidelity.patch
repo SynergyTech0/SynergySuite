@@ -1,0 +1,432 @@
+diff --git a/crates/doc/src/entity.rs b/crates/doc/src/entity.rs
+index 4d22c17..bd8106d 100644
+--- a/crates/doc/src/entity.rs
++++ b/crates/doc/src/entity.rs
+@@ -792,6 +792,23 @@ pub struct Face3d {
+     pub corners: [Vec3; 4],
+     #[serde(default)]
+     pub hidden_edges: u8,
++    /// The mesh this face was read from: a polyface or polygon mesh POLYLINE is drawn and edited
++    /// as one 3D face per mesh face, and saved as a mesh again.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub mesh: Option<MeshPart>,
++}
++
++/// A face's place in the mesh it was read from.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
++pub struct MeshPart {
++    /// The mesh's handle in the file it was read from: the faces of one mesh share it.
++    pub id: u64,
++    /// The face's position in the mesh, from 0.
++    pub index: u32,
++    /// A polygon mesh's vertex rows (M) and columns (N) and its DXF closure flags (1: closed
++    /// in M, 32: closed in N); `None` for a polyface mesh.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub grid: Option<(u32, u32, u8)>,
+ }
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+ pub struct RayLine {
+diff --git a/crates/io/src/dxf_ext.rs b/crates/io/src/dxf_ext.rs
+index cb91534..ec8c382 100644
+--- a/crates/io/src/dxf_ext.rs
++++ b/crates/io/src/dxf_ext.rs
+@@ -271,7 +271,12 @@ pub(crate) const ARROWS: &[(Arrowhead, &str)] = &[
+ 
+ /// True for a standard arrowhead block name (case-insensitive).
+ pub(crate) fn is_standard_arrow(name: &str) -> bool {
+-    ARROWS.iter().any(|(_, n)| n.eq_ignore_ascii_case(name))
++    standard_arrow(name).is_some()
++}
++
++/// A standard arrowhead block's name as AutoCAD spells it (case-insensitive lookup).
++pub(crate) fn standard_arrow(name: &str) -> Option<&'static str> {
++    ARROWS.iter().map(|(_, n)| *n).find(|n| n.eq_ignore_ascii_case(name))
+ }
+ 
+ /// The block an arrow name is written as when no user block has that name: names starting
+diff --git a/crates/io/src/dxf_read.rs b/crates/io/src/dxf_read.rs
+index 7615bc5..a6f388c 100644
+--- a/crates/io/src/dxf_read.rs
++++ b/crates/io/src/dxf_read.rs
+@@ -465,7 +465,7 @@ fn entity(kind: &str, tags: &[Tag]) -> Option<(Common, EntityKind)> {
+             if kind == "SOLID" { EntityKind::Solid(Solid { corners }) } else { EntityKind::Trace(Solid { corners }) }
+         }
+         "MLINE" => EntityKind::MLine(crate::dxf_mline::read_entity(tags)),
+-        "3DFACE" => EntityKind::Face3d(Face3d { corners: [t.p(10), t.p(11), t.p(12), t.p(13)], hidden_edges: t.i(70).unwrap_or(0) as u8 }),
++        "3DFACE" => EntityKind::Face3d(Face3d { corners: [t.p(10), t.p(11), t.p(12), t.p(13)], hidden_edges: t.i(70).unwrap_or(0) as u8, mesh: None }),
+         "HATCH" => {
+             let mut k = hatch(tags, &t)?;
+             if c.extrusion.z < 0.0
+@@ -1143,8 +1143,16 @@ fn parse_entities(recs: &[(String, Vec<Tag>)], d: &mut Drawing, rx: &mut Rx, ski
+                     // Polyface (64) and polygon (16) meshes become 3D faces; the first takes the
+                     // polyline's place.
+                     let verts: Vec<Vec3> = pts.iter().map(|p| p.0).collect();
+-                    let mut fs = if flags & 64 != 0 { polyface_faces(&verts, &faces) } else { mesh_faces(&verts, &t, flags) }
++                    let (list, grid) = if flags & 64 != 0 { (polyface_faces(&verts, &faces), None) } else { mesh_faces(&verts, &t, flags) };
++                    // Each face knows its mesh (the id is set below, with the mesh's handle), so
++                    // saving writes the mesh again rather than loose 3D faces.
++                    let mut fs = list
+                         .into_iter()
++                        .enumerate()
++                        .map(|(i, mut f)| {
++                            f.mesh = Some(MeshPart { id: 0, index: u32::try_from(i).unwrap_or(u32::MAX), grid });
++                            f
++                        })
+                         .map(EntityKind::Face3d);
+                     let Some(first) = fs.next() else {
+                         *skipped = skipped.saturating_add(1);
+@@ -1225,6 +1233,12 @@ fn parse_entities(recs: &[(String, Vec<Tag>)], d: &mut Drawing, rx: &mut Rx, ski
+                 None => d.new_handle(),
+             };
+             entity_extras(kind, tags, h, &mut k, rx);
++            // A mesh's faces are named by the mesh's handle.
++            for f in std::iter::once(&mut k).chain(extra.iter_mut()) {
++                if let EntityKind::Face3d(Face3d { mesh: Some(m), .. }) = f {
++                    m.id = h.0;
++                }
++            }
+             let more: Vec<_> =
+                 extra.into_iter().map(|f| (owner.clone(), paper, Entity { handle: d.new_handle(), common: c.clone(), kind: f })).collect();
+             out.push((owner, paper, Entity { handle: h, common: c, kind: k }));
+@@ -1268,8 +1282,8 @@ fn polyface_faces(verts: &[Vec3], faces: &[[i64; 4]]) -> Vec<Face3d> {
+         }
+         match (ok, corners.as_slice()) {
+             // A triangle's closing edge is the 3DFACE's fourth (the third is degenerate).
+-            (true, [a, b, c]) => out.push(Face3d { corners: [*a, *b, *c, *c], hidden_edges: hidden | if hidden & 4 != 0 { 8 } else { 0 } }),
+-            (true, [a, b, c, d]) => out.push(Face3d { corners: [*a, *b, *c, *d], hidden_edges: hidden }),
++            (true, [a, b, c]) => out.push(Face3d { corners: [*a, *b, *c, *c], hidden_edges: hidden | if hidden & 4 != 0 { 8 } else { 0 }, mesh: None }),
++            (true, [a, b, c, d]) => out.push(Face3d { corners: [*a, *b, *c, *d], hidden_edges: hidden, mesh: None }),
+             _ => {}
+         }
+     }
+@@ -1278,12 +1292,12 @@ fn polyface_faces(verts: &[Vec3], faces: &[[i64; 4]]) -> Vec<Face3d> {
+ 
+ /// Quads of an M×N polygon mesh (71/72, or the smoothed 73/74 when the vertex count matches
+ /// those), closed in M by bit 1 and in N by bit 32. Vertices run row by row.
+-fn mesh_faces(verts: &[Vec3], t: &T, flags: i64) -> Vec<Face3d> {
++fn mesh_faces(verts: &[Vec3], t: &T, flags: i64) -> (Vec<Face3d>, Option<(u32, u32, u8)>) {
+     let dims = |a: i32, b: i32| Some((usize::try_from(t.i(a)?).ok()?, usize::try_from(t.i(b)?).ok()?));
+     let fits = |(m, n): (usize, usize)| m >= 2 && n >= 2 && m.checked_mul(n).is_some_and(|mn| mn <= verts.len());
+     let exact = |(m, n): (usize, usize)| fits((m, n)) && m * n == verts.len();
+     let Some((m, n)) = [dims(71, 72), dims(73, 74)].into_iter().flatten().find(|d| exact(*d)).or_else(|| dims(71, 72).filter(|d| fits(*d))) else {
+-        return Vec::new();
++        return (Vec::new(), None);
+     };
+     let at = |i: usize, j: usize| verts.get((i % m) * n + j % n).copied();
+     let rows = if flags & 1 != 0 { m } else { m - 1 };
+@@ -1292,11 +1306,13 @@ fn mesh_faces(verts: &[Vec3], t: &T, flags: i64) -> Vec<Face3d> {
+     for i in 0..rows {
+         for j in 0..cols {
+             if let (Some(a), Some(b), Some(c), Some(d)) = (at(i, j), at(i, j + 1), at(i + 1, j + 1), at(i + 1, j)) {
+-                out.push(Face3d { corners: [a, b, c, d], hidden_edges: 0 });
++                out.push(Face3d { corners: [a, b, c, d], hidden_edges: 0, mesh: None });
+             }
+         }
+     }
+-    out
++    let grid = (u32::try_from(m).ok(), u32::try_from(n).ok());
++    let grid = if let (Some(m), Some(n)) = grid { Some((m, n, (flags & (1 | 32)) as u8)) } else { None };
++    (out, grid)
+ }
+ 
+ fn header(tags: &[Tag], d: &mut Drawing) {
+diff --git a/crates/io/src/dxf_write.rs b/crates/io/src/dxf_write.rs
+index cd4d2c1..7525fc0 100644
+--- a/crates/io/src/dxf_write.rs
++++ b/crates/io/src/dxf_write.rs
+@@ -130,6 +130,163 @@ struct Ctx {
+     /// The version the file ends up in (the DWG version for a DWG save): it decides which
+     /// entity types exist (MULTILEADER from 2007).
+     target: Version,
++    /// 3D faces read from one POLYLINE mesh, by face handle: they are written as that mesh again.
++    meshes: HashMap<Handle, MeshRole>,
++}
++
++/// A mesh face's part in writing its mesh.
++enum MeshRole {
++    /// The first face: writes the whole mesh (every member's corners, in index order).
++    Head(MeshOut),
++    /// Written with its head.
++    Member,
++}
++
++struct MeshOut {
++    faces: Vec<Face3d>,
++    /// M×N vertices and closure flags, when the faces still form that grid.
++    grid: Option<(u32, u32, u8, Vec<Vec3>)>,
++}
++
++/// The faces of each mesh, per container (model space, a layout, a block): a mesh whose faces
++/// are spread over containers, or repeat an index (a copied face), keeps only the first of
++/// each index in the head's container; the rest are written as plain 3D faces.
++fn mesh_plan<'a>(containers: impl Iterator<Item = Vec<&'a Entity>>) -> HashMap<Handle, MeshRole> {
++    let mut out = HashMap::new();
++    for ents in containers {
++        let mut groups: Vec<(u64, Vec<(Handle, &Face3d, MeshPart)>)> = Vec::new();
++        for e in ents {
++            let EntityKind::Face3d(f) = &e.kind else { continue };
++            let Some(m) = f.mesh else { continue };
++            match groups.iter_mut().find(|(id, _)| *id == m.id) {
++                Some((_, g)) if g.iter().any(|(_, _, p)| p.index == m.index) => {}
++                Some((_, g)) => g.push((e.handle, f, m)),
++                None => groups.push((m.id, vec![(e.handle, f, m)])),
++            }
++        }
++        for (_, mut g) in groups {
++            let head = g[0].0;
++            g.sort_by_key(|(_, _, p)| p.index);
++            let grid = g[0].2.grid.and_then(|grid| mesh_grid(&g.iter().map(|(_, f, _)| *f).collect::<Vec<_>>(), grid));
++            let faces: Vec<Face3d> = g.iter().map(|(_, f, _)| (*f).clone()).collect();
++            for (h, _, _) in &g {
++                out.insert(*h, MeshRole::Member);
++            }
++            out.insert(head, MeshRole::Head(MeshOut { faces, grid }));
++        }
++    }
++    out
++}
++
++/// The M×N vertices of a polygon mesh whose faces (in index order) are still exactly its grid
++/// cells; `None` once any is missing or moved (it is then written as a polyface mesh).
++fn mesh_grid(faces: &[&Face3d], (m, n, closed): (u32, u32, u8)) -> Option<(u32, u32, u8, Vec<Vec3>)> {
++    let (mu, nu) = (usize::try_from(m).ok()?, usize::try_from(n).ok()?);
++    if mu < 2 || nu < 2 || mu.checked_mul(nu)? > 1 << 16 {
++        return None;
++    }
++    let rows = if closed & 1 != 0 { mu } else { mu - 1 };
++    let cols = if closed & 32 != 0 { nu } else { nu - 1 };
++    if faces.len() != rows * cols {
++        return None;
++    }
++    let mut v: Vec<Option<Vec3>> = vec![None; mu * nu];
++    let mut put = |i: usize, j: usize, p: Vec3| -> bool {
++        let slot = &mut v[(i % mu) * nu + j % nu];
++        match slot {
++            Some(q) => *q == p,
++            None => {
++                *slot = Some(p);
++                true
++            }
++        }
++    };
++    for i in 0..rows {
++        for j in 0..cols {
++            let c = faces[i * cols + j].corners;
++            if !(put(i, j, c[0]) && put(i, j + 1, c[1]) && put(i + 1, j + 1, c[2]) && put(i + 1, j, c[3])) {
++                return None;
++            }
++        }
++    }
++    let verts: Option<Vec<Vec3>> = v.into_iter().collect();
++    Some((m, n, closed, verts?))
++}
++
++/// A mesh as a POLYLINE (polygon mesh when `grid`, else polyface) with its VERTEXes and SEQEND.
++fn mesh_entity(w: &mut W, e: &Entity, owner: &str, paper: bool, m: &MeshOut) {
++    let ph = e.handle.hex();
++    let vertex = |w: &mut W, sub: &str, p: Vec3, flags: i64, idx: &[i64]| {
++        let vh = w.h();
++        w.s(0, "VERTEX");
++        w.s(5, vh);
++        w.s(330, &ph);
++        w.s(100, "AcDbEntity");
++        if paper {
++            w.i(67, 1);
++        }
++        w.s(8, &e.common.layer);
++        w.s(100, "AcDbVertex");
++        w.s(100, sub);
++        w.p(10, p);
++        w.i(70, flags);
++        for (k, i) in idx.iter().enumerate() {
++            w.i(71 + k as i32, *i);
++        }
++    };
++    w.s(0, "POLYLINE");
++    match &m.grid {
++        Some((gm, gn, closed, verts)) => {
++            common(w, e, owner, paper, "AcDbPolygonMesh");
++            w.i(66, 1);
++            w.p(10, Vec3::ZERO);
++            w.i(70, 16 | i64::from(*closed));
++            w.i(71, i64::from(*gm));
++            w.i(72, i64::from(*gn));
++            for p in verts {
++                vertex(w, "AcDbPolygonMeshVertex", *p, 64, &[]);
++            }
++        }
++        None => {
++            let mut verts: Vec<Vec3> = Vec::new();
++            let mut idx = |p: Vec3| -> i64 {
++                let at = verts.iter().position(|q| *q == p).unwrap_or_else(|| {
++                    verts.push(p);
++                    verts.len() - 1
++                });
++                at as i64 + 1
++            };
++            let recs: Vec<Vec<i64>> = m
++                .faces
++                .iter()
++                .map(|f| {
++                    let n = if f.corners[2] == f.corners[3] { 3 } else { 4 };
++                    (0..n).map(|k| if f.hidden_edges & (1 << k) != 0 { -idx(f.corners[k]) } else { idx(f.corners[k]) }).collect()
++                })
++                .collect();
++            common(w, e, owner, paper, "AcDbPolyFaceMesh");
++            w.i(66, 1);
++            w.p(10, Vec3::ZERO);
++            w.i(70, 64);
++            w.i(71, verts.len() as i64);
++            w.i(72, recs.len() as i64);
++            for p in &verts {
++                vertex(w, "AcDbPolyFaceMeshVertex", *p, 192, &[]);
++            }
++            for r in &recs {
++                vertex(w, "AcDbFaceRecord", Vec3::ZERO, 128, r);
++            }
++        }
++    }
++    let sh = w.h();
++    w.s(0, "SEQEND");
++    w.s(5, sh);
++    w.s(330, &ph);
++    w.s(100, "AcDbEntity");
++    if paper {
++        w.i(67, 1);
++    }
++    w.s(8, &e.common.layer);
+ }
+ 
+ impl Ctx {
+@@ -973,6 +1130,11 @@ fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: bool, cx: &Ctx
+             w.p(13, s.corners[3]);
+             thickness(w, e);
+         }
++        EntityKind::Face3d(_) if cx.meshes.contains_key(&e.handle) => {
++            if let Some(MeshRole::Head(m)) = cx.meshes.get(&e.handle) {
++                mesh_entity(w, e, owner, paper, m);
++            }
++        }
+         EntityKind::Face3d(f) => {
+             w.s(0, "3DFACE");
+             common(w, e, owner, paper, "AcDbFace");
+@@ -1612,6 +1774,11 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
+     let user_blocks: Vec<(String, String, &Block)> = user_blocks.into_iter().map(|(n, _, b)| (n, w.h(), b)).collect();
+     let mut cx = Ctx { paper_views: paper_views(d), target, ..Ctx::default() };
+     cx.block_records = user_blocks.iter().map(|(n, h, _)| (n.to_ascii_uppercase(), h.clone())).collect();
++    cx.meshes = mesh_plan(
++        std::iter::once(d.model.iter().map(|e| e.as_ref()).collect())
++            .chain(d.layouts.iter().map(|l| l.entities.iter().map(|e| e.as_ref()).collect()))
++            .chain(user_blocks.iter().map(|(_, _, b)| b.entities.iter().map(|e| e.as_ref()).collect())),
++    );
+     // Dimension blocks.
+     let mut dim_defs: Vec<(String, String, Vec<Entity>)> = Vec::new(); // filled below
+     let mut n = 1;
+@@ -1675,6 +1842,14 @@ fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
+             }
+         }
+     }
++    // Standard arrowhead blocks other programs' data names by handle (a leader's DSTYLE
++    // override, a multileader kept as read): written again, or the reference ends up null and
++    // the arrowhead reverts to the default.
++    for (kind, name) in d.foreign.targets.values() {
++        if let Some(n) = dxf_ext::standard_arrow(name).filter(|_| matches!(kind.as_str(), "BLOCK_RECORD" | "BLOCK")) {
++            arrow_names.push(n.to_string());
++        }
++    }
+     let mut arrow_defs: Vec<(String, String, Vec<Entity>)> = Vec::new();
+     for name in arrow_names {
+         let key = name.trim().to_ascii_uppercase();
+diff --git a/crates/io/tests/entity_props_roundtrip.rs b/crates/io/tests/entity_props_roundtrip.rs
+index d86d0b4..c8a15bb 100644
+--- a/crates/io/tests/entity_props_roundtrip.rs
++++ b/crates/io/tests/entity_props_roundtrip.rs
+@@ -263,3 +263,88 @@ fn polyface_and_polygon_mesh_polylines_become_faces_not_bogus_vertices() {
+     let d = read_dxf(dxf(&refs).as_bytes()).expect("read hostile mesh");
+     assert_eq!(d.model.iter().count(), 0);
+ }
++
++/// Count of `0 NAME` records in a written DXF.
++fn records(s: &str, name: &str) -> usize {
++    let lines: Vec<&str> = s.lines().map(str::trim).collect();
++    lines.windows(2).filter(|w| w[0] == "0" && w[1] == name).count()
++}
++
++#[test]
++fn meshes_are_saved_as_meshes_not_loose_faces() {
++    let p = |x: f64, y: f64, z: f64| Vec3::new(x, y, z);
++    // Polyface with a hidden triangle edge.
++    let mut recs: Vec<Vec<(i32, &str)>> =
++        vec![vec![(0, "POLYLINE"), (8, "0"), (66, "1"), (10, "0"), (20, "0"), (30, "0"), (70, "64"), (71, "4"), (72, "2")]];
++    for (x, y) in [("0", "0"), ("1", "0"), ("1", "1"), ("0", "1")] {
++        recs.push(vertex(x, y, "2", "192"));
++    }
++    recs.push(face(["1", "2", "3", "4"]));
++    recs.push(face(["1", "3", "-4", "0"]));
++    recs.push(vec![(0, "SEQEND"), (8, "0")]);
++    let refs: Vec<&[(i32, &str)]> = recs.iter().map(Vec::as_slice).collect();
++    let d = read_dxf(dxf(&refs).as_bytes()).expect("read polyface");
++    let out = write_dxf(&d);
++    assert_eq!(records(&out, "POLYLINE"), 1, "one polyface mesh");
++    assert_eq!(records(&out, "3DFACE"), 0);
++    assert_eq!(faces(&roundtrip(&d)), faces(&d));
++    assert_eq!(faces(&roundtrip(&roundtrip(&d))), faces(&d), "stable over saves");
++
++    // 3×2 polygon mesh: saved as the same grid.
++    let mut recs: Vec<Vec<(i32, &str)>> =
++        vec![vec![(0, "POLYLINE"), (8, "0"), (66, "1"), (10, "0"), (20, "0"), (30, "0"), (70, "16"), (71, "3"), (72, "2")]];
++    for (x, y) in [("0", "0"), ("0", "1"), ("1", "0"), ("1", "1"), ("2", "0"), ("2", "1")] {
++        recs.push(vertex(x, y, "0", "64"));
++    }
++    recs.push(vec![(0, "SEQEND"), (8, "0")]);
++    let refs: Vec<&[(i32, &str)]> = recs.iter().map(Vec::as_slice).collect();
++    let d = read_dxf(dxf(&refs).as_bytes()).expect("read mesh");
++    let out = write_dxf(&d);
++    assert_eq!(records(&out, "POLYLINE"), 1);
++    assert_eq!(records(&out, "VERTEX"), 6, "the grid's own vertices");
++    assert_eq!(faces(&roundtrip(&d)), faces(&d));
++
++    // A face moved out of the grid: still one mesh, now a polyface.
++    let mut d = Drawing::new_metric();
++    let add_face = |d: &mut Drawing, corners: [Vec3; 4], index: u32| {
++        let mesh = Some(MeshPart { id: 0x77, index, grid: Some((3, 2, 0)) });
++        d.add(&Space::Model, Common::default(), EntityKind::Face3d(Face3d { corners, hidden_edges: 0, mesh })).expect("add")
++    };
++    add_face(&mut d, [p(0.0, 0.0, 0.0), p(0.0, 1.0, 0.0), p(1.0, 1.0, 0.0), p(1.0, 0.0, 0.0)], 0);
++    add_face(&mut d, [p(1.0, 0.0, 5.0), p(1.0, 1.0, 0.0), p(2.0, 1.0, 0.0), p(2.0, 0.0, 0.0)], 1);
++    let out = write_dxf(&d);
++    assert_eq!(records(&out, "POLYLINE"), 1);
++    assert_eq!(records(&out, "3DFACE"), 0);
++    let back: Vec<[Vec3; 4]> = faces(&roundtrip(&d)).into_iter().map(|f| f.corners).collect();
++    assert_eq!(back, faces(&d).into_iter().map(|f| f.corners).collect::<Vec<_>>());
++
++    // A copied face (same index twice) is written as a plain 3D face beside the mesh.
++    add_face(&mut d, [p(0.0, 0.0, 0.0), p(0.0, 1.0, 0.0), p(1.0, 1.0, 0.0), p(1.0, 0.0, 0.0)], 0);
++    let out = write_dxf(&d);
++    assert_eq!((records(&out, "POLYLINE"), records(&out, "3DFACE")), (1, 1));
++    assert_eq!(faces(&roundtrip(&d)).len(), 3);
++}
++
++
++#[test]
++fn a_leaders_standard_arrowhead_block_survives_a_save() {
++    // A leader whose DSTYLE override names `_ArchTick` by handle (341 = DIMLDRBLK); nothing
++    // inserts the block, and no dimension style uses it.
++    let s = "0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nBLOCK_RECORD\n5\n1\n70\n1\n0\nBLOCK_RECORD\n5\nA0\n100\nAcDbSymbolTableRecord\n100\nAcDbBlockTableRecord\n2\n_ArchTick\n0\nENDTAB\n0\nENDSEC\n\
++0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n5\nA1\n330\nA0\n8\n0\n2\n_ArchTick\n70\n0\n10\n0\n20\n0\n30\n0\n0\nLINE\n5\nA2\n330\nA0\n8\n0\n10\n-0.5\n20\n-0.5\n30\n0\n11\n0.5\n21\n0.5\n31\n0\n0\nENDBLK\n5\nA3\n330\nA0\n8\n0\n0\nENDSEC\n\
++0\nSECTION\n2\nENTITIES\n0\nLEADER\n5\nB0\n8\n0\n100\nAcDbEntity\n100\nAcDbLeader\n3\nStandard\n71\n1\n72\n0\n76\n2\n10\n0\n20\n0\n30\n0\n10\n10\n20\n10\n30\n0\n1001\nACAD\n1000\nDSTYLE\n1002\n{\n1070\n341\n1005\nA0\n1002\n}\n0\nENDSEC\n0\nEOF\n";
++    let d = read_dxf(s.as_bytes()).expect("read");
++    let out = write_dxf(&d);
++    let t: Vec<&str> = out.lines().map(str::trim).collect();
++    let pair = |i: usize| (t[i], t[i + 1]);
++    // The written _ArchTick block record and the handle the leader's override names.
++    let rec = (0..t.len() - 1).step_by(2).find(|&i| pair(i) == ("0", "BLOCK_RECORD") && {
++        let end = (i + 2..t.len() - 1).step_by(2).find(|&k| t[k] == "0").unwrap_or(t.len());
++        (i..end).step_by(2).any(|k| pair(k) == ("2", "_ArchTick") || pair(k) == ("2", "_ARCHTICK"))
++    });
++    let rec = rec.expect("arrowhead block record written");
++    let rec_handle = (rec..t.len() - 1).step_by(2).find(|&k| t[k] == "5").map(|k| t[k + 1]).expect("handle");
++    let ldr = (0..t.len() - 1).step_by(2).find(|&i| pair(i) == ("0", "LEADER")).expect("leader");
++    let named = (ldr..t.len() - 1).step_by(2).find(|&k| t[k] == "1005").map(|k| t[k + 1]).expect("override kept");
++    assert_eq!(named, rec_handle, "the override still names the arrowhead block");
++}

@@ -605,7 +605,11 @@ async function roomFor(at: Pick<Place, "libraryId" | "owner">): Promise<number> 
  * Stores an upload at `path` (a name, or "folder/sub/name" for folder uploads) under `target`.
  * A file that is already there gets a new version, like saving over it.
  */
-export async function upload(me: Me, target: Target, path: string, body: ReadableStream<Uint8Array> | null, declaredSize?: number): Promise<Item> {
+export async function upload(
+  me: Me, target: Target, path: string, body: ReadableStream<Uint8Array> | null, declaredSize?: number, opts: { modifiedAt?: Date | null } = {},
+): Promise<Item> {
+  // A migration keeps the file's original date (never one in the future).
+  const when = opts.modifiedAt && !Number.isNaN(opts.modifiedAt.getTime()) && opts.modifiedAt.getTime() <= Date.now() ? opts.modifiedAt : null;
   const parts = splitPath(path);
   const name = parts.pop()!;
   let at = await place(me, target);
@@ -623,14 +627,14 @@ export async function upload(me: Me, target: Target, path: string, body: Readabl
 
   const out = await tx(async (tq) => {
     const [made] = await tq<{ id: string }>(
-      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id)
-       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, $11)
+      `INSERT INTO items (space, library_id, owner, parent_id, kind, name, mime, size, sha256, version, text, created_by, modified_by, label_id, created_at, modified_at)
+       VALUES ($1, $2, $3, $4, 'file', $5, $6, $7, $8, 1, $9, $10, $10, $11, COALESCE($12, now()), COALESCE($12, now()))
        ON CONFLICT (space, COALESCE(parent_id, '${NIL}'::uuid), lower(name)) WHERE trash_root IS NULL DO NOTHING
        RETURNING id`,
-      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, initial?.id.toLowerCase() ?? null],
+      [at.space, at.libraryId, at.owner, at.parentId, name, mime, stored.size, stored.sha256, text, me.email, initial?.id.toLowerCase() ?? null, when],
     );
     if (made) {
-      await tq("INSERT INTO versions (item_id, n, size, sha256, created_by) VALUES ($1, 1, $2, $3, $4)", [made.id, stored.size, stored.sha256, me.email]);
+      await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, 1, $2, $3, $4, COALESCE($5, now()))", [made.id, stored.size, stored.sha256, me.email, when]);
       await log(made.id, me, "uploaded", "", tq);
       if (initial) await log(made.id, me, "labeled", `${initial.name}${carried ? " (from the file)" : " (default)"}`, tq);
       return { id: made.id, pruned: [] as string[] };
@@ -643,12 +647,12 @@ export async function upload(me: Me, target: Target, path: string, body: Readabl
     if (cur.kind === "folder") throw new UserError(`A folder named "${cur.name}" is already here`, 409);
     if (cur.sha256 === stored.sha256) return { id: cur.id, pruned: [] }; // same bytes: nothing new to keep
     const n = cur.version + 1;
-    await tq("INSERT INTO versions (item_id, n, size, sha256, created_by) VALUES ($1, $2, $3, $4, $5)", [cur.id, n, stored.size, stored.sha256, me.email]);
+    await tq("INSERT INTO versions (item_id, n, size, sha256, created_by, created_at) VALUES ($1, $2, $3, $4, $5, COALESCE($6, now()))", [cur.id, n, stored.size, stored.sha256, me.email, when]);
     // The label stays with the file; one the new version carries only fills in a missing one.
     await tq(
-      `UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = now(),
+      `UPDATE items SET size = $2, sha256 = $3, version = $4, mime = $5, text = $6, modified_by = $7, modified_at = COALESCE($9, now()),
          label_id = COALESCE(label_id, $8) WHERE id = $1`,
-      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, carried?.id.toLowerCase() ?? null],
+      [cur.id, stored.size, stored.sha256, n, mime, text, me.email, carried?.id.toLowerCase() ?? null, when],
     );
     await log(cur.id, me, "uploaded", `version ${n}`, tq);
     if (!cur.label_id && carried) await log(cur.id, me, "labeled", `${carried.name} (from the file)`, tq);
@@ -1066,15 +1070,20 @@ export async function linkFolder(token: string, itemId?: string | null): Promise
 
 /* --------------------------------------------------------------- libraries */
 
-export type Library = { id: string; name: string; description: string; role: Role; members: number };
+/** `managedBy`: the app that decides who is in it (e.g. "sites:12"), or null when its owners do. */
+/** `team` is set for a team's library: its name and members are managed in Groups. */
+export type Library = { id: string; name: string; description: string; role: Role; members: number; managedBy: string | null; team: boolean };
+
+export const TEAM_MEMBERS = "Members of a team's library are managed in Groups";
 
 export async function libraries(me: Me): Promise<Library[]> {
-  const rows = await q<{ id: string; name: string; description: string; role: Role; members: string }>(
-    `SELECT l.id, l.name, l.description, m.role, (SELECT COUNT(*) FROM library_members x WHERE x.library_id = l.id) AS members
+  const rows = await q<{ id: string; name: string; description: string; role: Role; members: string; managed_by: string | null; team: boolean }>(
+    `SELECT l.id, l.name, l.description, m.role, l.managed_by, l.source IS NOT NULL AS team,
+            (SELECT COUNT(*) FROM library_members x WHERE x.library_id = l.id) AS members
      FROM libraries l JOIN library_members m ON m.library_id = l.id AND m.email = $1 ORDER BY lower(l.name)`,
     [me.email],
   );
-  return rows.map((r) => ({ ...r, members: Number(r.members) }));
+  return rows.map(({ managed_by, ...r }) => ({ ...r, members: Number(r.members), managedBy: managed_by }));
 }
 
 export async function createLibrary(me: Me, rawName: string, description = ""): Promise<Library> {
@@ -1088,7 +1097,7 @@ export async function createLibrary(me: Me, rawName: string, description = ""): 
     await tq("INSERT INTO library_members (library_id, email, role) VALUES ($1, $2, 'owner')", [l.id, me.email]);
     return l;
   });
-  return { id: lib.id, name, description, role: "owner", members: 1 };
+  return { id: lib.id, name, description, role: "owner", members: 1, managedBy: null, team: false };
 }
 
 async function libraryOwner(me: Me, libraryId: string): Promise<string> {
@@ -1099,15 +1108,41 @@ async function libraryOwner(me: Me, libraryId: string): Promise<string> {
   return lib;
 }
 
-export async function updateLibrary(me: Me, libraryId: string, patch: { name?: string; description?: string }): Promise<void> {
+/** Groups pushes a team library's members and name, so a change made here would not last. */
+async function notTeam(libraryId: string, message = TEAM_MEMBERS): Promise<void> {
+  const [l] = await q<{ source: string | null }>("SELECT source FROM libraries WHERE id = $1", [libraryId]);
+  if (l?.source) throw new UserError(message, 409);
+}
+
+/** Refuses changes to a library's name or people when another app keeps them. */
+async function refuseManaged(lib: string): Promise<void> {
+  const [l] = await q<{ managed_by: string | null }>("SELECT managed_by FROM libraries WHERE id = $1", [lib]);
+  if (l?.managed_by?.startsWith("sites:")) throw new UserError("This is a site's document library: change its name and people in Sites", 409);
+  if (l?.managed_by) throw new UserError("This library's people are managed in another app", 409);
+}
+
+async function unmanagedLibrary(me: Me, libraryId: string): Promise<string> {
   const lib = await libraryOwner(me, libraryId);
+  await refuseManaged(lib);
+  return lib;
+}
+
+export async function updateLibrary(me: Me, libraryId: string, patch: { name?: string; description?: string }): Promise<void> {
+  const lib = await unmanagedLibrary(me, libraryId);
+  if (patch.name !== undefined) await notTeam(lib, "A team's library is renamed in Groups");
   if (patch.name !== undefined) await q("UPDATE libraries SET name = $2 WHERE id = $1", [lib, cleanName(patch.name)]);
   if (patch.description !== undefined) await q("UPDATE libraries SET description = $2 WHERE id = $1", [lib, String(patch.description).slice(0, 500)]);
 }
 
 /** Only an empty library can be deleted, so nobody loses files by accident. */
 export async function deleteLibrary(me: Me, libraryId: string): Promise<void> {
-  const lib = await libraryOwner(me, libraryId);
+  const lib = await unmanagedLibrary(me, libraryId);
+  await notTeam(lib, "A team's library goes when the team is deleted in Groups");
+  await removeLibrary(lib);
+}
+
+/** Deletes an empty library (409 while it holds files); one with held files loses its members and stays. */
+export async function removeLibrary(lib: string): Promise<void> {
   const [live] = await q("SELECT 1 FROM items WHERE library_id = $1 AND trash_root IS NULL LIMIT 1", [lib]);
   if (live) throw new UserError("Move or delete everything in the library first", 409);
   const ids = (await q<{ id: string }>("SELECT id FROM items WHERE library_id = $1 AND parent_id IS NULL", [lib])).map((r) => r.id);
@@ -1128,7 +1163,8 @@ export async function members(me: Me, libraryId: string): Promise<{ email: strin
 }
 
 export async function setMember(me: Me, libraryId: string, rawEmail: unknown, rawRole: unknown): Promise<void> {
-  const lib = await libraryOwner(me, libraryId);
+  const lib = await unmanagedLibrary(me, libraryId);
+  await notTeam(lib);
   const email = cleanEmail(rawEmail);
   if (!isRole(rawRole)) throw new UserError("Pick a role");
   await tx(async (tq) => {
@@ -1144,6 +1180,8 @@ export async function setMember(me: Me, libraryId: string, rawEmail: unknown, ra
 export async function removeMember(me: Me, libraryId: string, rawEmail: unknown): Promise<void> {
   const email = String(rawEmail ?? "").toLowerCase();
   const lib = email === me.email ? id(libraryId) : await libraryOwner(me, libraryId);
+  await notTeam(lib);
+  await refuseManaged(lib);
   await tx(async (tq) => {
     await tq("DELETE FROM library_members WHERE library_id = $1 AND email = $2", [lib, email]);
     await keepAnOwner(tq, lib);

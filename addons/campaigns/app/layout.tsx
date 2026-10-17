@@ -1,23 +1,20 @@
-import './globals.css';
-import type { Metadata } from 'next';
-import { Nav } from './nav';
+import "./globals.css";
+import type { Metadata } from "next";
+import { SuiteBar } from "@/components/SuiteBar";
+import { currentUser } from "@/lib/api";
 
 export const metadata: Metadata = {
-  title: 'SynergyMail',
-  description: 'Marketing email platform on SynergyDB',
+  title: "Synergy Campaigns",
+  description: "Email marketing: audiences, campaigns, automations and reports.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const who = await currentUser();
   return (
     <html lang="en">
-      <body>
-        <div className="app">
-          <aside className="side">
-            <div className="brand">Synergy<span>Mail</span></div>
-            <Nav />
-          </aside>
-          <div className="main">{children}</div>
-        </div>
+      <body className="suite-body">
+        <SuiteBar app="campaigns" user={who?.email ?? ""} domain={process.env.SUITE_DOMAIN} />
+        <div className="suite-main">{children}</div>
       </body>
     </html>
   );

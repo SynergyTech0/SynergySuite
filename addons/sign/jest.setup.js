@@ -1,8 +1,7 @@
 import '@testing-library/jest-dom'
 
 // Mock environment variables
-process.env.NEXTAUTH_SECRET = 'test-secret-key'
-process.env.NEXTAUTH_URL = 'http://localhost:3000'
+process.env.SIGN_PUBLIC_URL = 'http://localhost:3300'
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test'
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock'
 process.env.AWS_ACCESS_KEY_ID = 'test'
@@ -30,8 +29,8 @@ jest.mock('next/navigation', () => ({
   },
 }))
 
-// Mock NextAuth
-jest.mock('next-auth/react', () => ({
+// The browser side of the suite sign-in
+jest.mock('@/lib/session-client', () => ({
   useSession: jest.fn(() => ({
     data: null,
     status: 'unauthenticated',

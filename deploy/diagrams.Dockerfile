@@ -53,6 +53,7 @@ COPY apps/notes/package.json apps/notes/
 COPY apps/office/package.json apps/office/
 COPY apps/planner/package.json apps/planner/
 COPY apps/projects/package.json apps/projects/
+COPY apps/field/package.json apps/field/
 COPY apps/contracts/package.json apps/contracts/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
@@ -61,7 +62,9 @@ COPY apps/todo/package.json apps/todo/
 COPY apps/phone/package.json apps/phone/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/groups/package.json apps/groups/
 COPY addons/portal/package.json addons/portal/
+COPY addons/campaigns/package.json addons/campaigns/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/diagrams --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
 COPY apps/diagrams apps/diagrams

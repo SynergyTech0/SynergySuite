@@ -31,13 +31,15 @@ RUN for i in 1 2 3 4; do \
       git clone --depth 1 --branch ${CADCRAFT_REF} https://github.com/storytold/cadcraft.git /engine/.cadcraft && exit 0; \
       rm -rf /engine/.cadcraft; echo "clone failed, retrying ($i)" >&2; sleep $((i * 5)); \
     done; exit 1
-COPY apps/cad/engine/dwg-wasm.patch apps/cad/engine/cadcraft-brand.patch /engine/
+COPY apps/cad/engine/dwg-wasm.patch apps/cad/engine/cadcraft-brand.patch apps/cad/engine/cadcraft-save-fidelity.patch /engine/
 COPY apps/cad/engine/dwg /engine/dwg
 # A Windows checkout made before .gitattributes pinned LF may have CRLF patches, which don't apply.
 # cadcraft-brand.patch shows Synergy CAD in place of CADCraft, keeping the credit in About.
-RUN sed -i 's/\r$//' /engine/dwg-wasm.patch /engine/cadcraft-brand.patch \
+# cadcraft-save-fidelity.patch keeps 3D meshes and arrowhead blocks when a drawing is saved.
+RUN sed -i 's/\r$//' /engine/dwg-wasm.patch /engine/cadcraft-brand.patch /engine/cadcraft-save-fidelity.patch \
  && git -C /engine/.cadcraft apply /engine/dwg-wasm.patch \
- && git -C /engine/.cadcraft apply /engine/cadcraft-brand.patch
+ && git -C /engine/.cadcraft apply /engine/cadcraft-brand.patch \
+ && git -C /engine/.cadcraft apply /engine/cadcraft-save-fidelity.patch
 # Two jobs keep peak memory within a small build machine.
 ARG CARGO_BUILD_JOBS=2
 WORKDIR /engine/.cadcraft/apps/cadcraft-web
@@ -97,8 +99,10 @@ COPY apps/sites/package.json apps/sites/
 COPY apps/stream/package.json apps/stream/
 COPY apps/trust/package.json apps/trust/
 COPY apps/whiteboard/package.json apps/whiteboard/
+COPY apps/groups/package.json apps/groups/
 COPY apps/hr/package.json apps/hr/
 COPY addons/portal/package.json addons/portal/
+COPY addons/campaigns/package.json addons/campaigns/
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund --workspace apps/cad --workspace packages/shell --workspace packages/search --include-workspace-root \
  && npm run build:packages
 COPY apps/cad apps/cad

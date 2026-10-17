@@ -1,13 +1,12 @@
-import { NextResponse } from 'next/server';
-import { getCampaign, campaignStats, recentEvents } from '@/lib/repo';
+import { body, route, type Params } from "@/lib/api";
+import { deleteCampaign, getCampaign, readiness, updateCampaign } from "@/lib/campaigns";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const camp = await getCampaign(id);
-  if (!camp) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  const stats = await campaignStats(id);
-  const events = await recentEvents(id);
-  return NextResponse.json({ campaign: camp, stats, events });
-}
+/** The campaign, and for a draft what still stops it going out and how many it would reach. */
+export const GET = route(async (_ctx, _req, { params }: Params<"id">) => {
+  const c = await getCampaign((await params).id);
+  return { campaign: c, readiness: c.status === "draft" ? await readiness(c) : null };
+});
+export const PATCH = route(async (ctx, req, { params }: Params<"id">) => updateCampaign(ctx, (await params).id, await body(req)));
+export const DELETE = route(async (ctx, _req, { params }: Params<"id">) => deleteCampaign(ctx, (await params).id));

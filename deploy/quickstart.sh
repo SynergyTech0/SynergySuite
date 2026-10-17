@@ -58,6 +58,7 @@ else
   setvar OAUTH2_COOKIE_SECRET "$(hex 16)"
   setvar PROXY_SHARED_SECRET "$(hex 32)"
   setvar CAL_SVC_TOKEN "$(hex 32)"
+  setvar DRIVE_SVC_TOKEN "$(hex 32)"
   setvar SEED_ADMIN_EMAIL "admin@$domain"
   setvar SEED_ADMIN_PASSWORD "Suite-$(hex 8)"
   # Local mode: certificates from Caddy's own CA, and every port bound to this machine only.
@@ -65,6 +66,7 @@ else
   setvar HTTP_PUBLISH 127.0.0.1:80
   setvar HTTPS_PUBLISH 127.0.0.1:443
   setvar MAIL_ENCRYPTION_KEY "$(openssl rand -base64 32)"
+  setvar MIGRATION_ENCRYPTION_KEY "$(openssl rand -base64 32)"
   setvar BOOKS_ENCRYPTION_KEY "$(hex 32)"
   setvar INSIGHTS_SECRET "$(hex 32)"
   setvar STALWART_ADMIN_PASSWORD "$(hex 24)"
@@ -89,6 +91,16 @@ fill DEVICES_MDM_API_KEY "$(hex 32)"
 fill DEVICES_MDM_WEBHOOK_KEY "$(hex 32)"
 fill DEVICES_SCEP_CHALLENGE "$(hex 32)"
 fill HR_DATA_KEY "$(hex 32)"
+# Meet and Phone's media server (the livekit service).
+fill LIVEKIT_API_KEY "API$(hex 6)"
+fill LIVEKIT_API_SECRET "$(hex 32)"
+if [ "$(getvar CADDY_GLOBAL_OPTIONS)" = local_certs ]; then
+  # Local mode: browsers on this machine send call media to 127.0.0.1:7881/tcp and 7882/udp.
+  fill LIVEKIT_NODE_IP 127.0.0.1
+  fill LIVEKIT_USE_EXTERNAL_IP false
+  fill LIVEKIT_TCP_PUBLISH 127.0.0.1:7881
+  fill LIVEKIT_UDP_PUBLISH 127.0.0.1:7882
+fi
 
 domain=$(getvar SUITE_DOMAIN)
 [ -n "$domain" ] || die "SUITE_DOMAIN is empty in $ENV_FILE."
@@ -112,13 +124,19 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1"
-  for h in auth sso admin base books builder bookings calendar chat commerce contacts contracts crm desk devices diagrams drive engage flow flow-studio forms insights loop mail meet notes office ops people hr phone planner portal projects search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin base books builder bookings campaigns calendar chat commerce contacts contracts crm desk devices diagrams drive engage field flow flow-studio forms groups insights loop mail meet notes office ops people hr phone planner portal projects search sign sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi
 
 services=()
-if [ $# -gt 0 ]; then services=("${CORE[@]}" "$@"); fi
+if [ $# -gt 0 ]; then
+  services=("${CORE[@]}" "$@")
+  # Meet and Phone need the media server.
+  for s in "$@"; do
+    case "$s" in meet|phone) services+=(livekit); break ;; esac
+  done
+fi
 
 # The suite's images are built by .github/workflows/images.yml and published to the GitHub
 # Container Registry, so by default they are downloaded, not built here. Anything that can't be
@@ -223,7 +241,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|contracts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|campaigns|calendar|chat|commerce|contacts|contracts|crm|desk|devices|diagrams|drive|engage|field|flow|forms|groups|insights|loop|mail|meet|notes|office|ops|hr|phone|planner|portal|projects|search|sign|sites|todo|trust|whiteboard)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""

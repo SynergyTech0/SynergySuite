@@ -23,6 +23,7 @@ import { sendEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { generateInvitationToken } from "@/lib/invitation-tokens";
 import { renderEnterprisePaymentConfirmation } from "@/lib/email-templates/enterprise-payment-confirmation";
+import { publicBase } from "@/lib/urls";
 
 // Disable body parsing, need raw body for webhook signature verification
 export const runtime = "nodejs";
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
 					}
 
 					const passwordSetupUrl = passwordSetupToken
-						? `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/enterprise/setup-password?token=${passwordSetupToken}`
+						? `${publicBase()}/dashboard`
 						: undefined;
 
 					// Send confirmation email with password setup link

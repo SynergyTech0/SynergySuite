@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { generateInvitationToken } from "@/lib/invitation-tokens";
 import { NotificationType } from "@prisma/client";
+import { publicBase } from "@/lib/urls";
 
 export async function PUT(request: Request) {
 	const session = await getServerSession(authOptions);
@@ -105,7 +106,7 @@ export async function PUT(request: Request) {
 							<table role="presentation" style="margin: 0 auto;">
 								<tr>
 									<td style="text-align: center;">
-										<a href="${process.env.NEXTAUTH_URL}/auth/login" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); transition: transform 0.2s;">Log In to Your Account</a>
+										<a href="${publicBase()}/dashboard" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); transition: transform 0.2s;">Log In to Your Account</a>
 									</td>
 								</tr>
 							</table>
@@ -171,7 +172,7 @@ export async function PUT(request: Request) {
 							<table role="presentation" style="margin:0 auto;">
 								<tr>
 									<td style="text-align:center;">
-										<a href="${process.env.NEXTAUTH_URL}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">Manage Users</a>
+										<a href="${publicBase()}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">Manage Users</a>
 									</td>
 								</tr>
 							</table>
@@ -237,7 +238,7 @@ export async function PUT(request: Request) {
 	});
 
 	// Send invitation email
-	const invitationUrl = `${process.env.NEXTAUTH_URL}/auth/signup?invitation=${token}`;
+	const invitationUrl = `${publicBase()}/dashboard/enterprise`;
 
 	await sendEmail(
 		email,
@@ -347,7 +348,7 @@ export async function PUT(request: Request) {
 						<table role="presentation" style="margin:0 auto;">
 							<tr>
 								<td style="text-align:center;">
-									<a href="${process.env.NEXTAUTH_URL}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">View Invitations</a>
+									<a href="${publicBase()}/dashboard/enterprise/" style="display:inline-block;background:linear-gradient(135deg,#2563eb 0%,#4f46e5 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:14px;box-shadow:0 4px 12px rgba(37,99,235,0.3);">View Invitations</a>
 								</td>
 							</tr>
 						</table>
@@ -376,4 +377,4 @@ export async function PUT(request: Request) {
 		message: "Invitation sent successfully",
 		invitationToken: token,
 	});
-}
+}

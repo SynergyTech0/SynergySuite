@@ -12,10 +12,12 @@ async function req(method, url, body) {
 }
 const api = {
   me: () => req('GET', '/api/me'),
+  calendars: () => req('GET', '/api/calendars'),
   events: (from, to) => req('GET', `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`),
   create: e => req('POST', '/api/events', e),
   update: (id, e) => req('PATCH', `/api/events/${id}`, e),
   remove: id => req('DELETE', `/api/events/${id}`),
+  draft: d => req('POST', '/api/draft', d),
 };
 
 const HOUR_START = 7, HOUR_END = 21;
@@ -23,6 +25,8 @@ const startOfWeek = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setD
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 const fmtHour = h => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
 const fmtTime = d => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// The picker value for an event's calendar: personal, company or group:<source>.
+const calendarId = e => e.calendar === 'group' ? `group:${e.group_source}` : e.calendar;
 
 export default function App() {
   const [me, setMe] = useState(null);
@@ -34,6 +38,7 @@ export default function App() {
   });
   const [weekStart, setWeekStart] = useState(startOfWeek(link.at || new Date()));
   const [events, setEvents] = useState([]);
+  const [calendars, setCalendars] = useState([]); // [{id, name, source?, role?}]
   const [editor, setEditor] = useState(null); // {event?, startAt?, endAt?}
   const [error, setError] = useState('');
   const flash = useCallback(e => { setError(String(e.message || e)); setTimeout(() => setError(''), 5000); }, []);
@@ -43,6 +48,11 @@ export default function App() {
   }, [flash]);
 
   useEffect(() => { api.me().then(setMe).catch(flash); }, []); // eslint-disable-line
+  useEffect(() => { api.calendars().then(setCalendars).catch(flash); }, []); // eslint-disable-line
+  const calendarName = e => calendars.find(c => c.id === calendarId(e))?.name || (e.calendar === 'group' ? 'Group calendar' : e.calendar);
+  // The organizer, or an owner of the group calendar the event is on.
+  const canEdit = e => e.owner_email === me?.email
+    || (e.calendar === 'group' && calendars.some(c => c.id === calendarId(e) && c.role === 'owner'));
   useEffect(() => { refresh(weekStart); }, [weekStart, refresh]);
   const [linkOpened, setLinkOpened] = useState(false);
   useEffect(() => {
@@ -102,7 +112,7 @@ export default function App() {
               <div className="day-head">
                 {day.toLocaleDateString([], { weekday: 'short' })} <b>{day.getDate()}</b>
                 {allDayFor(day).map(e => (
-                  <button type="button" key={e.id} className="allday-chip" onClick={() => setEditor({ event: e })}>{e.title}</button>
+                  <button type="button" key={e.id} className={`allday-chip ${e.calendar}`} onClick={() => setEditor({ event: e })}>{e.title}</button>
                 ))}
               </div>
               <div className="day-body"
@@ -123,6 +133,7 @@ export default function App() {
                       style={{ top, height }}
                       onClick={() => setEditor({ event: e })}>
                       <span className="ev-title">{e.title}</span>
+                      {e.calendar === 'group' && <span className="ev-cal">{calendarName(e)}</span>}
                       <span className="ev-time">{fmtTime(e.start_at)}</span>
                     </button>
                   );
@@ -136,6 +147,9 @@ export default function App() {
       {editor && (
         <EventEditor
           me={me}
+          calendars={calendars}
+          calendarName={calendarName}
+          canEdit={!editor.event || canEdit(editor.event)}
           event={editor.event}
           defaults={editor}
           onClose={() => setEditor(null)}
@@ -162,18 +176,42 @@ const toLocal = d => {
   return x.toISOString().slice(0, 16);
 };
 
-function EventEditor({ me, event, defaults, onClose, onSave, onDelete }) {
+function EventEditor({ me, calendars, calendarName, canEdit, event, defaults, onClose, onSave, onDelete }) {
   const [f, setF] = useState({
     title: event?.title || '',
     description: event?.description || '',
     location: event?.location || '',
-    calendar: event?.calendar || 'personal',
+    calendar: event ? calendarId(event) : 'personal',
     startAt: toLocal(event?.start_at || defaults.startAt),
     endAt: toLocal(event?.end_at || defaults.endAt),
     attendees: (event?.attendees || []).join(', '),
   });
   const set = p => setF(prev => ({ ...prev, ...p }));
   const mine = !event || event.owner_email === me?.email;
+  // Draft with Copilot: notes from the title, attendees and what the person asks for. Saved only with Save.
+  const [assist, setAssist] = useState(false);
+  const [ask, setAsk] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState('');
+  async function copilot(mode) {
+    setDrafting(true);
+    setDraftError('');
+    try {
+      const { text } = await api.draft({
+        mode, instructions: ask, title: f.title, description: f.description, location: f.location,
+        attendees: f.attendees, when: f.startAt ? new Date(f.startAt).toLocaleString() : '',
+      });
+      set({ description: text });
+      setAssist(false);
+    } catch (e) {
+      setDraftError(String(e.message || e));
+    } finally {
+      setDrafting(false);
+    }
+  }
+  const groups = calendars.filter(c => c.source);
+  // An event on a group calendar the person has left still shows its own calendar.
+  const stale = f.calendar.startsWith('group:') && !groups.some(c => c.id === f.calendar);
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -183,8 +221,8 @@ function EventEditor({ me, event, defaults, onClose, onSave, onDelete }) {
     <div className="backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="event-editor-title"
         onClick={e => e.stopPropagation()}>
-        <h3 id="event-editor-title">{event ? (mine ? 'Edit event' : event.title) : 'New event'}</h3>
-        {mine ? (
+        <h3 id="event-editor-title">{event ? (canEdit ? 'Edit event' : event.title) : 'New event'}</h3>
+        {canEdit ? (
           <>
             <label>Title <input autoFocus value={f.title} onChange={e => set({ title: e.target.value })} /></label>
             <div className="row2">
@@ -192,21 +230,45 @@ function EventEditor({ me, event, defaults, onClose, onSave, onDelete }) {
               <label>End <input type="datetime-local" value={f.endAt} onChange={e => set({ endAt: e.target.value })} /></label>
             </div>
             <label>Calendar
-              <select value={f.calendar} onChange={e => set({ calendar: e.target.value })}>
+              <select value={f.calendar} disabled={!mine} onChange={e => set({ calendar: e.target.value })}>
                 <option value="personal">Personal</option>
                 <option value="company">Company (everyone sees)</option>
+                {groups.map(c => <option key={c.id} value={c.id}>{c.name} (group)</option>)}
+                {stale && <option value={f.calendar}>{calendarName(event)}</option>}
               </select>
             </label>
             <label>Location / link <input value={f.location} onChange={e => set({ location: e.target.value })} /></label>
             <label>Attendees <input placeholder="emails, comma separated" value={f.attendees} onChange={e => set({ attendees: e.target.value })} /></label>
-            <label>Notes <input value={f.description} onChange={e => set({ description: e.target.value })} /></label>
+            <label>Notes <textarea rows={4} maxLength={2000} value={f.description} onChange={e => set({ description: e.target.value })} /></label>
+            {me?.ai && (
+              <div className="assist">
+                {!assist ? (
+                  <button type="button" onClick={() => setAssist(true)}>✨ Draft with Copilot</button>
+                ) : (
+                  <>
+                    <input aria-label="What should the notes cover?" placeholder="What should the notes cover? e.g. agenda for the Q3 review"
+                      value={ask} maxLength={1000} onChange={e => setAsk(e.target.value)} />
+                    <div className="assist-actions">
+                      <button type="button" className="primary" disabled={drafting} onClick={() => copilot('write')}>{drafting ? 'Writing…' : 'Write notes'}</button>
+                      <button type="button" disabled={drafting || !f.description.trim()} onClick={() => copilot('rewrite')}>Rewrite</button>
+                      <button type="button" disabled={drafting || !f.description.trim()} onClick={() => copilot('shorten')}>Shorten</button>
+                      <button type="button" onClick={() => setAssist(false)}>Close</button>
+                    </div>
+                    <p className="hint">Copilot replaces the notes above. Check them, then Save.</p>
+                    {draftError && <p className="hint bad-text" role="alert">{draftError}</p>}
+                  </>
+                )}
+              </div>
+            )}
             <div className="modal-actions">
               {onDelete && <button className="bad" onClick={() => confirm('Delete event?') && onDelete()}>Delete</button>}
               <button onClick={onClose}>Cancel</button>
               <button className="primary" disabled={!f.title.trim()}
                 onClick={() => onSave({
                   title: f.title, description: f.description, location: f.location,
-                  calendar: f.calendar,
+                  ...(f.calendar.startsWith('group:')
+                    ? { calendar: 'group', groupSource: f.calendar.slice('group:'.length) }
+                    : { calendar: f.calendar }),
                   startAt: new Date(f.startAt).toISOString(),
                   endAt: new Date(f.endAt).toISOString(),
                   attendees: f.attendees.split(',').map(s => s.trim()).filter(Boolean),
@@ -218,7 +280,7 @@ function EventEditor({ me, event, defaults, onClose, onSave, onDelete }) {
             <p>{fmtRange(event)}</p>
             {event.location && <p>📍 {event.location}</p>}
             {event.description && <p className="hint">{event.description}</p>}
-            <p className="hint">Owner: {event.owner_email} · {event.calendar}</p>
+            <p className="hint">Owner: {event.owner_email} · {calendarName(event)}</p>
             <div className="modal-actions"><button onClick={onClose}>Close</button></div>
           </>
         )}

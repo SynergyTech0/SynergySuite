@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS movements (
   location_id UUID NOT NULL REFERENCES locations(id),
   qty         NUMERIC(14,3) NOT NULL,
   unit_cost   NUMERIC(14,4) NOT NULL DEFAULT 0,
-  kind        TEXT NOT NULL CHECK (kind IN ('receive', 'sale', 'return', 'adjust', 'count', 'transfer_in', 'transfer_out', 'cancel', 'mfg_issue', 'mfg_receipt', 'maint_issue')),
+  kind        TEXT NOT NULL CHECK (kind IN ('receive', 'sale', 'return', 'adjust', 'count', 'transfer_in', 'transfer_out', 'cancel', 'mfg_issue', 'mfg_receipt', 'maint_issue', 'service_issue')),
   ref_type    TEXT,
   ref_id      TEXT,
   note        TEXT NOT NULL DEFAULT '',
@@ -93,6 +93,13 @@ CREATE TABLE IF NOT EXISTS movements (
 );
 CREATE INDEX IF NOT EXISTS movements_product_idx ON movements (product_id, at DESC);
 CREATE INDEX IF NOT EXISTS movements_at_idx ON movements (at DESC);
+-- Field Service's parts (service_issue) came after the first installs: widen their check once.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'movements_kind_check' AND pg_get_constraintdef(oid) LIKE '%service_issue%') THEN
+    ALTER TABLE movements DROP CONSTRAINT IF EXISTS movements_kind_check;
+    ALTER TABLE movements ADD CONSTRAINT movements_kind_check CHECK (kind IN ('receive', 'sale', 'return', 'adjust', 'count', 'transfer_in', 'transfer_out', 'cancel', 'mfg_issue', 'mfg_receipt', 'maint_issue', 'service_issue'));
+  END IF;
+END $$;
 
 CREATE SEQUENCE IF NOT EXISTS po_number_seq;
 CREATE TABLE IF NOT EXISTS purchase_orders (

@@ -19,7 +19,6 @@ async function main() {
       lastName: 'User',
       name: 'Admin User',
       role: 'ADMIN',
-      tier: 'ENTERPRISE',
       referralCode: 'ADMIN_SYNERGY',
       subscription: {
         create: {
@@ -44,7 +43,6 @@ async function main() {
       lastName: 'Affiliate',
       name: 'Test Affiliate',
       role: 'SENDER',
-      tier: 'PRO',
       referralCode: 'TESTAFFILIATE',
       payoutMethod: 'stripe',
       payoutEmail: 'affiliate@synergysign.com',
@@ -74,7 +72,6 @@ async function main() {
         lastName: 'User',
         name: `Referral ${i} User`,
         role: 'SENDER',
-        tier: 'BASIC',
         referredById: affiliate.id,
         referralCode: `REF${i}_${Math.random().toString(36).substring(2, 8)}`.toUpperCase(),
         subscription: {

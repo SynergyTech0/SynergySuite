@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { FieldType } from "@prisma/client";
@@ -13,6 +13,7 @@ import fs from "fs/promises";
 import os from "os";
 import FormData from "form-data";
 import fetch from "node-fetch";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -301,6 +302,8 @@ export async function GET(
     }
 
     const { id: documentId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
 
     const document = await prisma.document.findUnique({
       where: { id: documentId },
@@ -347,6 +350,8 @@ export async function POST(
     }
 
     const { id: documentId } = await context.params;
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
 
     const document = await prisma.document.findUnique({
       where: { id: documentId },

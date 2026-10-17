@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { FieldType, Prisma } from "@prisma/client";
@@ -9,6 +9,7 @@ import {
   detectFieldsFromOcr,
   summarizeText,
 } from "@/lib/ocr-utils";
+import { documentForOwner, isDenied } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export async function POST(
     }
 
     const documentId = ((await context.params).id);
+    const __owner = await documentForOwner(documentId);
+    if (isDenied(__owner)) return __owner.denied;
 
     // Fetch document with signers
     const document = await prisma.document.findUnique({
@@ -249,9 +252,7 @@ export async function POST(
         originalWidth: Math.round(field.width),
         originalHeight: Math.round(field.height),
         // 🎯 AUTO-ASSIGN to party/signer
-        ...(assignedToId && {
-          document_signers: { connect: { id: assignedToId } }
-        }),
+        assignedToId,
       });
     }
 
@@ -296,7 +297,7 @@ export async function POST(
       data: {
         documentId,
         userId: user!.id,
-        action: "FIELDS_AUTO_DETECTED" as any, // ✅ Cast if not in enum
+        action: "FIELD_ADDED",
         details: {
           fieldsDetected: fieldsToCreate.length,
           pagesProcessed: images.length,
@@ -305,7 +306,7 @@ export async function POST(
     });
 
     // Count auto-assigned fields
-    const autoAssignedCount = fieldsToCreate.filter(f => f.document_signers).length;
+    const autoAssignedCount = fieldsToCreate.filter(f => f.assignedToId).length;
 
     console.log(
       `✅ Auto-detected ${fieldsToCreate.length} fields across ${images.length} pages (${autoAssignedCount} auto-assigned to parties)`

@@ -1,6 +1,6 @@
 // app/api/billing/subscription/set/route.tsx
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "@/lib/auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,6 +10,7 @@ import {
   BillingCycle,
   SubscriptionTier,
 } from "@/lib/stripe";
+import { publicBase } from "@/lib/urls";
 
 export async function POST(req: Request) {
   try {
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+    const baseUrl = publicBase();
 
     console.log("Creating checkout session:", {
       customerId: user.stripeAccountId,

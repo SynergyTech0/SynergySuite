@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/lib/session-client";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,8 @@ export function Sidebar() {
 
   const filteredNavigation = () => {
     let toReturn = navigation.filter(item => item.roles.includes(session?.user?.role || 'SIGNER'));
+    // Paid plans and affiliate payouts belong to the hosted product; a suite runs without them (SIGN_BILLING=1 shows them).
+    if (!session?.billing) toReturn = toReturn.filter(item => item.name !== 'Billing' && item.name !== 'Affiliates');
     toReturn = toReturn.filter(item => 
       !(item.exclude?.includes("ENTERPRISE") && session?.user?.subscription?.tier == "ENTERPRISE" && !session?.user?.isEnterpriseAdmin)
     );
@@ -89,7 +91,7 @@ export function Sidebar() {
         onMouseEnter={() => setHoverOpen(true)}
         onMouseLeave={() => setHoverOpen(false)}
         className={cn(
-          "fixed top-0 left-0 z-50 max-h-screen min-h-screen bg-white border-r border-gray-200",
+          "fixed top-12 bottom-0 left-0 z-50 bg-white border-r border-gray-200 overflow-y-auto",
           "transition-all duration-300 ease-in-out flex flex-col",
           sidebarOpen ? "w-72" : "w-20"
         )}

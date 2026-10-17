@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { stripe, STRIPE_PRICING, ENTERPRISE_PRICING } from "@/lib/stripe";
+import { publicBase } from "@/lib/urls";
 
 export async function POST(request: NextRequest) {
 	try {
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Create Stripe Checkout Session for yearly subscription
-		const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+		const baseUrl = publicBase();
 		const successUrl = `${baseUrl}/enterprise/payment/success?session_id={CHECKOUT_SESSION_ID}&requestId=${requestId}`;
 		const cancelUrl = `${baseUrl}/enterprise/payment?token=${token}&requestId=${requestId}`;
 

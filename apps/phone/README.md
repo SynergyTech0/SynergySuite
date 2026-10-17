@@ -18,12 +18,11 @@ Calls between colleagues need only the media server. Real phone numbers also nee
 ## Setting it up
 
 1. **Database**: new installs get a `phone` database from `deploy/postgres-init.sql`. On an existing install, create it once: `docker compose exec postgres psql -U postgres -c "CREATE DATABASE phone"`.
-2. **Media server webhook** (required): in Meet's `livekit.yaml`, uncomment the `webhook` section (see `apps/meet/deploy/livekit.template.yaml`) so it points at `https://phone.<your domain>/api/livekit/webhook`, and restart LiveKit. Without it calls ring but never connect their state.
+2. **Media server webhook** (required): the `livekit` service in `deploy/compose.yml` already sends its webhooks to Phone (`LIVEKIT_WEBHOOK_URL`). With a media server of your own, uncomment the `webhook` section in its `livekit.yaml` (see `apps/meet/deploy/livekit.template.yaml`) so it points at `https://phone.<your domain>/api/livekit/webhook`, and restart LiveKit. Without it calls ring but never connect their state.
 3. **Admins**: `PHONE_ADMIN_EMAILS` (defaults to `ADMIN_EMAILS`) can open Phone admin.
 4. **Real phone numbers** (optional):
-   - Uncomment `redis` in `livekit.yaml` too.
-   - Copy `deploy/sip.template.yaml` to `sip.yaml` next to `deploy/docker-compose.sip.yml`, fill in the media server's key and secret, and run `docker compose -f docker-compose.sip.yml up -d` on the media server's host.
-   - Open UDP and TCP 5060 (SIP) and UDP 10000 to 20000 (call audio) to your provider.
+   - With the suite's compose file: set `COMPOSE_PROFILES=sip` and `LIVEKIT_REDIS_ADDRESS=sip-valkey:6379` in `deploy/.env` and run `up -d` again. That starts the `sip` service and its Valkey store, and links the media server to them. Open UDP and TCP 5060 (SIP, `SIP_PUBLISH`) and UDP 10000 to 10099 (call audio, about 100 calls at once) to your provider.
+   - With a media server of your own: uncomment `redis` in its `livekit.yaml`, copy `deploy/sip.template.yaml` to `sip.yaml` next to `deploy/docker-compose.sip.yml`, fill in the media server's key and secret, run `docker compose -f docker-compose.sip.yml up -d` on the media server's host, and open UDP and TCP 5060 and UDP 10000 to 20000 to your provider.
    - In Phone admin, add a trunk with your provider's SIP address and login, the provider's IP ranges for calls in, then its numbers, and give each number to a person.
    - At the provider, send each number's calls to `PHONE_SIP_HOST` (default `sip.<your domain>`, pointing at the media server's host) on port 5060.
 5. **Calling phones into meetings** (optional): set the same `PHONE_SVC_TOKEN` (`openssl rand -hex 32`) for Meet and Phone.
@@ -35,7 +34,7 @@ Calls between colleagues need only the media server. Real phone numbers also nee
 |---|---|
 | `DATABASE_URL` | Phone's Postgres database |
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | The media server's keys, the same as Meet's |
-| `LIVEKIT_API_URL` | The media server's API (default `https://meet.<SUITE_DOMAIN>`) |
+| `LIVEKIT_API_URL` | The media server's API (default `https://meet.<SUITE_DOMAIN>`; `http://livekit:7880` in `deploy/compose.yml`) |
 | `NEXT_PUBLIC_LIVEKIT_URL` | Where browsers connect (default: the API URL as `wss://`) |
 | `TURN_HOST`, `TURN_STATIC_SECRET` | TURN for people behind strict firewalls, as in Meet |
 | `PHONE_ADMIN_EMAILS` | Who can manage trunks and numbers (default `ADMIN_EMAILS`) |
