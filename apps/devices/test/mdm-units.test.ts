@@ -151,3 +151,37 @@ describe("webhook signature", () => {
     expect(webhookSigned(body, sig, {} as NodeJS.ProcessEnv)).toBe(false);
   });
 });
+
+describe("windows helpers", async () => {
+  const { parseXml, textAt } = await import("../lib/mdm/xml");
+  const win = await import("../lib/mdm/windows");
+
+  it("reads SOAP and SyncML, and refuses DOCTYPE", () => {
+    const doc = parseXml(`<?xml version="1.0"?><!-- hi --><s:Envelope xmlns:s="x"><s:Body a="1 &amp; 2"><v>&lt;tag&gt; &#65;&#x42;</v><c><![CDATA[<raw & stuff>]]></c><e/></s:Body></s:Envelope>`);
+    expect(doc.name).toBe("Envelope");
+    expect(doc.children[0].attrs.a).toBe("1 & 2");
+    expect(textAt(doc, "Body", "v")).toBe("<tag> AB");
+    expect(textAt(doc, "Body", "c")).toBe("<raw & stuff>");
+    expect(() => parseXml(`<!DOCTYPE x [<!ENTITY a "b">]><x>&a;</x>`)).toThrow(/DOCTYPE/);
+    expect(() => parseXml(`<a><b></a>`)).toThrow();
+  });
+
+  it("maps DeviceStatus to compliance facts", () => {
+    expect(win.windowsFacts({ encryption: "1", firewall: "0", antivirus: "0" })).toEqual({ disk_encryption: true, firewall: true, antivirus: true });
+    expect(win.windowsFacts({ encryption: "0", firewall: "1", antivirus: "4" })).toEqual({ disk_encryption: false, firewall: false });
+  });
+
+  it("checks MSI product codes and builds the management host", () => {
+    expect(win.productCode("23170f69-40c1-2702-2408-000001000000")).toBe("{23170F69-40C1-2702-2408-000001000000}");
+    expect(() => win.productCode("7zip")).toThrow(/product code/);
+    expect(win.managementHost({ SUITE_DOMAIN: "acme.io" } as unknown as NodeJS.ProcessEnv)).toBe("devices-windows.acme.io");
+    expect(win.managementHost({ DEVICES_WINDOWS_MDM_HOST: "https://mdm.acme.io/" } as unknown as NodeJS.ProcessEnv)).toBe("mdm.acme.io");
+  });
+
+  it("turns profiles into CSP settings, and undoes them", () => {
+    expect(win.profileCommands("software_update", { install_os_updates: true })).toEqual([{ verb: "Replace", uri: "./Device/Vendor/MSFT/Policy/Config/Update/AllowAutoUpdate", format: "int", data: "2" }]);
+    expect(win.profileCommands("filevault", {}, true)).toEqual([{ verb: "Delete", uri: "./Device/Vendor/MSFT/BitLocker/RequireDeviceEncryption", ok: [404] }]);
+    expect(win.profileCommands("firewall", { block_all_incoming: true }).filter((c) => c.uri.endsWith("Shielded")).map((c) => c.data)).toEqual(["true", "true", "true"]);
+    expect(win.profileCommands("custom", {})).toEqual([]);
+  });
+});

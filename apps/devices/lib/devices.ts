@@ -111,8 +111,9 @@ export async function retire(me: Me, id: string): Promise<void> {
 export async function refresh(me: Me, id: string): Promise<void> {
   const d = await getDevice(me, id);
   const viaMdm = await refreshManaged(me, id);
-  if (!d.host_identifier.startsWith("mdm:")) await queueRefresh([id], me.email);
-  else if (!viaMdm) throw new UserError("This device reports only through Apple management, which can't reach it right now", 409);
+  // Rows without osquery: iPhones and iPads (mdm:), Android (android:) and Windows PCs managed only by MDM (wmdm:).
+  if (!/^(mdm|android|wmdm):/.test(d.host_identifier)) await queueRefresh([id], me.email);
+  else if (!viaMdm) throw new UserError("This device reports only through device management, which can't reach it right now", 409);
 }
 
 export async function overview() {

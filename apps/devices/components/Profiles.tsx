@@ -1,5 +1,5 @@
 "use client";
-// Configuration profiles: settings sent to every managed iPhone, iPad or Mac of the chosen platforms.
+// Configuration profiles: settings sent to every managed iPhone, iPad, Mac, Android phone or Windows PC of the chosen platforms.
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { api, ago, useData } from "./client";
@@ -23,12 +23,12 @@ export function Profiles({ app }: { app: AppCtx }) {
       <div className="pagehead">
         <div>
           <h1>Configuration profiles</h1>
-          <p className="muted">Settings for managed iPhones, iPads and Macs. A profile goes to every managed device of its platforms, now and when new ones enroll; changing it sends the new version, and turning it off or deleting it removes it.</p>
+          <p className="muted">Settings for managed iPhones, iPads, Macs, Android phones and Windows PCs. A profile goes to every managed device of its platforms, now and when new ones enroll; changing it sends the new version, and turning it off or deleting it removes it.</p>
         </div>
         <button className="btn primary" onClick={() => setEditing("new")}><Plus size={16} /> New profile</button>
       </div>
       {!data ? <p className="muted">Loading…</p> : !data.profiles.length ? (
-        <section className="panel"><Empty><h2>No profiles yet</h2><p>Require a passcode, turn on FileVault and the firewall, keep software up to date, add the office Wi-Fi, or upload a profile made in Apple Configurator or iMazing Profile Editor.</p></Empty></section>
+        <section className="panel"><Empty><h2>No profiles yet</h2><p>Require a passcode, turn on FileVault or BitLocker and the firewall, keep software up to date, add the office Wi-Fi, or upload a profile made in Apple Configurator or iMazing Profile Editor.</p></Empty></section>
       ) : (
         <section className="panel flush">
           <table className="table">

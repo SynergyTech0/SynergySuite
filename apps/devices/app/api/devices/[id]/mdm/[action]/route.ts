@@ -3,7 +3,7 @@ import { erase, lock, power } from "@/lib/mdm/apple";
 import { UserError } from "@/lib/util";
 
 /**
- * lock { message?, phone? } (admins or the owner), erase { confirm, keep_data_plan? } (admins),
+ * lock { message?, phone? } (admins or the owner), erase { confirm, keep_data_plan?, keep_user_data? } (admins),
  * restart and shutdown (admins).
  */
 export const POST = route(async (me, req, { params }: Params<"id" | "action">) => {

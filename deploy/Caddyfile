@@ -339,6 +339,8 @@ phone.{$SUITE_DOMAIN} {
 }
 
 devices.{$SUITE_DOMAIN} {
+	# Only the Windows check-in host below may say which certificate a PC presented.
+	request_header -X-Client-Cert
 	# The osquery agent on each computer has no suite account: it signs in with its enrollment
 	# key and node key, checked in the app. The posture feed for Trust stays on the compose network.
 	handle /api/osquery/* {
@@ -361,12 +363,56 @@ devices.{$SUITE_DOMAIN} {
 	handle /scep {
 		reverse_proxy devices-scep:8080
 	}
+	# Windows enrollment (discovery, certificate policy, certificate request): PCs sign in through
+	# /api/enroll/windows/auth, which stays behind sign-in, and bring its one-time token here.
+	@windows_enroll path /api/windows/discovery /api/windows/policy /api/windows/enroll
+	handle @windows_enroll {
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		import to_app devices:3810
+	}
+	handle /api/windows/* {
+		respond 404
+	}
 	handle /api/svc/* {
 		respond 404
 	}
 	handle {
 		import signed_in
 		import to_app devices:3810
+	}
+}
+
+# Windows PCs check in here with the identity certificate Devices issued them. This host asks for
+# a client certificate (so it is separate from Devices' own, where browsers would be asked too) and
+# passes it on; Devices checks it against its Windows device CA.
+devices-windows.{$SUITE_DOMAIN} {
+	tls {
+		client_auth {
+			mode require
+		}
+	}
+	handle /ManagementServer/MDM.svc {
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		rewrite * /api/windows/manage
+		reverse_proxy devices:3810 {
+			header_up X-Proxy-Auth-Secret {$PROXY_SHARED_SECRET}
+			header_up X-Client-Cert {http.request.tls.client.certificate_der_base64}
+		}
+	}
+	handle {
+		respond 404
 	}
 }
 

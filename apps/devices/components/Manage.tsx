@@ -8,7 +8,7 @@ import { Modal } from "./Modal";
 import { type AppCtx, Badge, Empty, Facts } from "./shared";
 
 export type Management = {
-  id: string; platform: "darwin" | "ios" | "android"; status: string; enrollment_type: string; info: Record<string, unknown> & { security?: Record<string, unknown> };
+  id: string; platform: "darwin" | "ios" | "android" | "windows"; status: string; enrollment_type: string; info: Record<string, unknown> & { security?: Record<string, unknown> };
   info_at: string | null; enrolled_at: string | null; last_seen: string | null; unenrolled_at: string | null;
   commands: { uuid: string; request_type: string; label: string; status: string; requested_by: string; error: string | null; created_at: string; updated_at: string; pin: string | null }[];
   profiles: { id: string; name: string; status: string; error: string | null; updated_at: string }[];
@@ -29,13 +29,14 @@ export function ManageActions({ app, id, hostname, m, onDone }: { app: AppCtx; i
     api(`/api/devices/${id}/mdm/${action}`, { method: "POST" }).then(() => { app.say(action === "restart" ? "Restarting" : "Shutting down"); onDone(); }).catch((e) => app.say(e.message));
   const supervised = m.info.IsSupervised === true;
   const android = m.platform === "android";
-  const canRestart = android ? m.enrollment_type === "fully_managed" : m.platform === "darwin" || supervised;
+  const windows = m.platform === "windows";
+  const canRestart = android ? m.enrollment_type === "fully_managed" : windows || m.platform === "darwin" || supervised;
   return (
     <>
-      <button className="btn" onClick={() => setOpen("lock")}><Lock size={15} /> Lock</button>
+      {!windows ? <button className="btn" onClick={() => setOpen("lock")}><Lock size={15} /> Lock</button> : null}
       <button className="btn" onClick={() => setOpen("install")}>Install app</button>
       {admin && canRestart ? <button className="btn" onClick={() => power("restart")}><RotateCcw size={15} /> Restart</button> : null}
-      {admin && canRestart && !android ? <button className="btn" onClick={() => power("shutdown")}><Power size={15} /> Shut down</button> : null}
+      {admin && canRestart && !android && !windows ? <button className="btn" onClick={() => power("shutdown")}><Power size={15} /> Shut down</button> : null}
       {admin ? <button className="btn" onClick={() => setOpen("erase")}><Trash2 size={15} /> Erase</button> : null}
       {open === "lock" ? <LockDialog app={app} id={id} hostname={hostname} m={m} onClose={() => { setOpen(null); onDone(); }} /> : null}
       {open === "erase" ? <EraseDialog app={app} id={id} hostname={hostname} m={m} onClose={() => { setOpen(null); onDone(); }} /> : null}
@@ -82,6 +83,7 @@ function LockDialog({ app, id, hostname, m, onClose }: { app: AppCtx; id: string
 function EraseDialog({ app, id, hostname, m, onClose }: { app: AppCtx; id: string; hostname: string; m: Management; onClose: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [keepPlan, setKeepPlan] = useState(true);
+  const [keepFiles, setKeepFiles] = useState(false);
   const workProfile = m.platform === "android" && m.enrollment_type === "work_profile";
   const [pin, setPin] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -100,13 +102,15 @@ function EraseDialog({ app, id, hostname, m, onClose }: { app: AppCtx; id: strin
     <Modal title={workProfile ? `Remove the work profile from ${hostname}?` : `Erase ${hostname}?`} onClose={onClose}>
       <form className="form" onSubmit={(e) => {
         e.preventDefault();
-        api<{ pin: string | null }>(`/api/devices/${id}/mdm/erase`, { method: "POST", json: { confirm, keep_data_plan: keepPlan } })
+        api<{ pin: string | null }>(`/api/devices/${id}/mdm/erase`, { method: "POST", json: { confirm, keep_data_plan: keepPlan, keep_user_data: keepFiles } })
           .then((r) => { if (r.pin) setPin(r.pin); else { app.say(`Erasing ${hostname}`); onClose(); } })
           .catch((x) => setErr(x.message));
       }}>
         <div className="notice danger"><div><p>{workProfile
           ? "The work profile and its apps and data are deleted; the person's own apps and data stay. This can't be undone, and the phone leaves management."
+          : m.platform === "windows" ? "Windows is reset at the PC's next check-in: apps and settings are removed and it returns to its setup screen. This can't be undone, and the PC leaves management."
           : "Everything on the device is deleted and it returns to its setup screen. This can't be undone, and the device leaves management."}</p></div></div>
+        {m.platform === "windows" ? <label className="check"><input type="checkbox" checked={keepFiles} onChange={(e) => setKeepFiles(e.target.checked)} /> Keep user accounts and their files (reinstall Windows only)</label> : null}
         {m.platform === "ios" || (m.platform === "android" && !workProfile) ? <label className="check"><input type="checkbox" checked={keepPlan} onChange={(e) => setKeepPlan(e.target.checked)} /> Keep the cellular data plan (eSIM)</label> : null}
         <label><span>Type <strong>{hostname}</strong> to confirm</span><input value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" /></label>
         <p className="error small">{err}</p>
@@ -123,6 +127,7 @@ export function ManagementTab({ m }: { m: Management }) {
     <div className="split">
       <section className="panel flush">
         <h3>Commands</h3>
+        {m.platform === "windows" ? <p className="muted small" style={{ margin: "0 16px 8px" }}>Windows picks up commands at its next check-in, about once an hour. On the PC, Settings › Accounts › Access work or school › Info › Sync checks in now.</p> : null}
         {!m.commands.length ? <Empty><p>No commands yet.</p></Empty> : (
           <div className="tablewrap">
             <table className="table">
@@ -153,6 +158,7 @@ export function ManagementTab({ m }: { m: Management }) {
             ["Last contact", formatDateTime(m.last_seen)],
             ["Mode", m.platform !== "android" ? "" : m.enrollment_type === "work_profile" ? "Work profile (personal phone)" : "Fully managed (company phone)"],
             ["Meets the Android policy", m.info.policy_compliant === true ? "Yes" : m.info.policy_compliant === false ? <span key="p">No{Array.isArray(m.info.noncompliance) && m.info.noncompliance.length ? <div className="rsub">{(m.info.noncompliance as { settingName?: string }[]).map((n) => n.settingName).filter(Boolean).join(", ")}</div> : null}</span> : ""],
+            ["TPM", typeof m.info.tpm === "string" ? m.info.tpm : ""],
             ["Device integrity", typeof m.info.posture === "string" ? POSTURE[m.info.posture] ?? m.info.posture : ""],
             ["Supervised", m.info.IsSupervised === true ? "Yes" : m.info.IsSupervised === false ? "No" : ""],
             ["Find My", m.info.IsDeviceLocatorServiceEnabled === true ? "On" : m.info.IsDeviceLocatorServiceEnabled === false ? "Off" : ""],
@@ -161,7 +167,8 @@ export function ManagementTab({ m }: { m: Management }) {
             ["Phone number", typeof m.info.PhoneNumber === "string" ? m.info.PhoneNumber : typeof m.info.phone === "string" ? m.info.phone : ""],
             ["Battery", typeof m.info.BatteryLevel === "number" ? `${Math.round((m.info.BatteryLevel as number) * 100)}%` : ""],
             ["Details from", m.info_at ? ago(m.info_at) : ""],
-          ]} />
+          // Only what this kind of device reports.
+          ].filter(([, v]) => v !== "") as [string, React.ReactNode][]} />
         </section>
         <section className="panel">
           <h3>Configuration profiles</h3>
