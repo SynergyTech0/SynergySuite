@@ -6,10 +6,9 @@ import type { LineItem } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import { useOrgList } from '../hooks/useOrgList';
 import { useCreateInvoice } from '../hooks/useInvoices';
+import { useInventoryItems } from '../hooks/useInventory';
 
-const ITEMS = ['Consulting', 'Implementation', 'Support plan', 'Training', 'License — Annual'];
 const TERMS = ['Due on receipt', 'Net 15', 'Net 30', 'Net 60'];
-const TAX_RATE = 0.0725;
 
 type CustomerOption = { id: string; name: string };
 
@@ -22,6 +21,9 @@ export function NewInvoice() {
   const { data: customerData } = useOrgList<CustomerOption>('customers');
   const customers = customerData?.items ?? [];
   const create = useCreateInvoice();
+  // Suggest the company's own products and services; any text can still be typed.
+  const { data: inventory } = useInventoryItems();
+  const itemOptions = (inventory ?? []).map((i) => i.name);
 
   const [customerId, setCustomerId] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -30,8 +32,8 @@ export function NewInvoice() {
   const [lines, setLines] = useState<LineItem[]>([blankLine(), blankLine()]);
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + lineAmount(l), 0), [lines]);
-  const tax = subtotal * TAX_RATE;
-  const total = subtotal + tax;
+  // The invoice is saved without sales tax lines, so the total is the subtotal.
+  const total = subtotal;
 
   const payloadLines = lines
     .filter((l) => l.item || l.description || l.rate > 0)
@@ -103,7 +105,7 @@ export function NewInvoice() {
         </div>
 
         <div className="p-6 border-b border-gray-200">
-          <LineItemGrid lines={lines} onChange={setLines} itemOptions={ITEMS} />
+          <LineItemGrid lines={lines} onChange={setLines} itemOptions={itemOptions} />
         </div>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -113,10 +115,6 @@ export function NewInvoice() {
               <div className="flex justify-between">
                 <span className="text-gray-500">Subtotal</span>
                 <span className="tabular-nums text-gray-900">{formatMoney(subtotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Tax ({(TAX_RATE * 100).toFixed(2)}%)</span>
-                <span className="tabular-nums text-gray-900">{formatMoney(tax)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-gray-200">
                 <span className="font-semibold text-gray-900">Total</span>

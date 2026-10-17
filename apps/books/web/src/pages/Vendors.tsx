@@ -1,14 +1,23 @@
-import { Plus, Search, Mail, Phone, MoreVertical, FileText } from 'lucide-react';
-
-const vendors = [
-  { id: '1', name: 'Office Depot', email: 'accounts@officedepot.com', phone: '(800) 123-4567', balance: 1250, bills: 8, is1099: false },
-  { id: '2', name: 'John Smith Consulting', email: 'john@smithconsulting.com', phone: '(555) 234-5678', balance: 5000, bills: 3, is1099: true },
-  { id: '3', name: 'AWS', email: 'billing@aws.amazon.com', phone: '(888) 345-6789', balance: 2400, bills: 12, is1099: false },
-  { id: '4', name: 'Acme Landlord LLC', email: 'rent@acmelandlord.com', phone: '(555) 456-7890', balance: 0, bills: 6, is1099: false },
-  { id: '5', name: 'Jane Doe Design', email: 'jane@doedesign.co', phone: '(555) 567-8901', balance: 3500, bills: 2, is1099: true },
-];
+import { useState } from 'react';
+import { Plus, Search, Mail, Phone, MoreVertical, FileText, Loader2 } from 'lucide-react';
+import { useVendors } from '../hooks/useParties';
+import { useBills } from '../hooks/useBills';
+import { num } from '../hooks/useOrgList';
+import { formatMoney, initials } from '../lib/format';
 
 export function Vendors() {
+  const [search, setSearch] = useState('');
+  const vendorsQ = useVendors(search.trim() || undefined);
+  const billsQ = useBills();
+  const vendors = vendorsQ.data?.items ?? [];
+
+  // Bill count per vendor, from the org's bills.
+  const billCount = new Map<string, number>();
+  for (const bill of billsQ.data?.items ?? []) {
+    billCount.set(bill.vendorId, (billCount.get(bill.vendorId) ?? 0) + 1);
+  }
+  const is1099 = (v: (typeof vendors)[number]) => v.is1099 ?? v.requires1099 ?? false;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -24,19 +33,19 @@ export function Vendors() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="stat-card">
-          <p className="stat-value">{vendors.length}</p>
+          <p className="stat-value">{vendorsQ.data?.total ?? 0}</p>
           <p className="stat-label">Total Vendors</p>
         </div>
         <div className="stat-card">
-          <p className="stat-value text-red-600">${vendors.reduce((sum, v) => sum + v.balance, 0).toLocaleString()}</p>
+          <p className="stat-value text-red-600">{formatMoney(vendors.reduce((sum, v) => sum + num(v.balance), 0))}</p>
           <p className="stat-label">Total Payables</p>
         </div>
         <div className="stat-card">
-          <p className="stat-value">{vendors.reduce((sum, v) => sum + v.bills, 0)}</p>
+          <p className="stat-value">{billsQ.data?.total ?? 0}</p>
           <p className="stat-label">Total Bills</p>
         </div>
         <div className="stat-card">
-          <p className="stat-value text-purple-600">{vendors.filter(v => v.is1099).length}</p>
+          <p className="stat-value text-purple-600">{vendors.filter(is1099).length}</p>
           <p className="stat-label">1099 Vendors</p>
         </div>
       </div>
@@ -45,7 +54,13 @@ export function Vendors() {
         <div className="card-header">
           <div className="relative max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="Search vendors..." className="input pl-9" />
+            <input
+              type="text"
+              placeholder="Search vendors..."
+              className="input pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         </div>
         <div className="table-container">
@@ -61,13 +76,35 @@ export function Vendors() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
+              {vendorsQ.isLoading && (
+                <tr>
+                  <td colSpan={6} className="text-center text-gray-400 py-8">
+                    <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {vendorsQ.isError && (
+                <tr>
+                  <td colSpan={6} className="text-center text-red-600 py-8">
+                    {(vendorsQ.error as Error).message || 'Vendors could not be loaded.'}
+                  </td>
+                </tr>
+              )}
+              {vendorsQ.isSuccess && vendors.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center text-gray-500 py-8">
+                    {search ? 'No vendors match your search.' : 'No vendors yet.'}
+                  </td>
+                </tr>
+              )}
               {vendors.map((vendor) => (
                 <tr key={vendor.id}>
                   <td>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
                         <span className="text-sm font-medium text-orange-700">
-                          {vendor.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          {initials(vendor.name)}
                         </span>
                       </div>
                       <span className="font-medium">{vendor.name}</span>
@@ -75,19 +112,24 @@ export function Vendors() {
                   </td>
                   <td>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Mail className="w-3 h-3" />
-                        {vendor.email}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <Phone className="w-3 h-3" />
-                        {vendor.phone}
-                      </div>
+                      {vendor.email && (
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Mail className="w-3 h-3" />
+                          {vendor.email}
+                        </div>
+                      )}
+                      {vendor.phone && (
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          <Phone className="w-3 h-3" />
+                          {vendor.phone}
+                        </div>
+                      )}
+                      {!vendor.email && !vendor.phone && <span className="text-sm text-gray-400">-</span>}
                     </div>
                   </td>
-                  <td>{vendor.bills}</td>
+                  <td>{billCount.get(vendor.id) ?? 0}</td>
                   <td>
-                    {vendor.is1099 ? (
+                    {is1099(vendor) ? (
                       <span className="badge bg-purple-100 text-purple-800">
                         <FileText className="w-3 h-3 mr-1" />
                         1099
@@ -97,8 +139,8 @@ export function Vendors() {
                     )}
                   </td>
                   <td className="text-right font-mono">
-                    <span className={vendor.balance > 0 ? 'text-red-600' : ''}>
-                      ${vendor.balance.toLocaleString()}
+                    <span className={num(vendor.balance) > 0 ? 'text-red-600' : ''}>
+                      {formatMoney(num(vendor.balance))}
                     </span>
                   </td>
                   <td>

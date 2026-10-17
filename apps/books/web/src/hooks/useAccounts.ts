@@ -12,6 +12,7 @@ export type Account = {
   normalBalance: string;
   isActive?: boolean | null;
   isBankAccount?: boolean | null;
+  parentId?: string | null;
 };
 
 export function useAccounts() {

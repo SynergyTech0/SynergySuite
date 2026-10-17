@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../stores/authStore';
 
@@ -50,6 +50,10 @@ export function useBalanceSheet(asOfDate: string, enabled = true) {
 }
 
 export type TrialBalanceRow = {
+  accountId?: string;
+  accountType?: string;
+  /** Signed by the account's normal balance (a debit-normal account with credits shows negative). */
+  balance?: number;
   accountCode?: string;
   accountNumber?: string;
   accountName?: string;
@@ -73,6 +77,37 @@ export function useTrialBalance(enabled = true) {
     queryFn: () => apiFetch<TrialBalance>(`/organizations/${orgId}/reports/trial-balance`),
     enabled: enabled && !!orgId,
   });
+}
+
+/** Revenue and expenses for each of the last `months` calendar months (oldest first), one P&L per month. */
+export function useMonthlyIncome(months = 6) {
+  const orgId = useAuth((s) => s.user?.organizationId);
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const now = new Date();
+  const ranges = Array.from({ length: months }, (_, i) => {
+    const first = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+    return { month: first.toLocaleDateString('en-US', { month: 'short' }), start: iso(first), end: iso(last) };
+  });
+
+  const results = useQueries({
+    queries: ranges.map((r) => ({
+      queryKey: ['income-statement', orgId, r.start, r.end],
+      queryFn: () =>
+        apiFetch<IncomeStatement>(`/organizations/${orgId}/reports/income-statement?startDate=${r.start}&endDate=${r.end}`),
+      enabled: !!orgId,
+    })),
+  });
+
+  return {
+    isLoading: results.some((r) => r.isLoading),
+    isError: results.some((r) => r.isError),
+    data: ranges.map((r, i) => ({
+      month: r.month,
+      revenue: results[i].data?.totals?.totalRevenue ?? 0,
+      expenses: results[i].data?.totals?.totalExpenses ?? 0,
+    })),
+  };
 }
 
 // ---- Statement of Cash Flows -------------------------------------------------

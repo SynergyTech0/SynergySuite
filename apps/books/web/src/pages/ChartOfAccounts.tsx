@@ -1,45 +1,62 @@
-import { useState } from 'react';
-import { Plus, Search, ChevronRight, ChevronDown, Edit, Trash2 } from 'lucide-react';
+import { useState, type ReactElement } from 'react';
+import { Plus, Search, ChevronRight, ChevronDown, Edit, Trash2, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
+import { useAccounts } from '../hooks/useAccounts';
+import type { Account } from '../hooks/useAccounts';
+import { useTrialBalance } from '../hooks/useIncomeStatement';
 
 const accountTypes = ['All', 'Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
 
-const accounts = [
-  {
-    id: '1',
-    code: '1000',
-    name: 'Cash and Cash Equivalents',
-    type: 'Asset',
-    subType: 'Current Asset',
-    balance: 125000,
-    children: [
-      { id: '1a', code: '1010', name: 'Checking Account', type: 'Asset', subType: 'Current Asset', balance: 85000 },
-      { id: '1b', code: '1020', name: 'Savings Account', type: 'Asset', subType: 'Current Asset', balance: 40000 },
-    ],
-  },
-  { id: '2', code: '1100', name: 'Accounts Receivable', type: 'Asset', subType: 'Current Asset', balance: 45200 },
-  { id: '3', code: '1500', name: 'Fixed Assets', type: 'Asset', subType: 'Fixed Asset', balance: 150000, children: [
-    { id: '3a', code: '1510', name: 'Equipment', type: 'Asset', subType: 'Fixed Asset', balance: 75000 },
-    { id: '3b', code: '1590', name: 'Accumulated Depreciation', type: 'Asset', subType: 'Fixed Asset', balance: -25000 },
-  ]},
-  { id: '4', code: '2000', name: 'Accounts Payable', type: 'Liability', subType: 'Current Liability', balance: 28000 },
-  { id: '5', code: '3000', name: "Owner's Equity", type: 'Equity', subType: 'Equity', balance: 200000 },
-  { id: '6', code: '4000', name: 'Revenue', type: 'Revenue', subType: 'Operating Revenue', balance: 328500 },
-  { id: '7', code: '5000', name: 'Cost of Goods Sold', type: 'Expense', subType: 'COGS', balance: 120000 },
-  { id: '8', code: '6000', name: 'Operating Expenses', type: 'Expense', subType: 'Operating Expense', balance: 92000, children: [
-    { id: '8a', code: '6100', name: 'Salaries and Wages', type: 'Expense', subType: 'Operating Expense', balance: 65000 },
-    { id: '8b', code: '6200', name: 'Rent Expense', type: 'Expense', subType: 'Operating Expense', balance: 18000 },
-    { id: '8c', code: '6300', name: 'Utilities', type: 'Expense', subType: 'Operating Expense', balance: 9000 },
-  ]},
-];
+type AccountRow = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  subType: string;
+  balance: number;
+  children?: AccountRow[];
+};
+
+const titleCase = (v: string) => v.toLowerCase().replace(/(^|[\s_])\w/g, (m) => m.toUpperCase()).replace(/_/g, ' ');
+
+/** Nest accounts under their parents; each row carries its ledger balance. */
+function buildTree(accounts: Account[], balances: Map<string, number>): AccountRow[] {
+  const rows = new Map<string, AccountRow>();
+  for (const a of accounts) {
+    rows.set(a.id, {
+      id: a.id,
+      code: a.accountNumber,
+      name: a.name,
+      type: titleCase(a.accountType),
+      subType: a.accountSubtype ? titleCase(a.accountSubtype) : '',
+      balance: balances.get(a.id) ?? 0,
+    });
+  }
+  const roots: AccountRow[] = [];
+  for (const a of accounts) {
+    const row = rows.get(a.id)!;
+    const parent = a.parentId ? rows.get(a.parentId) : undefined;
+    if (parent) (parent.children ??= []).push(row);
+    else roots.push(row);
+  }
+  return roots;
+}
 
 export function ChartOfAccounts() {
   const [selectedType, setSelectedType] = useState('All');
-  const [expandedAccounts, setExpandedAccounts] = useState<string[]>(['1', '3', '8']);
+  const [collapsedAccounts, setCollapsedAccounts] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const accountsQ = useAccounts();
+  const trialBalance = useTrialBalance();
+
+  const balances = new Map<string, number>();
+  for (const row of trialBalance.data?.accounts ?? []) {
+    if (row.accountId) balances.set(row.accountId, row.balance ?? 0);
+  }
+  const accounts = buildTree(accountsQ.data ?? [], balances);
 
   const toggleExpanded = (id: string) => {
-    setExpandedAccounts((prev) =>
+    setCollapsedAccounts((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
@@ -60,7 +77,7 @@ export function ChartOfAccounts() {
     return amount < 0 ? `(${formatted})` : formatted;
   };
 
-  const renderAccount = (account: typeof accounts[0], level = 0) => (
+  const renderAccount = (account: AccountRow, level = 0): ReactElement => (
     <div key={account.id}>
       <div
         className={clsx(
@@ -75,7 +92,7 @@ export function ChartOfAccounts() {
               onClick={() => toggleExpanded(account.id)}
               className="p-0.5 hover:bg-gray-200 rounded"
             >
-              {expandedAccounts.includes(account.id) ? (
+              {!collapsedAccounts.includes(account.id) ? (
                 <ChevronDown className="w-4 h-4 text-gray-500" />
               ) : (
                 <ChevronRight className="w-4 h-4 text-gray-500" />
@@ -105,9 +122,9 @@ export function ChartOfAccounts() {
           </div>
         </div>
       </div>
-      {account.children && expandedAccounts.includes(account.id) && (
+      {account.children && !collapsedAccounts.includes(account.id) && (
         <div>
-          {account.children.map((child) => renderAccount(child as any, level + 1))}
+          {account.children.map((child) => renderAccount(child, level + 1))}
         </div>
       )}
     </div>
@@ -170,7 +187,23 @@ export function ChartOfAccounts() {
               <span className="w-16">Actions</span>
             </div>
           </div>
-          {filteredAccounts.map((account) => renderAccount(account))}
+          {(accountsQ.isLoading || trialBalance.isLoading) && (
+            <div className="px-4 py-12 text-center text-sm text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
+              Loading…
+            </div>
+          )}
+          {accountsQ.isError && (
+            <div className="px-4 py-12 text-center text-sm text-red-600">
+              {(accountsQ.error as Error).message || 'Accounts could not be loaded.'}
+            </div>
+          )}
+          {accountsQ.isSuccess && !trialBalance.isLoading && filteredAccounts.length === 0 && (
+            <div className="px-4 py-12 text-center text-sm text-gray-500">
+              {(accountsQ.data ?? []).length === 0 ? 'No accounts yet.' : 'No accounts match your filter.'}
+            </div>
+          )}
+          {!trialBalance.isLoading && filteredAccounts.map((account) => renderAccount(account))}
         </div>
       </div>
     </div>

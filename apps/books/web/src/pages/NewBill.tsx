@@ -5,8 +5,7 @@ import { LineItemGrid, blankLine, lineAmount } from '../components/ui';
 import type { LineItem } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import { useOrgList, useCreateOrgResource } from '../hooks/useOrgList';
-
-const ITEMS = ['Rent', 'Utilities', 'Software', 'Supplies', 'Contractor'];
+import { useAccounts } from '../hooks/useAccounts';
 
 type VendorOption = { id: string; name: string };
 type BillPayload = {
@@ -23,6 +22,9 @@ export function NewBill() {
   const { data: vendorData } = useOrgList<VendorOption>('vendors');
   const vendors = vendorData?.items ?? [];
   const create = useCreateOrgResource<BillPayload>('bills');
+  // Suggest the company's own expense accounts; any text can still be typed.
+  const { data: accounts } = useAccounts();
+  const itemOptions = (accounts ?? []).filter((a) => a.accountType === 'EXPENSE' && a.isActive !== false).map((a) => a.name);
 
   const [vendorId, setVendorId] = useState('');
   const [billDate, setBillDate] = useState(new Date().toISOString().split('T')[0]);
@@ -96,7 +98,7 @@ export function NewBill() {
         </div>
 
         <div className="p-6 border-b border-gray-200">
-          <LineItemGrid lines={lines} onChange={setLines} itemOptions={ITEMS} />
+          <LineItemGrid lines={lines} onChange={setLines} itemOptions={itemOptions} />
         </div>
 
         <div className="p-6 flex justify-end">

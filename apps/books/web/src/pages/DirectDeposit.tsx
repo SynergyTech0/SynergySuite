@@ -5,6 +5,7 @@ import type { Column } from '../components/ui';
 import { useNicheList } from '../hooks/useNicheList';
 import { useBankAccounts, useVendorBankAccounts, useNicheCreate } from '../hooks/useBankAccounts';
 import { num } from '../hooks/useOrgList';
+import { useOrganization } from '../hooks/useOrganization';
 import { formatMoney, formatDate } from '../lib/format';
 
 type AchBatch = {
@@ -33,12 +34,15 @@ export function DirectDeposit() {
   const create = useNicheCreate<Record<string, unknown>>('/ach/batches', 'ach-batches');
 
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ bankAccountId: '', batchType: 'VENDOR_PAYMENT', effectiveDate: '', companyName: 'Acme Corporation', companyId: '1234567890' });
+  const org = useOrganization();
+  // The NACHA company name defaults to this company; the 10-digit company ID comes from the bank.
+  const blankForm = () => ({ bankAccountId: '', batchType: 'VENDOR_PAYMENT', effectiveDate: '', companyName: org.data?.name ?? '', companyId: '' });
+  const [form, setForm] = useState(blankForm);
   const [rows, setRows] = useState<TxnRow[]>([{ vendorBankAccountId: '', amount: '' }]);
 
   const resetAndClose = () => {
     setOpen(false);
-    setForm({ bankAccountId: '', batchType: 'VENDOR_PAYMENT', effectiveDate: '', companyName: 'Acme Corporation', companyId: '1234567890' });
+    setForm(blankForm());
     setRows([{ vendorBankAccountId: '', amount: '' }]);
   };
 
@@ -94,7 +98,15 @@ export function DirectDeposit() {
         error={q.error}
         empty="No ACH batches yet."
         actions={
-          <button className="btn-primary" onClick={() => setOpen(true)} disabled={blocked} title={blocked ? 'Needs a bank account and a vendor bank account' : undefined}>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setForm((f) => ({ ...f, companyName: f.companyName || org.data?.name || '' }));
+              setOpen(true);
+            }}
+            disabled={blocked}
+            title={blocked ? 'Needs a bank account and a vendor bank account' : undefined}
+          >
             <Plus className="w-4 h-4 mr-2" />
             New batch
           </button>

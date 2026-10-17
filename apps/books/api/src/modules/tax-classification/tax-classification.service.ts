@@ -265,7 +265,8 @@ export class TaxClassificationService {
       minConfidence?: number;
     } = {},
   ) {
-    const where: any = {};
+    // Only this organization's journal lines: the classification table itself has no organization column.
+    const where: any = { journalLine: { journal: { organizationId } } };
 
     if (options.category) {
       where.category = options.category;
@@ -293,16 +294,27 @@ export class TaxClassificationService {
   }
 
   async getClassificationStats(organizationId: string) {
+    const inOrg = { journalLine: { journal: { organizationId } } };
+
     const stats = await this.prisma.journalLineTaxClassification.groupBy({
       by: ['category'],
+      where: inOrg,
       _count: { id: true },
       _avg: { confidence: true },
     });
 
-    const feedbackStats = await this.prisma.classificationFeedback.groupBy({
-      by: ['isCorrect'],
-      _count: { id: true },
-    });
+    // Feedback rows point at a classification, not an organization, so scope them through it.
+    const classificationIds = (
+      await this.prisma.journalLineTaxClassification.findMany({ where: inOrg, select: { id: true } })
+    ).map((c) => c.id);
+
+    const feedbackStats = classificationIds.length
+      ? await this.prisma.classificationFeedback.groupBy({
+          by: ['isCorrect'],
+          where: { journalLineTaxClassificationId: { in: classificationIds } },
+          _count: { id: true },
+        })
+      : [];
 
     return {
       byCategory: stats.map((s) => ({
@@ -356,12 +368,13 @@ export class TaxClassificationService {
 
   private calculateAccuracy(
     feedbackStats: Array<{ isCorrect: boolean | null; _count: { id: number } }>,
-  ): number {
+  ): number | null {
     // Feedback with isCorrect = null has not been judged yet, so it is excluded
     const correct = feedbackStats.find((s) => s.isCorrect === true)?._count.id || 0;
     const incorrect = feedbackStats.find((s) => s.isCorrect === false)?._count.id || 0;
     const total = correct + incorrect;
 
-    return total > 0 ? correct / total : 1.0;
+    // No judged feedback means no accuracy to report, not a perfect score.
+    return total > 0 ? correct / total : null;
   }
 }

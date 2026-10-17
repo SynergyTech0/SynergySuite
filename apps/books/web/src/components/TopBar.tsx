@@ -5,6 +5,10 @@ import clsx from 'clsx';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { SettingsMenu } from './SettingsMenu';
 import { useCompanies, useSwitchCompany } from '../hooks/usePlanning';
+import { useArAging } from '../hooks/useIncomeStatement';
+import { useOrgList } from '../hooks/useOrgList';
+import { useAuth } from '../stores/authStore';
+import { initials } from '../lib/format';
 
 function CompanySwitcher() {
   const [open, setOpen] = useState(false);
@@ -62,11 +66,26 @@ function CompanySwitcher() {
 function NotificationsMenu() {
   const [open, setOpen] = useState(false);
   const ref = useClickOutside<HTMLDivElement>(() => setOpen(false));
-  const items = [
-    { title: '3 invoices are overdue', meta: 'Receivables · today' },
-    { title: 'Bank feed has 12 transactions to review', meta: 'Banking · 2h ago' },
-    { title: 'Form 941 filing due in 5 days', meta: 'Payroll · yesterday' },
-  ];
+  const navigate = useNavigate();
+  const aging = useArAging();
+  const toReview = useOrgList('bank-transactions', { status: 'UNMATCHED' });
+
+  // Only things that are true of the books right now.
+  const overdue = aging.data
+    ? (['days1to30', 'days31to60', 'days61to90', 'over90'] as const).reduce((n, k) => n + aging.data.detail[k].length, 0)
+    : 0;
+  const reviewCount = toReview.data?.total ?? 0;
+  const items: { title: string; meta: string; href: string }[] = [];
+  if (overdue > 0) {
+    items.push({ title: `${overdue} invoice${overdue === 1 ? ' is' : 's are'} overdue`, meta: 'Receivables', href: '/invoices' });
+  }
+  if (reviewCount > 0) {
+    items.push({
+      title: `Bank feed has ${reviewCount} transaction${reviewCount === 1 ? '' : 's'} to review`,
+      meta: 'Banking',
+      href: '/banking/review',
+    });
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -76,7 +95,9 @@ function NotificationsMenu() {
         aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
-        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent-500 rounded-full ring-2 ring-white" />
+        {items.length > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent-500 rounded-full ring-2 ring-white" />
+        )}
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 w-80 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -84,8 +105,16 @@ function NotificationsMenu() {
             <p className="text-sm font-semibold text-gray-900">Notifications</p>
           </div>
           <div className="divide-y divide-gray-100">
+            {items.length === 0 && <p className="px-4 py-6 text-sm text-gray-500 text-center">You're all caught up.</p>}
             {items.map((n) => (
-              <div key={n.title} className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
+              <div
+                key={n.title}
+                className="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(n.href);
+                }}
+              >
                 <p className="text-sm text-gray-800">{n.title}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{n.meta}</p>
               </div>
@@ -98,6 +127,8 @@ function NotificationsMenu() {
 }
 
 export function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
+  const user = useAuth((s) => s.user);
+  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.email : '';
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
       <div className="flex items-center gap-2 h-14 px-3 sm:px-4">
@@ -138,11 +169,12 @@ export function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
           <button
             className="ml-1 flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-gray-100 transition-colors"
             aria-label="Account"
+            title={user?.email}
           >
             <span className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-              JD
+              {initials(name)}
             </span>
-            <span className="hidden md:block text-sm font-medium text-gray-700">Jane Doe</span>
+            <span className="hidden md:block text-sm font-medium text-gray-700">{name}</span>
           </button>
         </div>
       </div>
