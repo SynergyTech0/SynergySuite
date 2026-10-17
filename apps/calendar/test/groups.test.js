@@ -140,6 +140,24 @@ test('calendar group calendars', { skip: !url && 'TEST_DATABASE_URL not set' }, 
     assert.equal((await as(bob, 'DELETE', `/events/${own.id}`)).status, 200);
   });
 
+  await t.test('repeating events on a group calendar: members see each occurrence, the owner may skip one', async () => {
+    const { status, body: series } = await as(bob, 'POST', '/events',
+      event('Weekly sync', { calendar: 'group', groupSource: SOURCE, tzid: 'Europe/Berlin', rrule: 'FREQ=WEEKLY;COUNT=3' }));
+    assert.equal(status, 200);
+    const occ = async who => (await as(who, 'GET', '/events?from=2027-03-01&to=2027-05-01')).body.filter(e => e.title === 'Weekly sync');
+    assert.equal((await occ(alice)).length, 3);
+    assert.equal((await occ(carol)).length, 0);
+    const listed = await svc('GET', `/group-calendars/${SOURCE}/events?from=2027-03-01&to=2027-05-01`);
+    assert.equal(listed.body.events.filter(e => e.title === 'Weekly sync').length, 3);
+    const second = (await occ(alice))[1];
+    assert.equal((await as(alice, 'DELETE', `/events/${series.id}?scope=this&occurrence=${encodeURIComponent(second.occurrence)}`)).status, 200);
+    assert.equal((await occ(bob)).length, 2);
+    // One occurrence can't move to another calendar on its own.
+    const first = (await occ(bob))[0];
+    assert.equal((await as(bob, 'PATCH', `/events/${series.id}`, { scope: 'this', occurrence: first.occurrence, calendar: 'personal' })).status, 400);
+    assert.equal((await as(bob, 'DELETE', `/events/${series.id}?scope=all`)).status, 200);
+  });
+
   await t.test('services list and add group events', async () => {
     assert.equal((await svc('POST', '/events', { ownerEmail: carol, ...event('Svc sneaky', { calendar: 'group', groupSource: SOURCE }) })).status, 403);
     const added = await svc('POST', '/events', { ownerEmail: alice, ...event('All hands', { calendar: 'group', groupSource: SOURCE }) });

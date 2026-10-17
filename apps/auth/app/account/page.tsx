@@ -40,7 +40,7 @@ export default async function AccountPage() {
             This is the shared demo account: its password, two-step verification and passkeys can&apos;t be changed.
           </div>
         )}
-        <AccountPanels mfaEnabled={b(user.mfa_enabled)} demo={demo} />
+        <AccountPanels mfaEnabled={b(user.mfa_enabled)} demo={demo} email={user.email} suiteDomain={process.env.SUITE_DOMAIN ?? ''} />
       </div>
     </>
   );

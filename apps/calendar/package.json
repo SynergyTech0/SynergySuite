@@ -5,15 +5,18 @@
   "description": "SynergyCal - team calendar with free/busy service API",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node e2e/month.e2e.mjs"
   },
   "dependencies": {
     "@synergy/ai": "*",
     "@synergy/compliance": "*",
     "@synergy/config": "*",
+    "@synergy/dav": "*",
     "@synergy/db": "*",
     "@synergy/search": "*",
     "@synergy/server": "*",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "rrule-temporal": "^2.2.8"
   }
 }

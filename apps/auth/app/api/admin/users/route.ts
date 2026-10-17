@@ -3,6 +3,7 @@ import { currentUser } from '@/lib/session';
 import { q, now } from '@/lib/db';
 import { createUser, findByEmail, setPassword, passwordPolicyError, type User } from '@/lib/users';
 import { audit } from '@/lib/audit';
+import { revokeAll } from '@/lib/app-passwords';
 
 async function requireAdmin(req: Request) {
   const auth = await currentUser(req);
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
     await setPassword(userId, password);
     await q(`UPDATE sa_users SET failed_logins = 0::bigint, locked_until_ms = 0::bigint WHERE id + 0 = $1::bigint`, [userId]);
     await q(`UPDATE sa_sessions SET revoked = 1::bigint WHERE user_id = $1::bigint`, [userId]);
+    await revokeAll(userId);
     await audit('admin.password_reset', auth.user.email, { user_id: userId }, req);
     return json({ ok: true });
   }
