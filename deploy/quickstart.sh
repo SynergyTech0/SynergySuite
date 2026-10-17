@@ -159,10 +159,9 @@ all_images() {
   "${COMPOSE[@]}" config --images ${services[@]+"${services[@]}"} | sort -u
 }
 
-# The suite images that aren't on this machine yet.
+# The images (the suite's and third-party ones) that aren't on this machine yet.
 missing_images() {
   all_images | while IFS= read -r img; do
-    case "$img" in "$registry"/synergysuite-*) ;; *) continue ;; esac
     docker image inspect "$img" >/dev/null 2>&1 || printf '%s\n' "$img"
   done
 }
@@ -170,9 +169,21 @@ missing_images() {
 # Download images one by one, SYNERGY_PULL_PARALLEL (default 6) at a time. `compose pull`
 # cancels every other download as soon as one image is missing from the registry (an app that
 # was just added and isn't published yet), so each image gets its own `docker pull` instead.
+# A Docker Hub image that fails (rate limit, a large download dropped) is tried once more from
+# Google's Docker Hub mirror, mirror.gcr.io, and tagged with its usual name.
 pull_images() {
-  printf '%s\n' "$@" | xargs -P "${SYNERGY_PULL_PARALLEL:-6}" -I{} \
-    sh -c 'docker pull -q "$1" >/dev/null 2>&1 && echo "  downloaded $1" || echo "  not downloaded: $1"' _ {}
+  printf '%s\n' "$@" | xargs -P "${SYNERGY_PULL_PARALLEL:-6}" -I{} sh -c '
+    img="$1"
+    if docker pull -q "$img" >/dev/null 2>&1; then echo "  downloaded $img"; exit 0; fi
+    case "$img" in
+      *.*/*|*:*/*|localhost/*) ;;
+      *)
+        case "$img" in */*) hub="$img" ;; *) hub="library/$img" ;; esac
+        if docker pull -q "mirror.gcr.io/$hub" >/dev/null 2>&1 && docker tag "mirror.gcr.io/$hub" "$img"; then
+          echo "  downloaded $img (from mirror.gcr.io)"; exit 0
+        fi ;;
+    esac
+    echo "  not downloaded: $img"' _ {}
 }
 
 # The service that builds a suite image: each one is named after it (office-collab runs the
@@ -183,6 +194,7 @@ image_service() {
 }
 
 to_build=()
+others=()
 if [ "${SYNERGY_BUILD:-pull}" = local ]; then
   if [ ${#services[@]} -gt 0 ]; then
     to_build=("${services[@]}")
@@ -191,9 +203,19 @@ if [ "${SYNERGY_BUILD:-pull}" = local ]; then
   fi
 else
   say "Downloading the suite's images ..."
+  # Third-party images are pinned to a version, so one that's already here is up to date and
+  # skipped. The suite's own images (latest) are always checked; an unchanged one costs a
+  # quick look at the registry, not a download.
   images=()
-  while IFS= read -r img; do [ -n "$img" ] && images+=("$img"); done < <(all_images)
-  pull_images "${images[@]}"
+  while IFS= read -r img; do
+    [ -n "$img" ] || continue
+    case "$img" in
+      "$registry"/synergysuite-*|*:latest) ;;
+      *) docker image inspect "$img" >/dev/null 2>&1 && continue ;;
+    esac
+    images+=("$img")
+  done < <(all_images)
+  [ ${#images[@]} -eq 0 ] || pull_images "${images[@]}"
   attempt=1
   while :; do
     missing=()
@@ -205,7 +227,17 @@ else
     pull_images "${missing[@]}"
   done
   to_build=()
-  for img in ${missing[@]+"${missing[@]}"}; do to_build+=("$(image_service "$img")"); done
+  for img in ${missing[@]+"${missing[@]}"}; do
+    case "$img" in
+      "$registry"/synergysuite-*) to_build+=("$(image_service "$img")") ;;
+      *) others+=("$img") ;;
+    esac
+  done
+  if [ ${#others[@]} -gt 0 ]; then
+    say ""
+    say "These images couldn't be downloaded: ${others[*]}"
+    say "The suite starts without the parts that need them; run this again later to add them."
+  fi
   if [ ${#to_build[@]} -gt 0 ]; then
     say ""
     say "These images couldn't be downloaded, so they are built here: ${to_build[*]}"
@@ -233,6 +265,30 @@ while [ "$i" -lt "${#to_build[@]}" ]; do
   build_batch "${to_build[@]:$i:$batch_size}"
   i=$((i + batch_size))
 done
+
+# A third-party image that couldn't be downloaded (say Insights' Metabase engine) shouldn't
+# hold up everything else, so the services that run one are left out of this start.
+if [ ${#others[@]} -gt 0 ]; then
+  up_services=()
+  skipped=()
+  candidates=()
+  if [ ${#services[@]} -gt 0 ]; then
+    candidates=("${services[@]}")
+  else
+    while IFS= read -r s; do [ -n "$s" ] && candidates+=("$s"); done < <("${COMPOSE[@]}" config --services)
+  fi
+  # A service's image list includes the images of what it depends on, so a service that needs
+  # a missing one is left out too.
+  for s in "${candidates[@]}"; do
+    if "${COMPOSE[@]}" config --images "$s" 2>/dev/null | grep -qxF -f <(printf '%s\n' "${others[@]}"); then
+      skipped+=("$s")
+    else
+      up_services+=("$s")
+    fi
+  done
+  services=("${up_services[@]}")
+  [ ${#skipped[@]} -eq 0 ] || say "Starting without: ${skipped[*]}"
+fi
 
 say "Starting the suite ..."
 "${COMPOSE[@]}" up -d ${services[@]+"${services[@]}"}
