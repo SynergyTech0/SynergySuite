@@ -50,7 +50,13 @@ poke() {
 }
 
 adb shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 > /dev/null
-sleep 25
+sleep 20
+# The first launch can be slow on the emulator; wait for the launcher's tiles.
+for _ in 1 2 3 4 5 6; do
+  shot 1-launch > /dev/null
+  grep -q 'Mail"' "$out/1-launch.xml" && break
+  sleep 10
+done
 shot 1-launch
 poke
 check "launch"
@@ -64,7 +70,8 @@ if [ -n "$xy" ]; then
   poke
   check "opening Mail"
 else
-  echo "::warning::No Mail button on the launcher screen"
+  echo "::error::No Mail button on the launcher screen"
+  fail=1
 fi
 
 adb shell settings put system accelerometer_rotation 0
