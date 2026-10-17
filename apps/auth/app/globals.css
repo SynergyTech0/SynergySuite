@@ -73,3 +73,6 @@ code.k { background: var(--bg); border: 1px solid var(--border); border-radius: 
 .mono { font-family: Consolas, monospace; font-size: 12px; }
 .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 12px 0; }
 .codes span { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: Consolas, monospace; font-size: 13px; text-align: center; }
+
+code.k.app-pw { font-size: 18px; letter-spacing: 1px; padding: 6px 12px; user-select: all; }
+table.kv td { padding: 3px 10px 3px 0; font-size: 13px; border: none; }

@@ -2,7 +2,8 @@
  * SynergyAuth end-to-end verification. Requires the dev server on :3500.
  * Exercises: discovery, login+lockout, TOTP MFA enroll/login, backup codes,
  * PKCE code flow, tokens, userinfo, refresh rotation + reuse detection,
- * introspection, revocation, client_credentials, logout.
+ * introspection, revocation, client_credentials, logout, app passwords (set
+ * PROXY_SHARED_SECRET for the server and this test to check them end to end).
  */
 import { createHmac, createHash, randomBytes, generateKeyPairSync, createSign } from 'crypto';
 import { readdirSync, readFileSync } from 'fs';
@@ -526,6 +527,68 @@ async function main() {
   await pool.end();
   // The fact that sections 6 & 8 (TOTP login, signed tokens) passed proves the
   // encrypted values still decrypt correctly for use.
+
+  console.log('== 21. App passwords (phone sync) ==');
+  const apEmail = `ap-${suffix}@example.com`;
+  await req('POST', '/api/admin/users', {
+    body: JSON.stringify({ action: 'create', email: apEmail, password: userPw, name: 'Phone User' }),
+    cookies: adminJar, headers: { 'content-type': 'application/json' },
+  });
+  const apJar = jar();
+  await req('POST', '/api/auth/login', { body: { email: apEmail, password: userPw, return_to: '/account' }, cookies: apJar });
+  const apOrigin = new URL(BASE).origin;
+  const makePw = (name, o = apOrigin) => req('POST', '/api/account/app-passwords', {
+    body: JSON.stringify({ name }), cookies: apJar, headers: { 'content-type': 'application/json', origin: o },
+  });
+  r = await makePw('iPhone');
+  const iphone = await r.json();
+  ok('app password made, shown once', r.status === 200 && /^[a-z2-9]{4}(-[a-z2-9]{4}){3}$/.test(iphone.password ?? ''), JSON.stringify(iphone));
+  r = await makePw('Evil', 'https://elsewhere.example');
+  ok('app password refused from another origin', r.status === 403);
+  r = await req('GET', '/api/account/app-passwords', { cookies: apJar });
+  const apListed = (await r.json()).appPasswords ?? [];
+  ok('app passwords listed without the password', apListed.length === 1 && apListed[0].name === 'iPhone' && !('password' in apListed[0]) && !('token_hash' in apListed[0]));
+  const secret = process.env.PROXY_SHARED_SECRET;
+  if (!secret) {
+    console.log('  SKIP  verify checks (set PROXY_SHARED_SECRET for the server and this test)');
+  } else {
+    const check = (email, password, s = secret) => req('POST', '/api/internal/app-passwords/verify', {
+      body: JSON.stringify({ email, password, app: 'e2e', ip: '192.0.2.1' }),
+      headers: { 'content-type': 'application/json', 'x-proxy-auth-secret': s },
+    });
+    r = await check(apEmail, iphone.password);
+    ok('app password verifies for the internal network', r.status === 200 && (await r.json()).email === apEmail);
+    r = await check(apEmail.toUpperCase(), iphone.password.toUpperCase().replace(/-/g, ' '));
+    ok('case, spaces and dashes don\'t matter', r.status === 200);
+    r = await check(apEmail, iphone.password, 'wrong-secret');
+    ok('verify refuses without the proxy secret', r.status === 403);
+    r = await check(apEmail, userPw);
+    ok('the account password is not an app password', r.status === 401);
+    r = await req('GET', '/api/account/app-passwords', { cookies: apJar });
+    ok('last used is recorded', ((await r.json()).appPasswords[0].last_used_app) === 'e2e');
+    const laptop = await (await makePw('Laptop')).json();
+    ok('second app password works', (await check(apEmail, laptop.password)).status === 200);
+    r = await req('DELETE', `/api/account/app-passwords/${laptop.id}`, { cookies: apJar, headers: { origin: apOrigin } });
+    ok('revoked', r.status === 200);
+    ok('revoked app password refused', (await check(apEmail, laptop.password)).status === 401);
+    ok('the other one still works', (await check(apEmail, iphone.password)).status === 200);
+    for (let i = 0; i < 10; i++) r = await check(apEmail, `wrong-guess-${i}-aaaaaaaa`);
+    ok('10 wrong guesses lock app passwords', r.status === 429);
+    ok('right password refused while locked', (await check(apEmail, iphone.password)).status === 429);
+    r = await req('POST', '/api/auth/login', { body: { email: apEmail, password: userPw, return_to: '/account' }, cookies: jar() });
+    ok('web sign-in is not locked by app password guesses', r.status === 303 && !(r.headers.get('location') ?? '').includes('error'));
+  }
+  r = await req('POST', '/api/admin/users', {
+    body: JSON.stringify({ action: 'reset_password', user_id: (await (await req('GET', '/api/admin/users', { cookies: adminJar })).json()).users.find((u) => u.email === apEmail).id, password: userPw }),
+    cookies: adminJar, headers: { 'content-type': 'application/json' },
+  });
+  const pg2 = (await import('pg')).default;
+  const pool2 = new pg2.Pool({ connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5499/synergydb', max: 1 });
+  const live = (await pool2.query(`SELECT count(*)::int AS n FROM sa_app_passwords p JOIN sa_users u ON u.id = p.user_id WHERE u.email = $1::text AND p.revoked = 0`, [apEmail])).rows[0].n;
+  const stored = (await pool2.query(`SELECT token_hash FROM sa_app_passwords p JOIN sa_users u ON u.id = p.user_id WHERE u.email = $1::text`, [apEmail])).rows;
+  await pool2.end();
+  ok('stored hashed, never as typed', stored.length === 2 && stored.every((x) => /^[0-9a-f]{64}$/.test(x.token_hash) && x.token_hash !== iphone.password));
+  ok('an admin password reset revokes app passwords', live === 0);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
