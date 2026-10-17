@@ -70,6 +70,11 @@
 	reverse_proxy {args[0]}
 }
 
+# The bare domain is the front door: it opens the Hub (sign-in first if needed).
+{$SUITE_DOMAIN} {
+	redir https://auth.{$SUITE_DOMAIN}/hub 302
+}
+
 auth.{$SUITE_DOMAIN} {
 	# App password checks for Calendar and Contacts stay on the compose network.
 	handle /api/internal/* {

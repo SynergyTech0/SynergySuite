@@ -123,7 +123,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "Some routers block DNS answers that point at 127.0.0.1. Add this line to /etc/hosts"
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
-  hosts="127.0.0.1"
+  hosts="127.0.0.1 $domain"
   for h in auth sso admin base books builder bookings campaigns calendar chat commerce contacts contracts crm desk devices diagrams drive engage field flow flow-studio forms groups insights law loop mail meet notes office ops people hr phone planner portal projects search sign sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
