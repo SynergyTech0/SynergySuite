@@ -1,16 +1,16 @@
 "use client";
 // Apps for managed devices: App Store apps for iPhone, iPad and Mac, signed .pkg installers for Macs,
-// and managed Google Play apps for Android.
+// managed Google Play apps for Android, and MSI installers for Windows.
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { api, useData } from "./client";
 import { Modal } from "./Modal";
 import { type AppCtx, Badge, Empty, PLATFORM } from "./shared";
 
-const SOURCE = { app_store: "App Store", package: "Package", play: "Google Play" } as const;
+const SOURCE = { app_store: "App Store", package: "Package", play: "Google Play", msi: "Windows installer" } as const;
 
 export type CatalogApp = {
-  id: string; name: string; platform: string; source: "app_store" | "package" | "play"; store_id: string | null; bundle_id: string; version: string;
+  id: string; name: string; platform: string; source: "app_store" | "package" | "play" | "msi"; store_id: string | null; bundle_id: string; version: string;
   url: string | null; auto_install: boolean; installed: number;
 };
 
@@ -29,7 +29,7 @@ export function Apps({ app }: { app: AppCtx }) {
         <button className="btn primary" onClick={() => setAdding(true)}><Plus size={16} /> Add app</button>
       </div>
       {!apps ? <p className="muted">Loading…</p> : !apps.length ? (
-        <section className="panel"><Empty><h2>No apps yet</h2><p>Add an App Store app by its link, a signed macOS installer package by its download address, or an Android app from Google Play.</p></Empty></section>
+        <section className="panel"><Empty><h2>No apps yet</h2><p>Add an App Store app by its link, a signed macOS installer package by its download address, an Android app from Google Play, or a Windows .msi installer.</p></Empty></section>
       ) : (
         <section className="panel flush">
           <table className="table">
@@ -37,7 +37,7 @@ export function Apps({ app }: { app: AppCtx }) {
             <tbody>
               {apps.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.name}<div className="rsub">{a.source === "app_store" ? `App Store ${a.store_id}` : a.source === "play" ? a.store_id : `${a.bundle_id} ${a.version}`}</div></td>
+                  <td>{a.name}<div className="rsub">{a.source === "app_store" ? `App Store ${a.store_id}` : a.source === "play" ? a.store_id : a.source === "msi" ? `${a.store_id} ${a.version}` : `${a.bundle_id} ${a.version}`}</div></td>
                   <td>{PLATFORM[a.platform] ?? a.platform}</td>
                   <td className="muted">{SOURCE[a.source]}</td>
                   <td className="num">{a.installed}</td>
@@ -45,7 +45,7 @@ export function Apps({ app }: { app: AppCtx }) {
                     <label className="check small"><input type="checkbox" checked={a.auto_install} onChange={(e) => run(api(`/api/mdm/apps/${a.id}`, { method: "PATCH", json: { auto_install: e.target.checked } }), e.target.checked ? "New devices will get it" : "New devices won't get it")} /> Install automatically</label>
                   </td>
                   <td className="nowrap">
-                    <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}/install`, { method: "POST", json: { all: true } }), `Installing ${a.name} on every managed ${a.platform === "darwin" ? "Mac" : a.platform === "android" ? "Android device" : "iPhone and iPad"}`)}>Install on all</button>{" "}
+                    <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}/install`, { method: "POST", json: { all: true } }), `Installing ${a.name} on every managed ${a.platform === "darwin" ? "Mac" : a.platform === "android" ? "Android device" : a.platform === "windows" ? "Windows PC" : "iPhone and iPad"}`)}>Install on all</button>{" "}
                     <button className="btn small" onClick={() => run(api(`/api/mdm/apps/${a.id}`, { method: "DELETE" }), "Removed from the list")}>Remove</button>
                   </td>
                 </tr>
@@ -54,14 +54,14 @@ export function Apps({ app }: { app: AppCtx }) {
           </table>
         </section>
       )}
-      <p className="muted small">App Store apps install without asking for an Apple ID on supervised devices with licenses from Apple Business Manager; otherwise the person is asked to sign in to the App Store. Packages must be signed with a Developer ID Installer certificate. Google Play apps install silently on Android work profiles and company phones.</p>
+      <p className="muted small">App Store apps install without asking for an Apple ID on supervised devices with licenses from Apple Business Manager; otherwise the person is asked to sign in to the App Store. Packages must be signed with a Developer ID Installer certificate. Google Play apps install silently on Android work profiles and company phones. Windows installers install silently at the PC&apos;s next check-in and are checked against the file Devices downloaded.</p>
       {adding ? <AddApp app={app} onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload(); }} /> : null}
     </div>
   );
 }
 
 function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; onSaved: () => void }) {
-  const [source, setSource] = useState<"app_store" | "package" | "play">("app_store");
+  const [source, setSource] = useState<"app_store" | "package" | "play" | "msi">("app_store");
   const [platform, setPlatform] = useState("ios");
   const [name, setName] = useState("");
   const [store, setStore] = useState("");
@@ -85,6 +85,7 @@ function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; o
           <button type="button" className={source === "app_store" ? "on" : ""} onClick={() => setSource("app_store")}>App Store</button>
           <button type="button" className={source === "package" ? "on" : ""} onClick={() => setSource("package")}>Mac package (.pkg)</button>
           <button type="button" className={source === "play" ? "on" : ""} onClick={() => setSource("play")}>Google Play</button>
+          <button type="button" className={source === "msi" ? "on" : ""} onClick={() => setSource("msi")}>Windows (.msi)</button>
         </div>
         <label><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} /></label>
         {source === "app_store" ? (
@@ -93,6 +94,15 @@ function AddApp({ app, onClose, onSaved }: { app: AppCtx; onClose: () => void; o
             <label><span>For</span>
               <select value={platform} onChange={(e) => setPlatform(e.target.value)}><option value="ios">iPhone and iPad</option><option value="darwin">Mac</option></select>
             </label>
+          </>
+        ) : source === "msi" ? (
+          <>
+            <label><span>Download address (https)</span><input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://files.example.com/app.msi" required /></label>
+            <div className="grid2">
+              <label><span>Product code</span><input value={store} onChange={(e) => setStore(e.target.value)} placeholder="{12345678-ABCD-…}" required /></label>
+              <label><span>Version</span><input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.2.0" required /></label>
+            </div>
+            <p className="muted small">The product code is in the installer&apos;s Property table (Orca or msiinfo shows it). Devices downloads the file once to take its SHA-256; PCs download it from this address.</p>
           </>
         ) : source === "play" ? (
           <label><span>Google Play link or package name</span><input value={store} onChange={(e) => setStore(e.target.value)} placeholder="https://play.google.com/store/apps/details?id=com.example.app" required /></label>

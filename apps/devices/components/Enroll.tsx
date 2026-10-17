@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ago, api, download, useData } from "./client";
 import { AndroidEnroll } from "./Android";
 import { AppleEnroll } from "./Apple";
+import { WindowsEnroll } from "./Windows";
 import { Modal } from "./Modal";
 import { type AppCtx, Badge, Empty } from "./shared";
 
@@ -69,6 +70,7 @@ export function Enroll({ app, organization, onCreated }: { app: AppCtx; organiza
       ) : null}
       <AppleEnroll app={app} />
       <AndroidEnroll app={app} />
+      <WindowsEnroll app={app} />
       {made ? <Scripts made={made} app={app} onClose={() => setMade(null)} /> : null}
     </>
   );

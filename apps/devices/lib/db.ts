@@ -281,11 +281,18 @@ CREATE TABLE IF NOT EXISTS mdm_apps (
 -- Android (lib/mdm/android.ts): phones enroll through Google's Android Management API. An enrollment's
 -- id is Google's device name; a "play" app is a Google Play package name in store_id.
 ALTER TABLE mdm_enrollments DROP CONSTRAINT IF EXISTS mdm_enrollments_platform_check;
-ALTER TABLE mdm_enrollments ADD CONSTRAINT mdm_enrollments_platform_check CHECK (platform IN ('darwin', 'ios', 'android'));
+ALTER TABLE mdm_enrollments ADD CONSTRAINT mdm_enrollments_platform_check CHECK (platform IN ('darwin', 'ios', 'android', 'windows'));
 ALTER TABLE mdm_apps DROP CONSTRAINT IF EXISTS mdm_apps_platform_check;
-ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_platform_check CHECK (platform IN ('darwin', 'ios', 'android'));
+ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_platform_check CHECK (platform IN ('darwin', 'ios', 'android', 'windows'));
 ALTER TABLE mdm_apps DROP CONSTRAINT IF EXISTS mdm_apps_source_check;
-ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_source_check CHECK (source IN ('app_store', 'package', 'play'));
+ALTER TABLE mdm_apps ADD CONSTRAINT mdm_apps_source_check CHECK (source IN ('app_store', 'package', 'play', 'msi'));
+-- Windows (lib/mdm/windows.ts): an enrollment's id is the PC's device ID; an "msi" app keeps its
+-- product code in store_id and its download's SHA-256 in manifest.
+-- Windows commands wait in Devices until the PC checks in: what to send (OMA-DM commands), when it
+-- went out, and each part's answer.
+ALTER TABLE mdm_commands ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE mdm_commands ADD COLUMN IF NOT EXISTS results JSONB;
+ALTER TABLE mdm_commands ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
 `;
 
 type Db = ReturnType<typeof createDb>;

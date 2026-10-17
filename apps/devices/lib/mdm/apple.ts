@@ -10,6 +10,7 @@ import { deployToEnrollment } from "./catalog";
 import { MdmUnavailable, type PushCert, enqueue, mdmConfig, uploadPushCert } from "./nanomdm";
 import { type PlistValue, PlistError, boolOrNull, dict, num, parsePlist, str } from "./plist";
 import { type ApplePlatform, MDM_PROFILE_ID, type MdmPlatform, enrollmentProfile } from "./profiles";
+import { queue as queueWindows, restartCommand, unenrollCommand, wipeCommand } from "./windows";
 
 /**
  * Apple device management: enrollment of iPhones, iPads and Macs, what they report, and the
@@ -282,7 +283,7 @@ export async function refreshDue(only?: string[]): Promise<void> {
   if (!only && Date.now() - lastSweep < 15 * 60_000) return;
   if (!only) lastSweep = Date.now();
   const rows = await q<{ id: string }>(
-    `SELECT id FROM mdm_enrollments WHERE status = 'enrolled' AND platform <> 'android' AND (info_asked_at IS NULL OR info_asked_at < now() - interval '1 day')
+    `SELECT id FROM mdm_enrollments WHERE status = 'enrolled' AND platform IN ('darwin', 'ios') AND (info_asked_at IS NULL OR info_asked_at < now() - interval '1 day')
        AND ($1::text[] IS NULL OR id = ANY($1)) LIMIT 200`,
     [only ?? null],
   );
@@ -461,6 +462,7 @@ const pin6 = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
  */
 export async function lock(me: Me, deviceId: string, v: { message?: unknown; phone?: unknown }): Promise<{ pin: string | null }> {
   const m = await managed(me, deviceId);
+  if (m.platform === "windows") throw new UserError("Windows can't be locked remotely (Windows has no remote lock for PCs). Restart it, or erase it if it's lost.");
   if (m.platform === "android") {
     await androidCommand(m.enrollment_id, "LOCK", me.email);
     await audit(me.email, "mdm.lock", deviceId, { hostname: m.hostname });
@@ -478,10 +480,16 @@ export async function lock(me: Me, deviceId: string, v: { message?: unknown; pho
  * Erase: everything on the device is deleted and it returns to setup. Admins only, and only after
  * typing the device's name. A Mac without Apple silicon or a T2 chip locks with a PIN afterwards.
  */
-export async function erase(me: Me, deviceId: string, v: { confirm?: unknown; keep_data_plan?: unknown }): Promise<{ pin: string | null }> {
+export async function erase(me: Me, deviceId: string, v: { confirm?: unknown; keep_data_plan?: unknown; keep_user_data?: unknown }): Promise<{ pin: string | null }> {
   if (me.role !== "admin") throw new UserError("Only device admins can erase a device", 403);
   const m = await managed(me, deviceId);
   if (text(v.confirm, 300) !== m.hostname) throw new UserError("Type the device's name exactly to confirm");
+  if (m.platform === "windows") {
+    const keep = v.keep_user_data === true;
+    await queueWindows([m.enrollment_id], "Wipe", keep ? "Reset (keep files)" : "Erase", wipeCommand(keep), me.email);
+    await audit(me.email, "mdm.erase", deviceId, { hostname: m.hostname, keep_user_data: keep });
+    return { pin: null };
+  }
   if (m.platform === "android") {
     await androidWipe(m.enrollment_id, m.device_id, me.email, v.keep_data_plan !== false);
     await audit(me.email, "mdm.erase", deviceId, { hostname: m.hostname, work_profile_only: m.mode === "work_profile" });
@@ -502,6 +510,12 @@ export async function erase(me: Me, deviceId: string, v: { confirm?: unknown; ke
 export async function power(me: Me, deviceId: string, action: "restart" | "shutdown"): Promise<void> {
   if (me.role !== "admin") throw new UserError("Only device admins can restart or shut down devices", 403);
   const m = await managed(me, deviceId);
+  if (m.platform === "windows") {
+    if (action !== "restart") throw new UserError("Windows PCs can be restarted remotely, but not shut down");
+    await queueWindows([m.enrollment_id], "Restart", "Restart", restartCommand, me.email);
+    await audit(me.email, "mdm.restart", deviceId, { hostname: m.hostname });
+    return;
+  }
   if (m.platform === "android") {
     if (action !== "restart" || m.mode !== "fully_managed") throw new UserError("Android phones can only be restarted remotely, and only company phones (not work profiles)");
     await androidCommand(m.enrollment_id, "REBOOT", me.email);
@@ -519,6 +533,11 @@ export async function refreshManaged(me: Me, deviceId: string): Promise<boolean>
     await refreshAndroid(e.id);
     return true;
   }
+  if (e?.platform === "windows") {
+    // The PC is asked for its details at its next check-in.
+    await q(`UPDATE mdm_enrollments SET info_at = NULL, info_asked_at = NULL WHERE id = $1`, [e.id]);
+    return true;
+  }
   if (!e || !mdmConfig()) return false;
   await askForInfo([e.id], me.email);
   return true;
@@ -528,7 +547,8 @@ export async function refreshManaged(me: Me, deviceId: string): Promise<boolean>
 export async function unenroll(actor: string, deviceId: string): Promise<void> {
   const all = await q<{ id: string; platform: string; enrollment_type: string }>(`SELECT id, platform, enrollment_type FROM mdm_enrollments WHERE device_id = $1 AND status = 'enrolled'`, [deviceId]);
   for (const a of all.filter((r) => r.platform === "android")) await androidRetire(a.id, a.enrollment_type, actor);
-  const rows = all.filter((r) => r.platform !== "android");
+  await queueWindows(all.filter((r) => r.platform === "windows").map((r) => r.id), "Unenroll", "Remove management", unenrollCommand, actor);
+  const rows = all.filter((r) => r.platform === "darwin" || r.platform === "ios");
   if (!rows.length || !mdmConfig()) return;
   await send(rows.map((r) => r.id), { RequestType: "RemoveProfile", Identifier: MDM_PROFILE_ID }, "Remove management", actor);
 }

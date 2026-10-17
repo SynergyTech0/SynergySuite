@@ -796,6 +796,8 @@ services:
       DEVICES_SCEP_CHALLENGE: ${DEVICES_SCEP_CHALLENGE:-}
       DEVICES_ORG_NAME: ${DEVICES_ORG_NAME:-}
       DEVICES_ANDROID_SERVICE_ACCOUNT: ${DEVICES_ANDROID_SERVICE_ACCOUNT:-}
+      DEVICES_WINDOWS_MDM: ${DEVICES_WINDOWS_MDM:-}
+      DEVICES_WINDOWS_MDM_HOST: ${DEVICES_WINDOWS_MDM_HOST:-}
 
   # Apple device management for Devices: NanoMDM speaks the MDM protocol to iPhones, iPads and
   # Macs, and the SCEP server issues their identity certificates. Both are MIT (MicroMDM project).
