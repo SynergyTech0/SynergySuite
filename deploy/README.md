@@ -171,6 +171,20 @@ deploy/hub-import/run.sh auth root@your-hub-server
 
 It reads the hub's database over your own SSH access (container `saauth-db`, or set `HUB_DB_CONTAINER`). People keep their passwords. Anyone who already has an account here keeps it unchanged unless you add `--overwrite-passwords`. Two-step sign-in has to be set up again, because the hub encrypted those secrets with its own key. Hub apps the suite now covers (Boards, Docs, Cal, Books and so on; the list is `COVERED` in `apps/auth/scripts/import-hub.mjs`) are replaced by their suite apps. Every other hub app becomes a linked app at its old address, with its grants. Running it again only adds what is missing.
 
+The hub's other apps come across the same way, one part at a time, each with `--dry-run` first:
+
+```bash
+deploy/hub-import/run.sh sign  root@your-sign-server    # SynergySign -> Sign
+deploy/hub-import/run.sh docs  root@your-docs-server    # SynergyDocs -> Office
+deploy/hub-import/run.sh drive root@your-drive-server   # SynergyDrive -> Drive
+```
+
+- **sign** (container `ssign-db`): documents with their signers, fields, audit trail and notifications, and the original and signed PDFs, which `sign.files.sh` reads from the old app's volume (container `synergysign-app`, or set `HUB_FILES_CONTAINER`). People are matched by email; anyone new gets a Sign user and signs in with their suite account. Sign admins still come from `SIGN_ADMIN_EMAILS`. Plans and billing, affiliate and enterprise records, templates and contract events the hub never sent stay behind. The PDFs are written to Sign's volume (`LOCAL_STORAGE_PATH`), not to an S3 backup.
+- **docs** (container `sdocs-db`): every document, spreadsheet and presentation with its sharing, comments and version history. Office grew out of SynergyDocs and stores them the same way, so they open as they were, in this suite's organization (`DOCS_ORG`). Open Office once before importing so it has set up its database.
+- **drive** (container `sdrive-postgres`): folders, files and their versions into each owner's own files; `drive.files.sh` reads the contents from the old object storage through the old API container (`sdrive-api`). The old Drive knew people only by an id made from their email, so they are matched against the suite's accounts and anyone already in Drive; add `--email someone@example.com` for anyone it lists as unknown. A folder that already exists by name is used as it is, and a file whose name is taken gets "name (1)". The hub's recycle bin and shared drives stay behind, and imported files don't count against quotas. Open Drive once before importing.
+
+Each part keeps the hub's ids, so running it again skips what is already here, and something deleted here after an import comes back if you import again. The files of `sign` and `drive` travel inside the same SSH stream as the rows (base64, about a third larger) and are never written to disk on the way.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.
