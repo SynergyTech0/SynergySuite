@@ -5,7 +5,8 @@ import { UserError, text, uuid } from "../util";
 import { organization, send } from "./apple";
 import { installOnAndroid, playPackage, syncAndroidPolicies } from "./android";
 import { mdmConfig } from "./nanomdm";
-import { type ApplePlatform, type MdmPlatform, PROFILE_KINDS, type ProfileKind, type Settings, cleanSettings, profileIdentifier, settingsProfile } from "./profiles";
+import { fileHash, msiCommands, productCode, profileCommands, queue } from "./windows";
+import { type MdmPlatform, PROFILE_KINDS, type ProfileKind, type Settings, cleanSettings, profileIdentifier, settingsProfile } from "./profiles";
 
 /**
  * Settings profiles and apps for Apple devices, like Intune's configuration profiles and app
@@ -16,8 +17,13 @@ import { type ApplePlatform, type MdmPlatform, PROFILE_KINDS, type ProfileKind, 
 
 type ProfileRow = { id: string; name: string; description: string; kind: ProfileKind; settings: Settings; platforms: MdmPlatform[]; enabled: boolean; version: number };
 
-const PLATFORMS: MdmPlatform[] = ["darwin", "ios", "android"];
-const PLATFORM_NAME: Record<MdmPlatform, string> = { darwin: "Mac", ios: "iPhone and iPad", android: "Android" };
+const PLATFORMS: MdmPlatform[] = ["darwin", "ios", "android", "windows"];
+const PLATFORM_NAME: Record<MdmPlatform, string> = { darwin: "Mac", ios: "iPhone and iPad", android: "Android", windows: "Windows" };
+
+/** Enrollments a profile or app goes to: Apple and Windows get commands; Android phones get Google policies instead. */
+type Target = { id: string; platform: MdmPlatform };
+const apple = (t: Target[]) => t.filter((x) => x.platform === "darwin" || x.platform === "ios").map((x) => x.id);
+const windows = (t: Target[]) => t.filter((x) => x.platform === "windows").map((x) => x.id);
 
 /** Settings never shown back in full (Wi-Fi passwords). */
 function redact(p: ProfileRow): ProfileRow {
@@ -88,10 +94,11 @@ export async function updateProfile(me: Me, id: string, v: Record<string, unknow
 export async function deleteProfile(me: Me, id: string): Promise<void> {
   const [p] = await q<ProfileRow>(`SELECT * FROM mdm_profiles WHERE id = $1`, [uuid(id, "profile")]);
   if (!p) throw new UserError("No such profile", 404);
-  const on = await q<{ enrollment_id: string }>(`SELECT enrollment_id FROM mdm_profile_status WHERE profile_id = $1`, [p.id]);
-  if (on.length && mdmConfig()) {
-    await send(on.map((r) => r.enrollment_id), { RequestType: "RemoveProfile", Identifier: profileIdentifier(p.id) }, `Remove profile ${p.name}`, me.email, {});
+  const on = await q<Target>(`SELECT s.enrollment_id AS id, e.platform FROM mdm_profile_status s JOIN mdm_enrollments e ON e.id = s.enrollment_id WHERE s.profile_id = $1`, [p.id]);
+  if (apple(on).length && mdmConfig()) {
+    await send(apple(on), { RequestType: "RemoveProfile", Identifier: profileIdentifier(p.id) }, `Remove profile ${p.name}`, me.email, {});
   }
+  await queue(windows(on), "RemoveProfile", `Remove profile ${p.name}`, profileCommands(p.kind, p.settings, true), me.email, {});
   await q(`DELETE FROM mdm_profiles WHERE id = $1`, [p.id]);
   await audit(me.email, "mdm.profile.delete", p.id, { name: p.name, removed_from: on.length });
   await syncAndroidPolicies(me.email);
@@ -102,51 +109,65 @@ export async function deleteProfile(me: Me, id: string): Promise<void> {
  * have this version get it; devices that shouldn't (turned off, platform removed) have it removed.
  */
 export async function deployProfile(profileId: string, actor: string): Promise<void> {
-  if (!mdmConfig()) return;
   const [p] = await q<ProfileRow>(`SELECT * FROM mdm_profiles WHERE id = $1`, [profileId]);
   if (!p) return;
   const want = p.enabled
-    ? await q<{ id: string }>(
-        `SELECT e.id FROM mdm_enrollments e LEFT JOIN mdm_profile_status s ON s.enrollment_id = e.id AND s.profile_id = $1
-         WHERE e.status = 'enrolled' AND e.platform <> 'android' AND e.platform = ANY($2) AND (s.version IS NULL OR s.version <> $3 OR s.status = 'error')`,
+    ? await q<Target>(
+        `SELECT e.id, e.platform FROM mdm_enrollments e LEFT JOIN mdm_profile_status s ON s.enrollment_id = e.id AND s.profile_id = $1
+         WHERE e.status = 'enrolled' AND e.platform IN ('darwin', 'ios', 'windows') AND e.platform = ANY($2) AND (s.version IS NULL OR s.version <> $3 OR s.status = 'error')`,
         [p.id, p.platforms, p.version],
       )
     : [];
-  if (want.length) await installProfileOn(p, want.map((r) => r.id), actor);
-  const remove = await q<{ enrollment_id: string }>(
-    `SELECT s.enrollment_id FROM mdm_profile_status s JOIN mdm_enrollments e ON e.id = s.enrollment_id
+  if (want.length) await installProfileOn(p, want, actor);
+  const remove = await q<Target>(
+    `SELECT s.enrollment_id AS id, e.platform FROM mdm_profile_status s JOIN mdm_enrollments e ON e.id = s.enrollment_id
      WHERE s.profile_id = $1 AND s.status <> 'removing' AND (NOT $2 OR NOT (e.platform = ANY($3)))`,
     [p.id, p.enabled, p.platforms],
   );
-  if (remove.length) {
-    const ids = remove.map((r) => r.enrollment_id);
-    const cmd = await send(ids, { RequestType: "RemoveProfile", Identifier: profileIdentifier(p.id) }, `Remove profile ${p.name}`, actor, { profile_id: p.id });
-    await q(`UPDATE mdm_profile_status SET status = 'removing', command_uuid = $3, updated_at = now() WHERE profile_id = $1 AND enrollment_id = ANY($2)`, [p.id, ids, cmd]);
+  const removing = async (ids: string[], cmd: string) => {
+    if (!cmd) await q(`DELETE FROM mdm_profile_status WHERE profile_id = $1 AND enrollment_id = ANY($2)`, [p.id, ids]);
+    else await q(`UPDATE mdm_profile_status SET status = 'removing', command_uuid = $3, updated_at = now() WHERE profile_id = $1 AND enrollment_id = ANY($2)`, [p.id, ids, cmd]);
+  };
+  if (apple(remove).length && mdmConfig()) {
+    await removing(apple(remove), await send(apple(remove), { RequestType: "RemoveProfile", Identifier: profileIdentifier(p.id) }, `Remove profile ${p.name}`, actor, { profile_id: p.id }));
+  }
+  if (windows(remove).length) {
+    await removing(windows(remove), await queue(windows(remove), "RemoveProfile", `Remove profile ${p.name}`, profileCommands(p.kind, p.settings, true), actor, { profile_id: p.id }));
   }
 }
 
-async function installProfileOn(p: ProfileRow, ids: string[], actor: string): Promise<void> {
-  const doc = settingsProfile({ ...p, organization: organization() });
-  const cmd = await send(ids, { RequestType: "InstallProfile", Payload: Buffer.from(doc.xml) }, `Install profile ${p.name}`, actor, { profile_id: p.id, version: p.version });
-  await q(
+async function installProfileOn(p: ProfileRow, targets: Target[], actor: string): Promise<void> {
+  const status = async (ids: string[], cmd: string) => q(
     `INSERT INTO mdm_profile_status (enrollment_id, profile_id, version, command_uuid, status)
-     SELECT unnest($1::text[]), $2, $3, $4, 'queued'
-     ON CONFLICT (enrollment_id, profile_id) DO UPDATE SET version = $3, command_uuid = $4, status = 'queued', error = NULL, updated_at = now()`,
+     SELECT unnest($1::text[]), $2, $3, NULLIF($4, ''), CASE WHEN $4 = '' THEN 'installed' ELSE 'queued' END
+     ON CONFLICT (enrollment_id, profile_id) DO UPDATE SET version = $3, command_uuid = NULLIF($4, ''),
+       status = CASE WHEN $4 = '' THEN 'installed' ELSE 'queued' END, error = NULL, updated_at = now()`,
     [ids, p.id, p.version, cmd],
   );
+  if (apple(targets).length && mdmConfig()) {
+    const doc = settingsProfile({ ...p, organization: organization() });
+    const cmd = await send(apple(targets), { RequestType: "InstallProfile", Payload: Buffer.from(doc.xml) }, `Install profile ${p.name}`, actor, { profile_id: p.id, version: p.version });
+    if (cmd) await status(apple(targets), cmd);
+  }
+  if (windows(targets).length) {
+    // A setting Windows doesn't have (screenshots, encrypted backups) leaves nothing to send: the profile counts as applied.
+    const subs = profileCommands(p.kind, p.settings);
+    await status(windows(targets), subs.length ? await queue(windows(targets), "InstallProfile", `Install profile ${p.name}`, subs, actor, { profile_id: p.id, version: p.version }) : "");
+  }
 }
 
 /** A newly enrolled device gets every enabled profile and automatic app for its platform. */
-export async function deployToEnrollment(enrollmentId: string, platform: ApplePlatform): Promise<void> {
+export async function deployToEnrollment(enrollmentId: string, platform: MdmPlatform): Promise<void> {
+  const target = [{ id: enrollmentId, platform }];
   const profiles = await q<ProfileRow>(`SELECT * FROM mdm_profiles WHERE enabled AND $1 = ANY(platforms) ORDER BY created_at`, [platform]);
-  for (const p of profiles) await installProfileOn(p, [enrollmentId], "Devices");
+  for (const p of profiles) await installProfileOn(p, target, "Devices");
   const apps = await q<AppRow>(`SELECT * FROM mdm_apps WHERE auto_install AND platform = $1 ORDER BY created_at`, [platform]);
   for (const a of apps) await installAppOn(a, [enrollmentId], "Devices");
 }
 
 /* ---------------------------------------------------------------- apps */
 
-type AppRow = { id: string; name: string; platform: MdmPlatform; source: "app_store" | "package" | "play"; store_id: string | null; bundle_id: string; version: string; url: string | null; manifest: Record<string, unknown> | null; auto_install: boolean };
+type AppRow = { id: string; name: string; platform: MdmPlatform; source: "app_store" | "package" | "play" | "msi"; store_id: string | null; bundle_id: string; version: string; url: string | null; manifest: Record<string, unknown> | null; auto_install: boolean };
 
 export async function listApps() {
   return q(
@@ -210,8 +231,8 @@ export async function packageManifest(url: string, meta: { bundle_id: string; ve
 }
 
 export async function createApp(me: Me, v: Record<string, unknown>, fetcher: typeof fetch = fetch): Promise<{ id: string }> {
-  const source = v.source === "package" ? "package" : v.source === "play" ? "play" : "app_store";
-  const platform: MdmPlatform = source === "package" ? "darwin" : source === "play" ? "android" : v.platform === "darwin" ? "darwin" : "ios";
+  const source = v.source === "package" ? "package" : v.source === "play" ? "play" : v.source === "msi" ? "msi" : "app_store";
+  const platform: MdmPlatform = source === "package" ? "darwin" : source === "play" ? "android" : source === "msi" ? "windows" : v.platform === "darwin" ? "darwin" : "ios";
   const name = text(v.name, 120);
   if (!name) throw new UserError("Name the app");
   let store: string | null = null;
@@ -223,6 +244,11 @@ export async function createApp(me: Me, v: Record<string, unknown>, fetcher: typ
     store = storeId(v.store);
   } else if (source === "play") {
     store = playPackage(v.store);
+  } else if (source === "msi") {
+    store = productCode(v.store);
+    if (!version) throw new UserError("Enter the installer's version");
+    url = text(v.url, 2000);
+    manifest = await fileHash(url, fetcher);
   } else {
     if (!/^[A-Za-z0-9.-]+$/.test(bundle)) throw new UserError("Enter the package's bundle identifier, like com.example.app");
     if (!version) throw new UserError("Enter the package's version");
@@ -257,6 +283,10 @@ export async function deleteApp(me: Me, id: string): Promise<void> {
 }
 
 async function installAppOn(a: AppRow, ids: string[], actor: string): Promise<string> {
+  if (a.platform === "windows") {
+    const m = a.manifest as { sha256: string };
+    return queue(ids, "InstallApp", `Install ${a.name}`, msiCommands({ store_id: a.store_id!, version: a.version, url: a.url!, sha256: m.sha256 }), actor, { app_id: a.id });
+  }
   const command = a.source === "app_store"
     // ManagementFlags 1: the app is removed when the device leaves management.
     ? { RequestType: "InstallApplication", iTunesStoreID: Number(a.store_id), ManagementFlags: 1 }

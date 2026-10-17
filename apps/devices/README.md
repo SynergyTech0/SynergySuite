@@ -39,6 +39,10 @@ iPhones, iPads and Macs can also be put under Apple device management, through
   passcode, Wi-Fi and restriction profiles; managed Google Play apps installed by admins or by
   people on their own phones. Phones report encryption, screen lock and Play Integrity for
   compliance.
+- **Windows management** with the MDM built into Windows 10 and 11: restart, reset (optionally
+  keeping user accounts and files), password, BitLocker, firewall, Windows Update, Wi-Fi and camera
+  settings, and MSI apps installed by admins or by people on their own PCs. PCs report BitLocker,
+  firewall and antivirus status; a PC that also runs osquery is one device, matched by serial number.
 - **Suite links**: search results and eDiscovery (devices and alerts per person) through the
   Admin center, and the `endpoint_compliance` and `endpoint_threats` evidence collectors in Trust.
 
@@ -91,6 +95,25 @@ Commands and state go through Google, so phones need nothing installed and Devic
 public port for them. Devices reads phones back every 15 minutes (or on Sync now). Each phone
 that has an app of its own gets its own policy; everything else comes from the shared one.
 
+## Windows devices
+
+Devices speaks Windows' own enrollment and management protocols (MS-MDE2, MS-XCEP, MS-WSTEP and
+OMA-DM, all published by Microsoft), so there's nothing to install and no extra service to run.
+
+1. Point DNS for `devices-windows.<SUITE_DOMAIN>` at the server. PCs check in there with the
+   identity certificate Devices issued them; that host asks for a client certificate, which is why
+   it isn't Devices' own.
+2. People choose Enroll this PC under My devices on the PC (or Settings › Accounts › Access work or
+   school › Enroll only in device management, with the server address Devices shows) and sign in
+   to the suite when Windows asks. The PC belongs to whoever signed in.
+
+The Caddyfile serves enrollment at `/api/windows/{discovery,policy,enroll}` without sign-in (each
+request carries a one-time token from the signed-in page `/api/enroll/windows/auth`) and sends
+`https://devices-windows.<domain>/ManagementServer/MDM.svc` to Devices with the PC's certificate.
+PCs check in hourly; Windows has no wake-up for other servers without Microsoft's push service, so
+commands wait for the next check-in (Settings › Accounts › Access work or school › Info › Sync
+checks in now). Windows has no remote lock for PCs.
+
 ## Settings
 
 | Variable | |
@@ -107,12 +130,15 @@ that has an app of its own gets its own policy; everything else comes from the s
 | `DEVICES_MDM_WEBHOOK_KEY` | Key NanoMDM signs its webhook with, shared with `devices-mdm` |
 | `DEVICES_SCEP_CHALLENGE` | SCEP challenge put in enrollment profiles, shared with `devices-scep` |
 | `DEVICES_ORG_NAME` | Organization name on management profiles and managed Google Play (default `Synergy`) |
+| `DEVICES_WINDOWS_MDM` | `off` turns Windows device management off (on by default) |
+| `DEVICES_WINDOWS_MDM_HOST` | Host PCs check in to; default `devices-windows.<SUITE_DOMAIN>` |
 | `DEVICES_ANDROID_SERVICE_ACCOUNT` | Google Cloud service account key (JSON or base64) for the Android Management API |
 
 ## Not yet
 
-Windows device management (lock, wipe, settings and apps on Windows) and blocking sign-in from
-non-compliant devices are the next milestones. Android zero-touch enrollment and private Play
+Blocking sign-in from non-compliant devices is the next milestone. Windows identity certificates
+last five years and aren't renewed automatically yet; Microsoft Store apps and Windows Autopilot
+aren't supported. Android zero-touch enrollment and private Play
 apps aren't supported yet. Apple Business Manager
 (automated enrollment and app licenses) isn't supported yet. Retiring a computer stops it
 reporting; it doesn't uninstall osquery.
