@@ -143,3 +143,31 @@ describe("first sight of a new user", () => {
     expect(ids.size).toBe(1);
   });
 });
+
+describe("people brought over from an older Hub", () => {
+  it("claims the imported row (email, no subject) on first sign-in instead of adding a second person", async () => {
+    const { db } = await import("@/db");
+    const { users } = await import("@/db/schema");
+    const [imported] = await db.insert(users).values({ email: "moved@example.com", name: "Moved" }).returning();
+    await db.insert(users).values({ email: "moved@example.com", name: "Mind twin", isMind: true });
+    setHeaders({ "x-forwarded-user": "oidc-sub-moved", "x-forwarded-email": "Moved@Example.com" });
+    const { getCurrentUserOrNull } = await import("@/lib/session");
+
+    const user = await getCurrentUserOrNull();
+    expect(user?.id).toBe(imported.id);
+    expect(user?.authSub).toBe("oidc-sub-moved");
+    expect((await getCurrentUserOrNull())?.id).toBe(imported.id);
+  });
+
+  it("never hands a row that already has a subject to someone else with that email", async () => {
+    const { db } = await import("@/db");
+    const { users } = await import("@/db/schema");
+    const [taken] = await db.insert(users).values({ authSub: "other-sub", email: "same@example.com", name: "First" }).returning();
+    setHeaders({ "x-forwarded-user": "oidc-sub-new", "x-forwarded-email": "same@example.com" });
+    const { getCurrentUserOrNull } = await import("@/lib/session");
+
+    const user = await getCurrentUserOrNull();
+    expect(user?.id).not.toBe(taken.id);
+    expect(user?.authSub).toBe("oidc-sub-new");
+  });
+});

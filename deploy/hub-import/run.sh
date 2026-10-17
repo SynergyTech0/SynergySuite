@@ -30,5 +30,5 @@ service=$(sed -n 's/.*service=\([^ ]*\).*/\1/p' <<<"$header")
 script=$(sed -n 's/.*script=\([^ ]*\).*/\1/p' <<<"$header")
 container=${HUB_DB_CONTAINER:-$container}
 
-ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\${POSTGRES_DB:-\$POSTGRES_USER}\"'" < "$sql" \
+ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-\${POSTGRES_USER:-postgres}}\"'" < "$sql" \
   | docker compose -f deploy/compose.yml --env-file "$ENV_FILE" exec -T "$service" node "${script:-scripts/import-hub.mjs}" "$@"
