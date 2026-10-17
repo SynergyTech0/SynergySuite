@@ -12,6 +12,11 @@
 # service whose importer reads it, e.g. `-- hub-import: container=saauth-db service=auth`,
 # plus script=<path> when the importer isn't scripts/import-hub.mjs in that container.
 # Set HUB_DB_CONTAINER if your old container has another name. Parts: ls deploy/hub-import/*.sql
+#
+# A part whose files live outside the database (on a volume, in object storage) also has a
+# <part>.files.sh, run on the old server with bash. It prints one line per file, "<path><TAB><base64>",
+# and comes after the export on the importer's stdin, below a line that reads "#hub-files".
+# Set HUB_FILES_CONTAINER if the container it reads from has another name.
 set -euo pipefail
 
 die() { echo "hub-import: $*" >&2; exit 1; }
@@ -30,5 +35,11 @@ service=$(sed -n 's/.*service=\([^ ]*\).*/\1/p' <<<"$header")
 script=$(sed -n 's/.*script=\([^ ]*\).*/\1/p' <<<"$header")
 container=${HUB_DB_CONTAINER:-$container}
 
-ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-\${POSTGRES_USER:-postgres}}\"'" < "$sql" \
-  | docker compose -f deploy/compose.yml --env-file "$ENV_FILE" exec -T "$service" node "${script:-scripts/import-hub.mjs}" "$@"
+files=$here/$part.files.sh
+{
+  ssh "$target" "docker exec -i $container sh -c 'psql -X -q -At -v ON_ERROR_STOP=1 -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-\${POSTGRES_USER:-postgres}}\"'" < "$sql"
+  if [ -f "$files" ]; then
+    echo '#hub-files'
+    ssh "$target" "HUB_FILES_CONTAINER=${HUB_FILES_CONTAINER:-} bash -s" < "$files"
+  fi
+} | docker compose -f deploy/compose.yml --env-file "$ENV_FILE" exec -T "$service" node "${script:-scripts/import-hub.mjs}" "$@"
