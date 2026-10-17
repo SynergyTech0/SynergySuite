@@ -16,6 +16,7 @@ export type Auth = { user: string; pass: string } | { user: string; accessToken:
 /** Everything needed to talk to one mailbox. Never sent to the browser. */
 export type Account = {
   id: string; // "suite" for the suite-hosted mailbox, otherwise the accounts row id
+  owner: string; // the suite user it belongs to
   label: string;
   address: string;
   fromName: string; // display name on outgoing mail
@@ -42,6 +43,7 @@ function suiteAccount(email: string, name = ""): Account | null {
   const insecureTls = bool(process.env.MAIL_SUITE_TLS_INSECURE, false);
   return {
     id: "suite",
+    owner: email,
     label: process.env.MAIL_SUITE_LABEL || "Mailbox",
     address: email,
     fromName: name,
@@ -79,7 +81,7 @@ function suiteAuth(email: string): Auth | null {
 }
 
 type Row = {
-  id: string; label: string; address: string;
+  id: string; owner_email: string; label: string; address: string;
   imap_host: string; imap_port: number; imap_secure: boolean;
   smtp_host: string; smtp_port: number; smtp_secure: boolean;
   username: string; secret: string;
@@ -88,6 +90,7 @@ type Row = {
 function fromRow(r: Row): Account {
   return {
     id: String(r.id),
+    owner: r.owner_email,
     label: r.label,
     address: r.address,
     fromName: r.label === r.address ? "" : r.label,
@@ -114,6 +117,22 @@ export async function getAccount(owner: string, id: string, ownerName = ""): Pro
   return rows[0] ? fromRow(rows[0]) : null;
 }
 
+/**
+ * Every outside account a user connected, for the hold sweep. One whose password can't be
+ * decrypted (MAIL_ENCRYPTION_KEY changed) is left out and logged.
+ */
+export async function listOutsideAccounts(owner: string): Promise<Account[]> {
+  const out: Account[] = [];
+  for (const r of await q<Row>("SELECT * FROM accounts WHERE owner_email = $1 ORDER BY id", [owner])) {
+    try {
+      out.push(fromRow(r));
+    } catch (err) {
+      console.error(`[mail] can't open the saved password of ${r.address}:`, (err as Error).message);
+    }
+  }
+  return out;
+}
+
 export type NewAccount = {
   label?: string; address: string; username?: string; password: string;
   imapHost: string; imapPort?: number; imapSecure?: boolean;
@@ -131,9 +150,12 @@ export async function addAccount(owner: string, a: NewAccount): Promise<string> 
   return String(rows[0].id);
 }
 
+/** Removes an outside account. Mail preserved from it for a legal hold stays, marked as removed. */
 export async function removeAccount(owner: string, id: string): Promise<boolean> {
   if (!/^\d+$/.test(id)) return false;
-  return (await q("DELETE FROM accounts WHERE id = $1 AND owner_email = $2 RETURNING id", [id, owner])).length > 0;
+  if (!(await q("DELETE FROM accounts WHERE id = $1 AND owner_email = $2 RETURNING id", [id, owner])).length) return false;
+  await q("UPDATE preserve_accounts SET removed_at = now() WHERE mailbox = $1 AND account = $2", [owner, id]);
+  return true;
 }
 
 const MAIL_PORTS = new Set([25, 143, 465, 587, 993, 2525]);

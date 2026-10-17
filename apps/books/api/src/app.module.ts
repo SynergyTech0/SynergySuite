@@ -41,6 +41,7 @@ import { BulkImportModule } from './modules/import/bulk-import.module';
 import { PurchaseOrderModule } from './modules/purchase-order/purchase-order.module';
 import { CurrencyModule } from './modules/currency/currency.module';
 import { BudgetModule } from './modules/budget/budget.module';
+import { ConsolidationModule } from './modules/consolidation/consolidation.module';
 import { SalesTaxModule } from './modules/sales-tax/sales-tax.module';
 import { FixedAssetsModule } from './modules/fixed-assets/fixed-assets.module';
 import { BankFeedsModule } from './modules/bank-feeds/bank-feeds.module';
@@ -85,6 +86,7 @@ import { MobileDepositModule } from './modules/mobile-deposit/mobile-deposit.mod
     PurchaseOrderModule,
     CurrencyModule,
     BudgetModule,
+    ConsolidationModule,
     SalesTaxModule,
     FixedAssetsModule,
     BankFeedsModule,

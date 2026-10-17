@@ -16,6 +16,7 @@
     "@hocuspocus/server": "2.15.2",
     "@noble/hashes": "^2.2.0",
     "@synergy/ai": "*",
+    "@synergy/compliance": "*",
     "@synergy/identity": "*",
     "@synergy/search": "*",
     "@synergy/shell": "*",

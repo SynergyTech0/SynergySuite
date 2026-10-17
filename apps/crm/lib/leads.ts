@@ -3,6 +3,7 @@
  * opportunity, and marks the lead converted, all in one transaction: either everything is
  * there afterwards or nothing is. A converted lead is read-only.
  */
+import { visible } from "./access";
 import { q, tx } from "./db";
 import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
@@ -53,8 +54,8 @@ function fields(b: Record<string, unknown>) {
 export type ListLeads = { q?: string; status?: string; source?: string; mine?: boolean };
 
 export async function list(ctx: Ctx, f: ListLeads = {}): Promise<Lead[]> {
-  const where: string[] = [];
   const params: unknown[] = [];
+  const where: string[] = [visible(ctx, "lead", "l", params)];
   if (f.q) {
     params.push(likeTerm(f.q));
     const p = `$${params.length}`;
@@ -73,23 +74,24 @@ export async function list(ctx: Ctx, f: ListLeads = {}): Promise<Lead[]> {
     params.push(ctx.email);
     where.push(`l.owner = $${params.length}`);
   }
-  const rows = await q<Row>(`${SELECT} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY l.updated_at DESC LIMIT 1000`, params);
+  const rows = await q<Row>(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY l.updated_at DESC LIMIT 1000`, params);
   return rows.map((r) => leadRow(ctx, r));
 }
 
-async function load(id: string): Promise<Row> {
-  const [row] = await q<Row>(`${SELECT} WHERE l.id = $1`, [id]);
+async function load(ctx: Ctx, id: string): Promise<Row> {
+  const params: unknown[] = [id];
+  const [row] = await q<Row>(`${SELECT} WHERE l.id = $1 AND ${visible(ctx, "lead", "l", params)}`, params);
   if (!row) throw new UserError("Lead not found", 404);
   return row;
 }
 
 export async function get(ctx: Ctx, id: string): Promise<Lead> {
-  return leadRow(ctx, await load(id));
+  return leadRow(ctx, await load(ctx, id));
 }
 
 /** The lead as stored, for scoring. */
-export async function raw(id: string) {
-  return load(id);
+export async function raw(ctx: Ctx, id: string) {
+  return load(ctx, id);
 }
 
 export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Lead> {
@@ -104,7 +106,7 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Lead
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Lead> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
   if (cur.status === "converted") throw new ForbiddenError("Converted leads are read-only");
   const v = fields(merged({ name: cur.name, company: cur.company, email: cur.email, phone: cur.phone, status: cur.status, source: cur.source }, b));
@@ -117,7 +119,7 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
 }
 
 export async function remove(ctx: Ctx, id: string): Promise<void> {
-  assertCanEdit(ctx, await load(id));
+  assertCanEdit(ctx, await load(ctx, id));
   await tx(async (tq) => {
     await keepHeld(tq, ctx.email, "activity", "t.related_type = 'lead' AND t.related_id = $1", [id]);
     await keepHeld(tq, ctx.email, "lead", "t.id = $1", [id]);
@@ -145,7 +147,11 @@ export async function convert(ctx: Ctx, id: string, b: Record<string, unknown>):
 
   return tx(async (tq) => {
     // Locked so two people converting the same lead at once can't both succeed.
-    const [lead] = await tq<{ owner: string; status: LeadStatus }>("SELECT owner, status FROM leads WHERE id = $1 FOR UPDATE", [id]);
+    const lp: unknown[] = [id];
+    const [lead] = await tq<{ owner: string; status: LeadStatus }>(
+      `SELECT l.owner, l.status FROM leads l WHERE l.id = $1 AND ${visible(ctx, "lead", "l", lp)} FOR UPDATE`,
+      lp,
+    );
     if (!lead) throw new UserError("Lead not found", 404);
     assertCanEdit(ctx, lead);
     if (lead.status === "converted") throw new UserError("This lead has already been converted", 409);
@@ -180,7 +186,7 @@ export async function convert(ctx: Ctx, id: string, b: Record<string, unknown>):
 
 /** A person's own score. It sticks: the model never replaces it. `null` clears it so the model may score again. */
 export async function overrideScore(ctx: Ctx, id: string, score: unknown, note?: unknown): Promise<Lead> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
   if (score === null || score === "" || score === undefined) {
     await q(

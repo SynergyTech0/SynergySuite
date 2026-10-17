@@ -272,6 +272,44 @@ describe.skipIf(!base)("hr against Postgres", async () => {
     expect(audit.map((r) => r.action)).toEqual(expect.arrayContaining(["payroll.private", "payroll.employer", "payroll.deposit_file"]));
   });
 
+  it("fills in W-2s, 941, 940 and the SSA file from paid runs", async () => {
+    const a = await as(ann);
+    const ye = await import("../lib/payroll/yearend");
+    const priv = await import("../lib/payroll/private");
+    const employer = await import("../lib/payroll/employer");
+    await expect(ye.taxForms(await as(eve), 2026)).rejects.toThrow(/payroll admins/);
+    const f = await ye.taxForms(a, 2026);
+    expect(f.w2s.map((r) => r.name)).toEqual(["Eve Adams", "Zed New"]);
+    expect(f.w2s[1].missing).toEqual(["Social Security number", "legal name", "address"]);
+    const q4 = f.quarters[3];
+    expect(q4.form941.wagesCents).toBe(f.w3.wagesCents);
+    expect(q4.states.map((s) => s.state)).toEqual(["CA", "TX"]);
+    expect(f.form940.totalPaymentsCents).toBeGreaterThan(0);
+    expect(f.efw2Missing).toEqual(expect.arrayContaining(["the BSO user ID", "the company's address"]));
+
+    // Each person sees only their own W-2, with the SSN cut to the last four.
+    const doc = await ye.w2Document(await as(eve), ids[eve], 2026);
+    expect(doc.employee).toMatchObject({ name: "Eve Adams", ssnMasked: "XXX-XX-6789" });
+    expect(doc.employer).toMatchObject({ ein: "12-3456789", name: "Acme Inc" });
+    expect(JSON.stringify(doc)).not.toMatch(/123-?45-?6789/);
+    await expect(ye.w2Document(await as(eve), ids[zed], 2026)).rejects.toThrow(/Not found/);
+    await expect(ye.w2Document(a, ids[eve], 2025)).rejects.toThrow(/No paid paychecks/);
+    expect(await ye.myW2Years(eve)).toEqual({ employeeId: ids[eve], years: [2026] });
+
+    await expect(ye.efw2File(a, 2026)).rejects.toThrow(/needs/);
+    await employer.saveEmployer(a, {
+      address1: "1 Main St", city: "Austin", state: "TX", zip: "78701", bsoUserId: "abcd1234", contactName: "Ann", contactPhone: "512 555 0100", contactEmail: ann,
+    });
+    await priv.savePrivate(a, ids[eve], { address1: "5 Oak Ave", addressState: "TX", zip: "78702" });
+    await priv.savePrivate(a, ids[zed], { legalFirst: "Zed", legalLast: "Ng", address1: "9 Elm St", city: "Oakland", addressState: "CA", zip: "94607", ssn: "234-56-7890" });
+    const file = await ye.efw2File(a, 2026);
+    expect(file.filename).toBe("W2REPORT-2026.txt");
+    const recs = file.text.split("\r\n").filter(Boolean);
+    expect(recs.map((r) => r.slice(0, 2))).toEqual(["RA", "RE", "RW", "RW", "RT", "RF"]);
+    expect(recs.filter((r) => r.startsWith("RW")).map((r) => r.slice(2, 11)).sort()).toEqual(["123456789", "234567890"]);
+    expect(Number(recs[4].slice(9, 24))).toBe(f.w3.wagesCents);
+  });
+
   it("finds people and time off in suite search, each person seeing only theirs", async () => {
     const people = await searchFor(await as(zed), { query: "eve" });
     expect(people.results.map((r) => r.kind)).toEqual(["person"]);

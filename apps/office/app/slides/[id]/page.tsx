@@ -23,6 +23,7 @@ export default async function SlidesPage({ params }: { params: Promise<{ id: str
         canEdit={canEdit}
         role={a.role}
         starred={a.doc.starred}
+        initialLabelId={a.doc.label_id}
       />
     </div>
   );

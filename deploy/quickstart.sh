@@ -85,6 +85,9 @@ fill FLOW_SECRET "$(hex 32)"
 fill FLOW_DB_PASSWORD "$(hex 24)"
 fill FLOW_ENCRYPTION_KEY "$(hex 16)"
 fill FLOW_JWT_SECRET "$(hex 32)"
+fill DEVICES_MDM_API_KEY "$(hex 32)"
+fill DEVICES_MDM_WEBHOOK_KEY "$(hex 32)"
+fill DEVICES_SCEP_CHALLENGE "$(hex 32)"
 fill HR_DATA_KEY "$(hex 32)"
 
 domain=$(getvar SUITE_DOMAIN)
@@ -109,7 +112,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1"
-  for h in auth sso admin base books builder bookings calendar chat commerce contacts crm desk devices diagrams drive engage flow flow-studio forms insights loop mail meet notes office ops people hr phone planner portal projects search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin base books builder bookings calendar chat commerce contacts contracts crm desk devices diagrams drive engage flow flow-studio forms insights loop mail meet notes office ops people hr phone planner portal projects search sites stream todo trust whiteboard; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi
@@ -220,7 +223,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|base|books|builder|bookings|calendar|chat|commerce|contacts|contracts|crm|desk|devices|diagrams|drive|engage|flow|forms|insights|loop|mail|notes|office|ops|hr|phone|planner|portal|projects|search|sites|todo|trust|whiteboard)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""

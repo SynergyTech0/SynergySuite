@@ -36,6 +36,7 @@ import { drawingXml } from "./drawing";
 import { buildIndex, indexInstr, xeInstr, type IndexEntryAttrs, type IndexItem } from "./word-index";
 import { chartSpaceXml, chartWorkbook, diagramParts, CHART_NS, DIAGRAM_NS, type ChartData, type DiagramData } from "./word-graphics";
 import { bibliography, citationOrder, citationText, sourcesXml, CITATION_STYLES, type CitationStyle, type Source } from "./citations";
+import { withFileLabel, type FileLabel } from "../labels";
 
 export type DocxComment = {
   id: string;
@@ -64,6 +65,8 @@ export type DocxInput = {
   indexPages?: string[];
   /** draw an SVG picture as PNG (Word wants a raster picture beside the SVG); without it SVG pictures are left out */
   rasterize?: (svg: string, width: number, height: number) => Promise<Uint8Array | null>;
+  /** the sensitivity label, written as MSIP custom properties in place of any label in settings.customProperties (null removes it; left out, they're written as they are) */
+  label?: FileLabel | null;
 };
 
 /** An SVG's size in px from its width/height or viewBox. */
@@ -1349,7 +1352,8 @@ class Writer {
       "docProps/app.xml",
       `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Synergy Docs</Application>${propXml("app")}</Properties>`,
     );
-    const custom = Object.entries(this.input.settings?.customProperties || {});
+    const customProps = this.input.label === undefined ? this.input.settings?.customProperties || {} : withFileLabel(this.input.settings?.customProperties, this.input.label);
+    const custom = Object.entries(customProps);
     if (custom.length)
       zip.file(
         "docProps/custom.xml",

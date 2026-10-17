@@ -23,6 +23,8 @@ async function ownDatabase(url: string): Promise<string> {
 
 const agent = "agent@example.com";
 const other = "other.agent@example.com";
+const rae = "restricted.agent@example.com";
+const pat = "pat@example.org";
 
 describe.skipIf(!base)("desk search", async () => {
   if (base) process.env.DATABASE_URL = process.env.DESK_DATABASE_URL = await ownDatabase(base);
@@ -31,6 +33,10 @@ describe.skipIf(!base)("desk search", async () => {
   const { outbox } = await import("../lib/mailer");
   const { q, db } = await import("../lib/db");
   const searchRoute = await import("../app/api/search/route");
+  const ticketRoute = await import("../app/api/tickets/[id]/route");
+  const ticketsRoute = await import("../app/api/tickets/route");
+  const replyRoute = await import("../app/api/tickets/[id]/reply/route");
+  const agentsRoute = await import("../app/api/agents/route");
   outbox.send = async () => ({ emailed: true, messageId: `<out-${Math.random()}@desk.test>` });
 
   const call = (email: string | null, body: unknown, secret = "gateway-secret") => {
@@ -50,7 +56,8 @@ describe.skipIf(!base)("desk search", async () => {
   let draft: { id: number }, pub: { id: number };
 
   beforeAll(async () => {
-    await q("TRUNCATE tickets, ticket_messages, ticket_counters, canned_replies, kb_articles RESTART IDENTITY CASCADE");
+    await q("TRUNCATE tickets, ticket_messages, ticket_counters, canned_replies, kb_articles, agents RESTART IDENTITY CASCADE");
+    await q("INSERT INTO agents (email, role, scope) VALUES ($1, 'admin', 'all'), ($2, 'agent', 'all'), ($3, 'agent', 'assigned')", [agent, other, rae]);
     printer = await tickets.create(
       { subject: "Printer jams", requesterEmail: "pat@example.org", requesterName: "Pat", body: "The printer on floor 2 jams every morning", assignee: agent },
       { source: "manual" },
@@ -78,13 +85,63 @@ describe.skipIf(!base)("desk search", async () => {
     expect(note.text).toContain("Escalate to facilities");
   });
 
-  it("shows every signed-in person what the Desk's own lists show them: all tickets and all articles", async () => {
-    // Desk has no roles: anyone signed in is staff, so another agent sees tickets assigned to someone
-    // else and drafts written by someone else, as the ticket list and knowledge base do.
+  it("shows an agent every ticket and draft, as the Desk's own lists do", async () => {
     expect(titles(await search(other, { query: "printer", kinds: ["ticket"] }))).toEqual(["ticket:Printer jams"]);
     expect(titles(await search(other, { query: "troubleshooting" }))).toEqual(["article:Printer troubleshooting (draft)"]);
     expect(titles(await search(other, { query: "sign" }))).toEqual(["ticket:Can't sign in"]);
     expect((await search(other, { query: "troubleshooting" })).results[0].url).toBe(`/?article=${draft.id}`);
+  });
+
+  it("shows a restricted agent only the tickets assigned to them", async () => {
+    expect((await search(rae, { query: "printer", kinds: ["ticket"] })).results).toEqual([]);
+    await tickets.update(login.id, { assignee: rae });
+    expect(titles(await search(rae, { query: "sign" }))).toEqual(["ticket:Can't sign in"]);
+    expect(titles(await search(rae, { query: "troubleshooting" }))).toEqual(["article:Printer troubleshooting (draft)"]);
+    await tickets.update(login.id, { assignee: "" });
+  });
+
+  it("shows anyone else only the tickets they asked for, without internal notes, and published articles", async () => {
+    expect(titles(await search(pat, { query: "printer" }))).toEqual(["article:Reset your password", "ticket:Printer jams"]);
+    expect((await search(pat, { query: "facilities" })).results).toEqual([]);
+    expect((await search(pat, { query: "jams", text: true })).results[0].text).not.toContain("facilities");
+    expect((await search("stranger@example.org", { query: "printer" })).results.map((h) => h.kind)).toEqual(["article"]);
+    expect((await search("stranger@example.org", { query: "sign" })).results).toEqual([]);
+  });
+
+  it("holds the ticket pages to the same rules", async () => {
+    const as = (email: string) => (current = new Headers({ "x-auth-request-email": email, "x-proxy-auth-secret": "gateway-secret" }));
+    const params = (id: number) => ({ params: Promise.resolve({ id: String(id) }) });
+    const json = (method: string, body?: unknown) =>
+      new Request("http://desk/api/x", { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+
+    as(pat);
+    const mine = await (await ticketRoute.GET(json("GET"), params(printer.id))).json();
+    expect(mine.messages.map((m: { direction: string }) => m.direction)).toEqual(["inbound"]);
+    expect((await ticketRoute.GET(json("GET"), params(login.id))).status).toBe(404);
+    expect((await ticketRoute.PATCH(json("PATCH", { status: "closed" }), params(printer.id))).status).toBe(403);
+    expect((await replyRoute.POST(json("POST", { body: "hi", internal: true }), params(printer.id))).status).toBe(403);
+    const list = await (await ticketsRoute.GET(new Request("http://desk/api/tickets?view=all"))).json();
+    expect(list.tickets.map((t: { id: number }) => t.id)).toEqual([printer.id]);
+    expect(list.counts.all).toBe(1);
+    // Opening a ticket as a non-agent always files it as theirs.
+    const made = await (await ticketsRoute.POST(json("POST", { subject: "New laptop", requesterEmail: "ceo@example.org", assignee: agent }))).json();
+    expect(made).toMatchObject({ requesterEmail: pat, assignee: "" });
+    expect((await agentsRoute.GET(json("GET"))).status).toBe(403);
+
+    as(rae);
+    expect((await ticketRoute.GET(json("GET"), params(printer.id))).status).toBe(404);
+    expect((await agentsRoute.POST(json("POST", { email: pat }))).status).toBe(403);
+
+    as(agent);
+    expect((await ticketRoute.PATCH(json("PATCH", { assignee: pat }), params(printer.id))).status).toBe(400);
+    expect((await agentsRoute.POST(json("POST", { email: pat, scope: "assigned" }))).status).toBe(200);
+    expect((await ticketRoute.PATCH(json("PATCH", { assignee: pat }), params(printer.id))).status).toBe(200);
+    as(pat);
+    expect((await ticketRoute.GET(json("GET"), params(printer.id))).status).toBe(200);
+    expect((await (await ticketRoute.GET(json("GET"), params(printer.id))).json()).messages).toHaveLength(2);
+    await q("DELETE FROM agents WHERE email = $1", [pat]);
+    await q("DELETE FROM tickets WHERE id = $1", [made.id]);
+    await tickets.update(printer.id, { assignee: agent });
   });
 
   it("honours kinds and limit", async () => {

@@ -10,12 +10,13 @@ const url = process.env.TEST_DATABASE_URL;
 if (url) process.env.DATABASE_URL = url;
 Object.assign(process.env, {
   MAIL_IMAP_HOST: "imap.example.com", MAIL_SUITE_AUTH: "shared-password", MAIL_DEV_PASSWORD: "x",
-  ADMIN_INTERNAL_URL: "http://admin.example.com", COMPLIANCE_TOKEN: "t0ken",
+  ADMIN_INTERNAL_URL: "http://admin.example.com", COMPLIANCE_TOKEN: "t0ken", MAIL_ALLOW_PRIVATE_HOSTS: "1",
 });
 delete process.env.MAIL_ADMIN_URL;
 
 const ann = "ann@example.com";
 const bob = "bob@example.com";
+const annHome = "ann.home@isp.example.net"; // an outside account Ann connected to Mail
 
 // What the Admin center says; null = unreachable.
 let holds: string[] | null = [ann];
@@ -32,7 +33,7 @@ describe.skipIf(!url)("legal hold", async () => {
   const { search, exportItems } = await import("../lib/discovery");
   const { decodeId } = await import("../lib/compliance");
   const { changeMessages } = await import("../lib/mailbox");
-  const { getAccount } = await import("../lib/accounts");
+  const { addAccount, getAccount, removeAccount } = await import("../lib/accounts");
   const { policy } = await import("../lib/policy");
 
   const count = async (mailbox = ann) => Number((await q<{ n: string }>("SELECT count(*) n FROM preserved_messages WHERE mailbox = $1", [mailbox]))[0].n);
@@ -54,7 +55,7 @@ describe.skipIf(!url)("legal hold", async () => {
     await q("SELECT 1");
   });
   beforeEach(async () => {
-    await q("TRUNCATE preserved_messages, preserve_mailboxes, preserve_folders, mail_users");
+    await q("TRUNCATE preserved_messages, preserve_mailboxes, preserve_folders, preserve_accounts, mail_users, accounts");
     fake.reset();
     holds = [ann];
     policy().invalidate();
@@ -196,5 +197,83 @@ describe.skipIf(!url)("legal hold", async () => {
     const [kept] = await exportItems([decodeId(live.id)!]);
     expect(kept).toMatchObject({ deleted: true, metadata: { source: "preserved", folder: "INBOX" } });
     expect(Buffer.from(kept.attachments![0].base64!, "base64").equals(raw)).toBe(true);
+  });
+
+  describe("outside accounts", () => {
+    let home = "";
+    beforeEach(async () => {
+      fake.mailbox(annHome);
+      fake.deliver(annHome, "INBOX", fake.message({ id: "h1@isp.example.net", subject: "Side invoice", from: "Erin <erin@example.org>", to: annHome, body: "Invoice for the side deal." }));
+      fake.deliver(annHome, "INBOX", fake.message({ id: "h2@isp.example.net", subject: "Gym", from: "gym@example.org", to: annHome, body: "Renewal" }));
+      home = await addAccount(ann, { label: "Home", address: annHome, password: "pw", imapHost: "127.0.0.1", smtpHost: "127.0.0.1" });
+    });
+
+    it("are preserved for their owner, kept apart from the suite mailbox", async () => {
+      expect(await sweepMailbox(ann)).toEqual({ stored: 5, known: 0 });
+      const rows = await q<{ account: string; n: string }>("SELECT account, count(*) n FROM preserved_messages WHERE mailbox = $1 GROUP BY account ORDER BY account", [ann]);
+      expect(rows.map((r) => [r.account, Number(r.n)])).toEqual([[home, 2], ["suite", 3]]);
+      expect(await q("SELECT address, label FROM preserve_accounts")).toEqual([{ address: annHome, label: "Home" }]);
+      // The same raw message in both accounts is two copies, one per account.
+      const raw = fake.server.boxes.get(annHome)!.get("INBOX")!.msgs[0].raw;
+      expect(await preserveRaw(ann, raw, { account: "suite", folder: "INBOX", uidValidity: "1", uid: 9 })).toBe("stored");
+      expect(await preserveRaw(ann, raw, { account: home, folder: "INBOX", uidValidity: "1", uid: 1 })).toBe("known");
+      fake.server.fetched = 0;
+      expect(await sweepMailbox(ann)).toEqual({ stored: 0, known: 0 });
+      expect(fake.server.fetched).toBe(0);
+    });
+
+    it("are searched and exported, with hits owned by the custodian", async () => {
+      await sweep();
+      const hits = await all({ query: "invoice", custodians: [ann] });
+      expect(hits.map((h) => h.title).sort()).toEqual(["Quarterly invoice", "Re: invoice", "Side invoice"]);
+      const side = hits.find((h) => h.title === "Side invoice")!;
+      expect(side).toMatchObject({ owner: ann, participants: ["erin@example.org"] });
+      expect(side.deleted).toBeUndefined();
+      expect(decodeId(side.id)).toMatchObject({ kind: "live", account: home });
+      const [item] = await exportItems([decodeId(side.id)!]);
+      expect(item).toMatchObject({ owner: ann, metadata: { source: "mailbox", account: { id: home, address: annHome, label: "Home" } } });
+
+      // Pages of one walk the suite mailbox and then the outside account, giving the same hits.
+      const paged = await all({ custodians: [ann], limit: 1 });
+      const whole = (await search({ custodians: [ann], limit: 200 })).hits;
+      expect(paged.map((h) => h.id)).toEqual(whole.map((h) => h.id));
+      expect(whole).toHaveLength(5);
+
+      // Found without custodians, too: Ann has connected an account.
+      expect((await search({ query: "gym" })).hits.map((h) => h.owner)).toEqual([ann]);
+    });
+
+    it("fall back to what was preserved when the password no longer works", async () => {
+      await sweep();
+      fake.server.boxes.delete(annHome); // password revoked: the fake refuses the login
+      const res = await search({ query: "invoice", custodians: [ann] });
+      expect(res.hits.map((h) => [h.title, h.deleted ?? false]).sort()).toEqual([["Quarterly invoice", false], ["Re: invoice", false], ["Side invoice", true]]);
+      expect(res.notes.join(" ")).toMatch(/Couldn't open ann.home@isp.example.net, an outside account of ann@example.com/);
+      const side = res.hits.find((h) => h.title === "Side invoice")!;
+      // An id handed out while the account still signed in is exported from the store.
+      const [item] = await exportItems([{ kind: "live", mailbox: ann, account: home, folder: "INBOX", uidValidity: "1", uid: 1, hash: decodeId(side.id)!.hash }]);
+      expect(item).toMatchObject({ deleted: true, metadata: { source: "preserved", account: { address: annHome } } });
+      // The suite mailbox is still swept.
+      fake.deliver(ann, "INBOX", msg("m8", "Still here"));
+      expect(await sweep()).toEqual([ann]);
+      expect(await count()).toBe(6);
+    });
+
+    it("copy before Mail deletes from them for a person on hold", async () => {
+      const acct = (await getAccount(ann, home))!;
+      await changeMessages(acct, "INBOX", [2], { action: "delete" });
+      const [row] = await q<{ account: string; mailbox: string; folder: string }>("SELECT account, mailbox, folder FROM preserved_messages WHERE message_id = '<h2@isp.example.net>'");
+      expect(row).toEqual({ account: home, mailbox: ann, folder: "INBOX" });
+    });
+
+    it("stay searchable after the person removes the account", async () => {
+      await sweep();
+      expect(await removeAccount(ann, home)).toBe(true);
+      const res = await search({ query: "side", custodians: [ann] });
+      expect(res.hits).toMatchObject([{ title: "Side invoice", owner: ann, deleted: true }]);
+      expect(res.notes.join(" ")).toMatch(/ann.home@isp.example.net of ann@example.com is no longer connected/);
+      const [item] = await exportItems([decodeId(res.hits[0].id)!]);
+      expect(item).toMatchObject({ deleted: true, metadata: { account: { id: home, address: annHome, label: "Home", removed: true } } });
+    });
   });
 });

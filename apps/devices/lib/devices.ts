@@ -1,5 +1,6 @@
 import type { Me } from "./api";
 import { audit, q } from "./db";
+import { refreshDue, refreshManaged, unenroll } from "./mdm/apple";
 import { queueRefresh } from "./osquery";
 import { BASELINE, parseRules } from "./rules";
 import { recompute, recomputeStale } from "./state";
@@ -26,6 +27,7 @@ function visible(me: Me): [string, unknown[]] {
 
 export async function listDevices(me: Me, f: { q?: string; compliance?: string; platform?: string; mine?: boolean } = {}): Promise<DeviceSummary[]> {
   await recomputeStale();
+  refreshDue().catch((e) => console.error("[devices] mdm refresh", e));
   const [where, params] = me.role === "admin" && !f.mine ? visible(me) : (["d.owner = $1", [me.email]] as [string, unknown[]]);
   const p = [...params];
   const conds = [where, "d.retired_at IS NULL"];
@@ -46,7 +48,7 @@ export async function listDevices(me: Me, f: { q?: string; compliance?: string; 
 
 export async function getDevice(me: Me, id: string) {
   const [where, params] = visible(me);
-  const [d] = await q<Record<string, unknown> & { id: string; owner: string | null; hostname: string }>(
+  const [d] = await q<Record<string, unknown> & { id: string; owner: string | null; hostname: string; host_identifier: string }>(
     `SELECT d.id, d.host_identifier, d.hostname, d.owner, d.platform, d.os_name, d.os_version, d.hardware_vendor, d.hardware_model,
        d.hardware_serial, d.cpu, d.memory_bytes, d.osquery_version, d.facts, d.facts_at, d.compliance, d.compliance_detail,
        d.compliance_at, d.notes, d.last_ip, d.enrolled_at, d.last_seen, d.vulns_checked_at, d.retired_at,
@@ -94,7 +96,8 @@ export async function updateDevice(me: Me, id: string, v: { owner?: unknown; not
 
 /**
  * Retire: the device's node key stops working, so osquery on it can no longer report, and it leaves
- * every list. Its history (alerts, inventory) is kept. Reinstalling with a valid key enrolls it again.
+ * every list. A device under Apple management is told to remove its enrollment profile. Its history
+ * (alerts, inventory) is kept. Reinstalling with a valid key, or the profile, enrolls it again.
  */
 export async function retire(me: Me, id: string): Promise<void> {
   const d = await getDevice(me, id);
@@ -102,15 +105,19 @@ export async function retire(me: Me, id: string): Promise<void> {
   await q(`UPDATE devices SET retired_at = now(), retired_by = $2, node_key_hash = NULL WHERE id = $1`, [id, me.email]);
   await q(`UPDATE live_targets SET status = 'error', error = 'Device retired', done_at = now() WHERE device_id = $1 AND status IN ('pending', 'sent')`, [id]);
   await audit(me.email, "device.retire", id, { hostname: d.hostname });
+  await unenroll(me.email, id).catch((e) => console.error("[devices] unenroll on retire", e));
 }
 
 export async function refresh(me: Me, id: string): Promise<void> {
-  await getDevice(me, id);
-  await queueRefresh([id], me.email);
+  const d = await getDevice(me, id);
+  const viaMdm = await refreshManaged(me, id);
+  if (!d.host_identifier.startsWith("mdm:")) await queueRefresh([id], me.email);
+  else if (!viaMdm) throw new UserError("This device reports only through Apple management, which can't reach it right now", 409);
 }
 
 export async function overview() {
   await recomputeStale();
+  refreshDue().catch((e) => console.error("[devices] mdm refresh", e));
   const [o] = await q<Record<string, number>>(
     `SELECT
        count(*)::int AS devices,
@@ -122,7 +129,9 @@ export async function overview() {
        count(*) FILTER (WHERE (facts->>'disk_encryption')::boolean)::int AS encrypted,
        count(*) FILTER (WHERE platform = 'windows')::int AS windows,
        count(*) FILTER (WHERE platform = 'darwin')::int AS darwin,
-       count(*) FILTER (WHERE platform = 'linux')::int AS linux
+       count(*) FILTER (WHERE platform = 'linux')::int AS linux,
+       count(*) FILTER (WHERE platform = 'ios')::int AS ios,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM mdm_enrollments e WHERE e.device_id = devices.id AND e.status = 'enrolled'))::int AS managed
      FROM devices WHERE retired_at IS NULL`,
   );
   const alerts = await q<{ severity: string; n: number }>(
@@ -153,7 +162,7 @@ export async function listPolicies() {
 
 function platforms(v: unknown): string[] {
   if (v === undefined || v === null) return [];
-  if (!Array.isArray(v) || v.some((p) => !["windows", "darwin", "linux"].includes(p))) throw new UserError("platforms must be windows, darwin or linux");
+  if (!Array.isArray(v) || v.some((p) => !["windows", "darwin", "linux", "ios"].includes(p))) throw new UserError("platforms must be windows, darwin, linux or ios");
   return [...new Set(v as string[])].sort();
 }
 

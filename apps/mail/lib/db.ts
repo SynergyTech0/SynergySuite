@@ -3,8 +3,9 @@ import { createDb } from "@synergy/db";
 /**
  * Mail keeps very little of its own: the outside accounts people connect. Messages stay on the
  * mail server (IMAP is the source of truth), so there is nothing to sync or migrate per message.
- * The one exception is legal hold: a copy of every message of a person on hold (preserved.ts),
- * since desktop and phone clients can delete straight from the mail server.
+ * The one exception is legal hold: a copy of every message of a person on hold (preserved.ts), in
+ * the suite mailbox and their outside accounts, since desktop and phone clients can delete
+ * straight from the mail server.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -30,10 +31,11 @@ CREATE TABLE IF NOT EXISTS mail_users (
   last_seen    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Raw copies of the mail of people on legal hold, one per distinct message per mailbox.
+-- Raw copies of the mail of people on legal hold, one per distinct message per account of a mailbox.
 CREATE TABLE IF NOT EXISTS preserved_messages (
   id           BIGSERIAL PRIMARY KEY,
   mailbox      TEXT NOT NULL,            -- the owner's address
+  account      TEXT NOT NULL DEFAULT 'suite', -- "suite", or the id of an outside account in accounts
   hash         TEXT NOT NULL,            -- sha256 of raw
   message_id   TEXT,
   folders      TEXT[] NOT NULL DEFAULT '{}',
@@ -50,12 +52,11 @@ CREATE TABLE IF NOT EXISTS preserved_messages (
   search_text  TEXT NOT NULL,
   raw          BYTEA NOT NULL,
   preserved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at   TIMESTAMPTZ,              -- deleted for good through Mail while on hold
-  UNIQUE (mailbox, hash)
+  deleted_at   TIMESTAMPTZ               -- deleted for good through Mail while on hold
 );
 CREATE INDEX IF NOT EXISTS preserved_mailbox_idx ON preserved_messages (mailbox, id);
 
--- Mailboxes the hold sweep copies, and how far it has got in each folder.
+-- Mailboxes the hold sweep copies, and how far it has got in each folder of each account.
 CREATE TABLE IF NOT EXISTS preserve_mailboxes (
   mailbox      TEXT PRIMARY KEY,
   held_since   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -64,11 +65,31 @@ CREATE TABLE IF NOT EXISTS preserve_mailboxes (
 );
 CREATE TABLE IF NOT EXISTS preserve_folders (
   mailbox      TEXT NOT NULL,
+  account      TEXT NOT NULL DEFAULT 'suite',
   folder       TEXT NOT NULL,
   uidvalidity  TEXT NOT NULL,
-  last_uid     BIGINT NOT NULL,
-  PRIMARY KEY (mailbox, folder)
+  last_uid     BIGINT NOT NULL
 );
+
+-- Outside accounts whose mail was preserved, so it can still be named after the account is removed.
+CREATE TABLE IF NOT EXISTS preserve_accounts (
+  mailbox      TEXT NOT NULL,
+  account      TEXT NOT NULL,
+  address      TEXT NOT NULL,
+  label        TEXT NOT NULL,
+  removed_at   TIMESTAMPTZ,              -- the person removed the account from Mail
+  PRIMARY KEY (mailbox, account)
+);
+
+-- Outside accounts came after the first release, when everything preserved was the suite
+-- mailbox: add the account to the keys. Safe to run on every start.
+ALTER TABLE preserved_messages ADD COLUMN IF NOT EXISTS account TEXT NOT NULL DEFAULT 'suite';
+ALTER TABLE preserved_messages DROP CONSTRAINT IF EXISTS preserved_messages_mailbox_hash_key;
+CREATE UNIQUE INDEX IF NOT EXISTS preserved_messages_key ON preserved_messages (mailbox, account, hash);
+CREATE INDEX IF NOT EXISTS preserved_account_idx ON preserved_messages (mailbox, account, id);
+ALTER TABLE preserve_folders ADD COLUMN IF NOT EXISTS account TEXT NOT NULL DEFAULT 'suite';
+ALTER TABLE preserve_folders DROP CONSTRAINT IF EXISTS preserve_folders_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS preserve_folders_key ON preserve_folders (mailbox, account, folder);
 `;
 
 type Db = ReturnType<typeof createDb>;

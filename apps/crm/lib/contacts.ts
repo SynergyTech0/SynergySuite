@@ -1,4 +1,5 @@
 // Contacts: the people at an account.
+import { visible } from "./access";
 import { q, tx } from "./db";
 import { keepHeld } from "./ediscovery";
 import { assertCanEdit } from "./permissions";
@@ -17,10 +18,11 @@ export function contactRow(ctx: Ctx, r: ContactRow): Contact {
   };
 }
 
-async function fields(b: Record<string, unknown>) {
+async function fields(ctx: Ctx, b: Record<string, unknown>) {
   const accountId = String(b.accountId ?? "");
   if (!isUuid(accountId)) throw new UserError("Pick an account");
-  const [acct] = await q("SELECT 1 FROM accounts WHERE id = $1", [accountId]);
+  const params: unknown[] = [accountId];
+  const [acct] = await q(`SELECT 1 FROM accounts a WHERE a.id = $1 AND ${visible(ctx, "account", "a", params)}`, params);
   if (!acct) throw new UserError("That account no longer exists");
   return {
     accountId,
@@ -34,8 +36,8 @@ async function fields(b: Record<string, unknown>) {
 export type ListContacts = { q?: string; accountId?: string; mine?: boolean };
 
 export async function list(ctx: Ctx, f: ListContacts = {}): Promise<Contact[]> {
-  const where: string[] = [];
   const params: unknown[] = [];
+  const where: string[] = [visible(ctx, "contact", "c", params)];
   if (f.q) {
     params.push(likeTerm(f.q));
     const p = `$${params.length}`;
@@ -49,22 +51,23 @@ export async function list(ctx: Ctx, f: ListContacts = {}): Promise<Contact[]> {
     params.push(ctx.email);
     where.push(`c.owner = $${params.length}`);
   }
-  const rows = await q<ContactRow>(`${SELECT} ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY lower(c.name) LIMIT 1000`, params);
+  const rows = await q<ContactRow>(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY lower(c.name) LIMIT 1000`, params);
   return rows.map((r) => contactRow(ctx, r));
 }
 
-async function load(id: string): Promise<ContactRow> {
-  const [row] = await q<ContactRow>(`${SELECT} WHERE c.id = $1`, [id]);
+async function load(ctx: Ctx, id: string): Promise<ContactRow> {
+  const params: unknown[] = [id];
+  const [row] = await q<ContactRow>(`${SELECT} WHERE c.id = $1 AND ${visible(ctx, "contact", "c", params)}`, params);
   if (!row) throw new UserError("Contact not found", 404);
   return row;
 }
 
 export async function get(ctx: Ctx, id: string): Promise<Contact> {
-  return contactRow(ctx, await load(id));
+  return contactRow(ctx, await load(ctx, id));
 }
 
 export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Contact> {
-  const v = await fields(b);
+  const v = await fields(ctx, b);
   const owner = await ownerFor(ctx, b.owner, null);
   const [row] = await q<{ id: string }>(
     `INSERT INTO contacts (account_id, name, email, phone, title, owner, created_by, updated_by)
@@ -75,9 +78,9 @@ export async function create(ctx: Ctx, b: Record<string, unknown>): Promise<Cont
 }
 
 export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): Promise<Contact> {
-  const cur = await load(id);
+  const cur = await load(ctx, id);
   assertCanEdit(ctx, cur);
-  const v = await fields(merged({ accountId: cur.account_id, name: cur.name, email: cur.email, phone: cur.phone, title: cur.title }, b));
+  const v = await fields(ctx, merged({ accountId: cur.account_id, name: cur.name, email: cur.email, phone: cur.phone, title: cur.title }, b));
   const owner = await ownerFor(ctx, b.owner, cur.owner);
   await q(
     `UPDATE contacts SET account_id=$2, name=$3, email=$4, phone=$5, title=$6, owner=$7, updated_by=$8, updated_at=now() WHERE id = $1`,
@@ -87,7 +90,7 @@ export async function update(ctx: Ctx, id: string, b: Record<string, unknown>): 
 }
 
 export async function remove(ctx: Ctx, id: string): Promise<void> {
-  assertCanEdit(ctx, await load(id));
+  assertCanEdit(ctx, await load(ctx, id));
   await tx(async (tq) => {
     await keepHeld(tq, ctx.email, "activity", "t.related_type = 'contact' AND t.related_id = $1", [id]);
     await keepHeld(tq, ctx.email, "contact", "t.id = $1", [id]);

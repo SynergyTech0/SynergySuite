@@ -34,6 +34,7 @@ import CommentsPane from "./slides/CommentsPane";
 import { anchorFor, decodeAnchor, encodeAnchor, pptxComments, threadsBySlide, type Anchor, type CommentThread } from "@/lib/slides/comments";
 import type { ImportedComment } from "@/lib/slides/pptx-import";
 import AppTitleBar from "./AppTitleBar";
+import { LabelChip, SensitivityDialog, useDocLabel } from "./SheetSensitivity";
 import { type Menu, type MenuItem } from "./MenuBar";
 import ElementFrame from "./slides/ElementFrame";
 import SlideToolbar, { type ToolbarActions } from "./slides/SlideToolbar";
@@ -231,6 +232,7 @@ export default function SlideEditor({
   canEdit = true,
   role = "owner",
   starred = false,
+  initialLabelId = null,
 }: {
   docId?: string;
   initialName?: string;
@@ -239,8 +241,15 @@ export default function SlideEditor({
   canEdit?: boolean;
   role?: "viewer" | "commenter" | "editor" | "owner";
   starred?: boolean;
+  /** The presentation's sensitivity label (documents.label_id). */
+  initialLabelId?: string | null;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
+  // File › Sensitivity: the organization's label on the presentation, written into .pptx files.
+  const docLabel = useDocLabel(docId, initialLabelId);
+  const [labelOpen, setLabelOpen] = useState(false);
+  const labelRef = useRef(docLabel.exportLabel);
+  labelRef.current = docLabel.exportLabel;
   const { ydoc, provider, yslides, ymeta, ylayouts } = useMemo(() => {
     const ydoc = new Y.Doc();
     let provider: HocuspocusProvider | null = null;
@@ -456,7 +465,7 @@ export default function SlideEditor({
     const w = window as unknown as Record<string, unknown>;
     w.__htmlToPptxRuns = htmlToPptxRuns;
     w.__exportPptxBytes = async () => {
-      const buf = await buildPptx(slidesRef.current, { name: nameRef.current, ...metaRef.current, masters: mastersRef.current, comments: pptxComments(slidesRef.current, threadsRef.current), ...(await fitScalesRef.current!()) });
+      const buf = await buildPptx(slidesRef.current, { name: nameRef.current, ...metaRef.current, masters: mastersRef.current, comments: pptxComments(slidesRef.current, threadsRef.current), ...(await fitScalesRef.current!()), label: labelRef.current ?? null });
       return Array.from(new Uint8Array(buf));
     };
     w.__slides = () => slidesRef.current;
@@ -1995,7 +2004,7 @@ export default function SlideEditor({
   const exportPptx = async () => {
     setBusy("Exporting…");
     try {
-      await downloadPptx(slides, { name: name || "presentation", ...meta, font: meta.font || undefined, masters, comments: pptxComments(slides, threads), ...(await pptxExtras()) });
+      await downloadPptx(slides, { name: name || "presentation", ...meta, font: meta.font || undefined, masters, comments: pptxComments(slides, threads), ...(await pptxExtras()), label: docLabel.exportLabel ?? null });
     } catch (e) {
       alert("Could not export: " + (e as Error).message);
     } finally {
@@ -2195,6 +2204,8 @@ export default function SlideEditor({
       });
       setSel(replace ? 0 : selIdx + 1);
       if (replace && (!name || name === "Untitled presentation")) renameDeck(file.name.replace(/\.(pptx|odp|ppt)$/i, ""));
+      // a labeled PowerPoint file labels the presentation, when the label is one of the organization's
+      if (replace && deck.label && canEdit) void docLabel.fromFile(deck.label).catch(() => {});
       const nComments = deck.comments?.length && docId && canComment ? await postImportedComments(deck.comments, deck.slides, sx, sy) : 0;
       setNotice([`Imported ${deck.slides.length} slide${deck.slides.length === 1 ? "" : "s"} from “${file.name}”${nComments ? ` with ${nComments} comment thread${nComments === 1 ? "" : "s"}` : ""}.`, ...deck.warnings]);
       scheduleTitleSave();
@@ -2429,6 +2440,7 @@ export default function SlideEditor({
         { label: "Export as video (WebM, MP4)…", onClick: () => setDialog("video") },
         { divider: true },
         { label: "Make a copy", onClick: () => void makeCopy(), disabled: !docId },
+        { label: "Sensitivity…", onClick: () => setLabelOpen(true), disabled: !docId },
         { label: "Version history", onClick: () => { setVersionsOpen(true); setCommentsOpen(false); }, disabled: !docId },
         { label: "Share…", onClick: () => setShareOpen(true), disabled: !canEdit },
         { label: "Print / Save as PDF", onClick: () => window.print(), shortcut: "Ctrl+P" },
@@ -2850,6 +2862,7 @@ export default function SlideEditor({
           onTitle={onBarTitle}
           shareOpen={shareOpen}
           onShareOpen={setShareOpen}
+          badge={docLabel.current && <LabelChip label={docLabel.current} list={docLabel.list} onClick={() => setLabelOpen(true)} />}
           rightExtra={
             <>
               {docId && (
@@ -3314,6 +3327,7 @@ export default function SlideEditor({
         const d = lead?.type === "shape" ? lead.dgm : undefined;
         return <DiagramDialog look={look} accent={d?.accent || theme.accent} initial={d ? { kind: d.kind, text: outlineText(d.items) } : undefined} onInsert={d && lead ? (kind, text) => relayDiagram(lead.id, kind, text) : insertDiagram} onClose={() => { setDialog(null); setDiagramEdit(null); }} />;
       })()}
+      {labelOpen && <SensitivityDialog app="PowerPoint" current={docLabel.current} canEdit={canEdit} onSave={async (l) => void (await docLabel.choose(l))} onClose={() => setLabelOpen(false)} />}
       {dialog === "pdf" && <PdfDialog hasHidden={slides.some((s) => s.hidden)} onExport={exportPdf} onClose={() => setDialog(null)} />}
       {dialog === "setup" && <SetUpShowDialog value={meta.show || {}} shows={meta.shows || []} onApply={setShowSettings} onClose={() => setDialog(null)} />}
       {dialog === "shows" && <CustomShowsDialog slides={slides} shows={meta.shows || []} onSave={setCustomShows} onStart={(id) => setShow({ mode: "show", start: 0, custom: id })} onClose={() => setDialog(null)} newId={() => genId("cs")} />}

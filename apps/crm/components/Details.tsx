@@ -8,6 +8,7 @@ import { api, formatDate, formatDateTime, formatMoney, type View } from "./clien
 import { AccountEditor, ContactEditor, ConvertDialog, LeadEditor, OpportunityEditor } from "./Editors";
 import { Confirm, Modal } from "./Modal";
 import { Avatar, Badge, Facts, type AppCtx } from "./shared";
+import { SharePanel } from "./Sharing";
 import { Timeline } from "./Timeline";
 
 type DetailProps = { app: AppCtx; id: string; onChange: () => void };
@@ -150,6 +151,7 @@ export function AccountDetail({ app, id, onChange }: DetailProps) {
         ) : <p className="muted small">No opportunities yet.</p>}
         {open.length ? <p className="muted small" style={{ marginTop: 8 }}>Open: {formatMoney(open.reduce((s, o) => s + Number(o.amount ?? 0), 0))}</p> : null}
       </section>
+      <SharePanel app={app} kind="account" id={a.id} canShare={a.editable} />
       <Timeline app={app} relatedType="account" relatedId={a.id} />
       {editing === "account" ? <AccountEditor app={app} record={a} onClose={() => setEditing(null)} onSaved={done} /> : null}
       {editing === "contact" ? <ContactEditor app={app} preset={{ accountId: a.id }} onClose={() => setEditing(null)} onSaved={done} /> : null}
@@ -174,6 +176,7 @@ export function ContactDetail({ app, id, onChange }: DetailProps) {
       <section className="panel">
         <Facts items={[["Email", mail(c.email)], ["Phone", tel(c.phone)], ["Account", <RelatedLink key="a" app={app} view="accounts" id={c.accountId}>{c.accountName}</RelatedLink>], ["Owner", c.ownerName], ["Created", formatDate(c.createdAt)], ["Updated", formatDate(c.updatedAt)]]} />
       </section>
+      <SharePanel app={app} kind="contact" id={c.id} canShare={c.editable} />
       <Timeline app={app} relatedType="contact" relatedId={c.id} />
       {editing ? <ContactEditor app={app} record={c} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void reload(); onChange(); }} /> : null}
       {del}
@@ -201,6 +204,7 @@ export function OpportunityDetail({ app, id, onChange }: DetailProps) {
           ["Owner", o.ownerName], ["Created", formatDate(o.createdAt)], ["Updated", formatDate(o.updatedAt)],
         ]} />
       </section>
+      <SharePanel app={app} kind="opportunity" id={o.id} canShare={o.editable} />
       <Timeline app={app} relatedType="opportunity" relatedId={o.id} />
       {editing ? <OpportunityEditor app={app} record={o} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void reload(); onChange(); app.changed(); }} /> : null}
       {del}
@@ -326,6 +330,7 @@ export function LeadDetail({ app, id, onChange }: DetailProps) {
           <Facts items={[["UTM source", l.utmSource], ["UTM medium", l.utmMedium], ["UTM campaign", l.utmCampaign], ["Landing page", l.landingPath]]} />
         </section>
       ) : null}
+      <SharePanel app={app} kind="lead" id={l.id} canShare={l.editable} />
       <Timeline app={app} relatedType={related} relatedId={l.id} />
       {editing === "edit" ? <LeadEditor app={app} record={l} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} /> : null}
       {editing === "convert" ? (

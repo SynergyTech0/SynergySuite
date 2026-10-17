@@ -18,7 +18,10 @@ const api = {
   update: (id, f) => req('PATCH', `/api/forms/${id}`, f),
   remove: id => req('DELETE', `/api/forms/${id}`),
   submissions: id => req('GET', `/api/forms/${id}/submissions`),
+  share: (id, shares) => req('PUT', `/api/forms/${id}/shares`, { shares }),
 };
+
+const ROLE_LABEL = { owner: 'Owner', edit: 'Can edit', view: 'Can view' };
 
 const fmt = ts => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const FIELD_TYPES = ['text', 'textarea', 'email', 'select', 'checkbox'];
@@ -63,7 +66,7 @@ export default function App() {
             }}>+ New form</button>
           </div>
           <table className="table">
-            <thead><tr><th>Title</th><th>Public URL</th><th>Status</th><th>Submissions</th><th>Updated</th><th></th></tr></thead>
+            <thead><tr><th>Title</th><th>Public URL</th><th>Status</th><th>Submissions</th><th>Owner</th><th>Updated</th><th></th></tr></thead>
             <tbody>
               {forms.map(f => (
                 <tr key={f.id}>
@@ -73,11 +76,12 @@ export default function App() {
                   </td>
                   <td>{f.published ? '🟢 live' : '⚪ draft'}</td>
                   <td onClick={async () => setViewing({ form: f, submissions: await api.submissions(f.id) })} className="link">{f.submission_count}</td>
+                  <td>{f.role === 'owner' ? 'You' : <>{f.owner || '—'} <span className="hint">({ROLE_LABEL[f.role]})</span></>}</td>
                   <td>{fmt(f.updated_at)}</td>
-                  <td><button className="mini" onClick={async () => { if (confirm(`Delete "${f.title}" and its submissions?`)) { await api.remove(f.id).catch(flash); refresh(); } }}>delete</button></td>
+                  <td>{f.role === 'owner' && <button className="mini" onClick={async () => { if (confirm(`Delete "${f.title}" and its submissions?`)) { await api.remove(f.id).catch(flash); refresh(); } }}>delete</button>}</td>
                 </tr>
               ))}
-              {forms.length === 0 && <tr><td colSpan="6" className="empty-row">No forms yet.</td></tr>}
+              {forms.length === 0 && <tr><td colSpan="7" className="empty-row">No forms yet. Forms shared with you show up here too.</td></tr>}
             </tbody>
           </table>
         </main>
@@ -127,6 +131,8 @@ function SubmissionsTable({ formId, submissions }) {
 function Builder({ form, onBack, flash }) {
   const [f, setF] = useState({ ...form, fields: form.fields.map(x => ({ ...x })) });
   const [saved, setSaved] = useState(true);
+  const [sharing, setSharing] = useState(false);
+  const readOnly = form.role === 'view';
   const set = patch => { setF(prev => ({ ...prev, ...patch })); setSaved(false); };
   const setField = (i, patch) => { setF(prev => ({ ...prev, fields: prev.fields.map((x, j) => j === i ? { ...x, ...patch } : x) })); setSaved(false); };
   const move = (i, dir) => {
@@ -153,16 +159,20 @@ function Builder({ form, onBack, flash }) {
       <div className="page-head">
         <div><button className="mini" onClick={onBack}>← back</button> <h2 className="inline">Builder</h2></div>
         <div>
-          <span className="hint">{saved ? 'saved' : 'unsaved changes'}</span>
-          <button onClick={() => save()}>Save</button>
-          {f.published
-            ? <button onClick={() => save({ published: false })}>Unpublish</button>
-            : <button className="primary" onClick={() => save({ published: true })}>Publish</button>}
+          {readOnly ? <span className="hint">view only, shared by {form.created_by}</span> : <>
+            <span className="hint">{saved ? 'saved' : 'unsaved changes'}</span>
+            <button onClick={() => save()}>Save</button>
+            {f.published
+              ? <button onClick={() => save({ published: false })}>Unpublish</button>
+              : <button className="primary" onClick={() => save({ published: true })}>Publish</button>}
+          </>}
+          {form.role === 'owner' && <button onClick={() => setSharing(true)}>Share</button>}
           {f.published && <a className="mini btn-link" href={`/f/${f.slug}`} target="_blank" rel="noreferrer">view live ↗</a>}
         </div>
       </div>
+      {sharing && <ShareDialog form={form} onClose={() => setSharing(false)} flash={flash} />}
 
-      <div className="builder">
+      <fieldset className="builder" disabled={readOnly}>
         <label>Title <input value={f.title} onChange={e => set({ title: e.target.value })} /></label>
         <label>Description <input value={f.description} onChange={e => set({ description: e.target.value })} /></label>
 
@@ -184,7 +194,50 @@ function Builder({ form, onBack, flash }) {
           </div>
         ))}
         <button className="mini" onClick={() => { setF(prev => ({ ...prev, fields: [...prev.fields, { label: '', type: 'text', required: false, options: [] }] })); setSaved(false); }}>+ add field</button>
-      </div>
+      </fieldset>
     </main>
+  );
+}
+
+// Who else can open the form: people by email, or everyone in the organization.
+function ShareDialog({ form, onClose, flash }) {
+  const [shares, setShares] = useState(form.shares || []);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('view');
+  const everyone = shares.find(s => s.principal === '*');
+  const people = shares.filter(s => s.principal !== '*');
+  const save = async next => {
+    try { const saved = await api.share(form.id, next); setShares(saved); form.shares = saved; } catch (e) { flash(e); }
+  };
+  const setEveryone = r => save([...people, ...(r ? [{ principal: '*', role: r }] : [])]);
+  return (
+    <div className="share-panel">
+      <div className="page-head"><h3>Share "{form.title}"</h3><button className="mini" onClick={onClose}>close</button></div>
+      <p className="hint">Only you and the people below can find this form, in the app and in suite search. Editors can change it and read its responses; viewers can read them.</p>
+      <label>Everyone in your organization{' '}
+        <select value={everyone?.role || ''} onChange={e => setEveryone(e.target.value)}>
+          <option value="">No access</option><option value="view">Can view</option><option value="edit">Can edit</option>
+        </select>
+      </label>
+      <table className="table">
+        <tbody>
+          {people.map(s => (
+            <tr key={s.principal}>
+              <td>{s.principal}</td>
+              <td><select value={s.role} onChange={e => save(shares.map(x => x.principal === s.principal ? { ...x, role: e.target.value } : x))}>
+                <option value="view">Can view</option><option value="edit">Can edit</option>
+              </select></td>
+              <td><button className="mini" onClick={() => save(shares.filter(x => x.principal !== s.principal))}>remove</button></td>
+            </tr>
+          ))}
+          {people.length === 0 && <tr><td colSpan="3" className="empty-row">Not shared with anyone yet.</td></tr>}
+        </tbody>
+      </table>
+      <form className="field-row" onSubmit={e => { e.preventDefault(); if (email.trim()) { save([...shares.filter(x => x.principal !== email.trim().toLowerCase()), { principal: email.trim(), role }]); setEmail(''); } }}>
+        <input className="grow" type="email" placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} />
+        <select value={role} onChange={e => setRole(e.target.value)}><option value="view">Can view</option><option value="edit">Can edit</option></select>
+        <button className="primary" type="submit">Add</button>
+      </form>
+    </div>
   );
 }

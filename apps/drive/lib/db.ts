@@ -107,6 +107,9 @@ CREATE INDEX IF NOT EXISTS activity_item_idx ON activity (item_id, at DESC);
 ALTER TABLE items ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 ALTER TABLE versions ADD COLUMN IF NOT EXISTS held_deleted_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS items_held_idx ON items (held_deleted_at) WHERE held_deleted_at IS NOT NULL;
+
+-- Sensitivity label (id from the Admin center's list, lower case), kept across versions.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS label_id TEXT;
 `;
 
 type Db = ReturnType<typeof createDb>;

@@ -386,6 +386,16 @@ devices.{$SUITE_DOMAIN} {
 		request_header -X-Auth-Request-Preferred-Username
 		import to_app devices:3810
 	}
+	# iPhones, iPads and Macs under Apple management: their check-ins and commands go to NanoMDM,
+	# their certificate requests to the SCEP server. Devices sign these requests themselves; NanoMDM's
+	# own API (/v1) is reached only on the compose network.
+	handle /mdm/apple/mdm {
+		uri strip_prefix /mdm/apple
+		reverse_proxy devices-mdm:9000
+	}
+	handle /scep {
+		reverse_proxy devices-scep:8080
+	}
 	handle /api/svc/* {
 		respond 404
 	}
@@ -431,6 +441,15 @@ todo.{$SUITE_DOMAIN} {
 engage.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app engage:3740
+}
+
+contracts.{$SUITE_DOMAIN} {
+	# The signing service reports progress on the internal network; never from outside.
+	handle /api/svc/* {
+		respond 404
+	}
+	import signed_in
+	import to_app contracts:3860
 }
 
 projects.{$SUITE_DOMAIN} {
