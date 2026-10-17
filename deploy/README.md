@@ -156,6 +156,21 @@ Not included:
 - `/api/svc/*` on groups, chat, drive and mail is answered only on the compose network (with `PROXY_SHARED_SECRET`); the gateway returns 404 for it.
 - `GROUPS_ADMIN_EMAILS` may manage and restore every group; `GROUPS_CREATE=admins` keeps creating groups to them.
 
+## The Hub and linked apps
+
+Account's Hub (`https://auth.<SUITE_DOMAIN>/hub`, also "All apps" at the bottom of every app's launcher) lists the suite apps plus any **linked apps**: tools the company runs somewhere else. Add, hide, restrict and grant them in Account > Admin > Apps. A restricted app shows only to the people granted it.
+
+### Moving from an older Synergy Hub
+
+If you ran the standalone SynergyAuth Hub before the suite, bring its people and apps across from the repository root:
+
+```bash
+deploy/hub-import/run.sh auth root@your-hub-server --dry-run   # see what would happen
+deploy/hub-import/run.sh auth root@your-hub-server
+```
+
+It reads the hub's database over your own SSH access (container `saauth-db`, or set `HUB_DB_CONTAINER`). People keep their passwords. Anyone who already has an account here keeps it unchanged unless you add `--overwrite-passwords`. Two-step sign-in has to be set up again, because the hub encrypted those secrets with its own key. Hub apps the suite now covers (Boards, Docs, Cal, Books and so on; the list is `COVERED` in `apps/auth/scripts/import-hub.mjs`) are replaced by their suite apps. Every other hub app becomes a linked app at its old address, with its grants. Running it again only adds what is missing.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.

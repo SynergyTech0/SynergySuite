@@ -239,6 +239,9 @@ export class SynergyAppBar extends HTMLElement {
     // The Search app has its own big box, so the bar's box is left out there.
     const searchApp = current === "search" ? undefined : apps.find((a) => a.id === "search");
     const searchUrl = searchApp ? urlFor(searchApp, domain) : "";
+    // The Hub (in Account) also lists the company's linked apps that run outside the suite.
+    const authApp = apps.find((a) => a.id === "auth");
+    const hubUrl = authApp ? `${urlFor(authApp, domain)}/hub` : "";
 
     // The bar lives in its own box so re-rendering it never moves (and so reloads) the panel's frame.
     let root = this.shadowRoot!.querySelector<HTMLElement>(".bar-root");
@@ -278,6 +281,7 @@ export class SynergyAppBar extends HTMLElement {
         nav a { padding: 10px 4px; text-align: center; color: inherit; text-decoration: none; border-radius: 6px; }
         nav a:hover, nav a:focus-visible { background: #f3f4f6; }
         nav a[aria-current] { font-weight: 600; }
+        nav a.all { grid-column: 1 / -1; border-top: 1px solid #e5e7eb; border-radius: 0 0 6px 6px; color: #2b4fe0; font-weight: 600; }
         svg { width: 20px; height: 20px; fill: currentColor; }
         .rings { position: fixed; top: 56px; right: 12px; z-index: 1001; display: flex; flex-direction: column; gap: 8px; }
         .ring { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff; color: #111827; border-radius: 12px;
@@ -307,6 +311,7 @@ export class SynergyAppBar extends HTMLElement {
         ${launchable
           .map((a) => `<a href="${esc(urlFor(a, domain))}" ${a.id === current ? 'aria-current="page"' : ""}>${esc(a.name)}</a>`)
           .join("")}
+        ${hubUrl ? `<a class="all" href="${esc(hubUrl)}">All apps</a>` : ""}
       </nav>
       <div class="rings"></div>`;
 

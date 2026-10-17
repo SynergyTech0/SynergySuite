@@ -1,4 +1,5 @@
 import { Pool, type QueryResultRow } from 'pg';
+import SUITE_APPS from './suite-apps.json';
 
 /*
  * SynergyDB (Postgres-wire) data layer. Same quirk workarounds as SynergyMail:
@@ -259,6 +260,31 @@ CREATE TABLE IF NOT EXISTS sa_settings (
   value      JSONB,
   updated_ms BIGINT
 );
+
+CREATE TABLE IF NOT EXISTS sa_apps (
+  id          BIGSERIAL PRIMARY KEY, -- Hub launcher tiles (lib/apps.ts)
+  slug        TEXT NOT NULL,
+  name        TEXT,
+  description TEXT,
+  url         TEXT,
+  icon        TEXT,
+  color       TEXT,
+  category    TEXT,
+  sort        BIGINT DEFAULT 100,
+  open_to_all BIGINT DEFAULT 1,  -- 0 = only people with an sa_user_apps grant
+  disabled    BIGINT DEFAULT 0,
+  suite       BIGINT DEFAULT 0,  -- 1 = a suite app, kept in step with lib/suite-apps.json
+  created_ms  BIGINT
+);
+CREATE INDEX IF NOT EXISTS sa_apps_slug_idx ON sa_apps(slug);
+
+CREATE TABLE IF NOT EXISTS sa_user_apps (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT,
+  app_id     BIGINT,
+  created_ms BIGINT
+);
+CREATE INDEX IF NOT EXISTS sa_user_apps_user_idx ON sa_user_apps(user_id);
 `;
 
 export function ensureSchema(): Promise<void> {
@@ -273,6 +299,7 @@ export function ensureSchema(): Promise<void> {
       for (const m of MIGRATIONS) {
         try { await raw(m); } catch { /* column already present */ }
       }
+      await seedSuiteApps();
     })().catch((e) => {
       global.__saSchema = undefined; // don't cache a failed init
       throw e;
@@ -283,4 +310,36 @@ export function ensureSchema(): Promise<void> {
 
 const MIGRATIONS = [
   `ALTER TABLE sa_saml_sps ADD COLUMN slo_url TEXT`,
+  // sa_apps copied from an older Hub has no suite column.
+  `ALTER TABLE sa_apps ADD COLUMN suite BIGINT DEFAULT 0`,
 ];
+
+/** Where a suite app lives: its subdomain behind Caddy, or its own port without a domain. */
+export function suiteAppUrl(app: { id: string; port: number }, domain = process.env.SUITE_DOMAIN): string {
+  return domain ? `https://${app.id}.${domain}` : `http://localhost:${app.port}`;
+}
+
+/*
+ * Every suite app gets a Hub tile. Tiles are added once and their address is
+ * refreshed on each start, so a changed SUITE_DOMAIN follows; name, order and
+ * who can see it stay whatever an admin set. Linked (non-suite) apps are left alone.
+ */
+async function seedSuiteApps(): Promise<void> {
+  const existing = await pool().query<{ id: string; slug: string }>(`SELECT id, slug FROM sa_apps`);
+  const bySlug = new Map(existing.rows.map((r) => [r.slug, r.id]));
+  let sort = 10;
+  for (const app of SUITE_APPS) {
+    const url = suiteAppUrl(app);
+    const id = bySlug.get(app.id);
+    if (id) {
+      await pool().query(`UPDATE sa_apps SET url = $1::text, suite = 1::bigint WHERE id = $2::bigint`, [url, id]);
+    } else {
+      await pool().query(
+        `INSERT INTO sa_apps (slug, name, url, category, sort, open_to_all, disabled, suite, created_ms)
+         VALUES ($1::text, $2::text, $3::text, $4::text, $5::bigint, 1::bigint, 0::bigint, 1::bigint, $6::bigint)`,
+        [app.id, app.name, url, app.category, sort, now()],
+      );
+    }
+    sort += 10;
+  }
+}

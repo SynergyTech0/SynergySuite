@@ -25,3 +25,10 @@ test('env only enforces required variables in production', () => {
   assert.throws(() => env('X', { required: true }, { NODE_ENV: 'production' }));
   assert.strictEqual(env('X', { required: true }, { NODE_ENV: 'production', X: 'v' }), 'v');
 });
+
+test("Account's Hub list matches the registry", () => {
+  // apps/auth builds on its own, so it keeps a copy (lib/suite-apps.json) for its Hub tiles.
+  const hub = require('../../../apps/auth/lib/suite-apps.json');
+  const want = apps.filter((a) => a.id !== 'auth').map((a) => `${a.id}:${a.port}:${a.name}`);
+  assert.deepStrictEqual(hub.map((a) => `${a.id}:${a.port}:${a.name}`), want);
+});
