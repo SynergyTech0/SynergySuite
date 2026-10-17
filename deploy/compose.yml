@@ -13,6 +13,8 @@ x-app: &app
   depends_on:
     postgres:
       condition: service_healthy
+    postgres-dbs:
+      condition: service_completed_successfully
 
 x-express: &express
   <<: *app
@@ -65,6 +67,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # postgres-init.sql only runs when the data volume is new, so an install that started before an
+  # app joined has no database for it. This makes any database in that file that's missing. Runs once per `up`.
+  postgres-dbs:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./postgres-init.sql:/init.sql:ro
+    entrypoint: ["sh", "-c", "for db in $$(sed -n 's/^CREATE DATABASE \\([a-z_]*\\);.*/\\1/p' /init.sql); do psql -tAc \"SELECT 1 FROM pg_database WHERE datname = '$$db'\" | grep -q 1 || psql -c \"CREATE DATABASE $$db\" || exit 1; done"]
 
   # Identity provider (Entra ID equivalent). Public: it is the login page.
   auth:
