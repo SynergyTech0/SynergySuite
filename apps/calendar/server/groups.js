@@ -119,11 +119,9 @@ function createGroups(db) {
     const from = new Date(req.query.from || Date.now() - 7 * 86400000);
     const to = new Date(req.query.to || Date.now() + 30 * 86400000);
     if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'from and to must be valid dates' });
-    const { rows } = await q(
-      `SELECT * FROM events
-        WHERE calendar = 'group' AND group_source = $1 AND held_deleted_at IS NULL
-          AND start_at < $3 AND end_at > $2
-        ORDER BY start_at LIMIT 1000`, [source, from, to]);
+    // Every occurrence, repeating events expanded (required here: events.js requires this file).
+    const { inRange } = require('./events');
+    const rows = await inRange(q, `(calendar = 'group' AND group_source = $1)`, [source], from, to, 1000);
     res.json({ events: rows });
   }));
 

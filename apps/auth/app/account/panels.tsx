@@ -12,19 +12,106 @@ async function post(url: string, data: Record<string, string>) {
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }
 
-export default function AccountPanels({ mfaEnabled, demo = false }: { mfaEnabled: boolean; demo?: boolean }) {
+export default function AccountPanels({ mfaEnabled, demo = false, email = '', suiteDomain = '' }: { mfaEnabled: boolean; demo?: boolean; email?: string; suiteDomain?: string }) {
   // The shared demo account (demo mode) can't change its credentials; only its session is shown.
   if (demo) return <SessionsPanel />;
   return (
-    <div className="grid2">
-      <div>
-        <MfaPanel mfaEnabled={mfaEnabled} />
-        <PasskeysPanel />
+    <>
+      <div className="grid2">
+        <div>
+          <MfaPanel mfaEnabled={mfaEnabled} />
+          <PasskeysPanel />
+        </div>
+        <div>
+          <PasswordPanel />
+          <SessionsPanel />
+        </div>
       </div>
-      <div>
-        <PasswordPanel />
-        <SessionsPanel />
+      <AppPasswordsPanel email={email} suiteDomain={suiteDomain} />
+    </>
+  );
+}
+
+type AppPw = { id: string; name: string; created_ms: number; last_used_ms: number; last_used_app: string | null };
+
+/* Passwords for phone and desktop apps that sync Calendar (CalDAV) and Contacts (CardDAV). */
+function AppPasswordsPanel({ email, suiteDomain }: { email: string; suiteDomain: string }) {
+  const [items, setItems] = useState<AppPw[]>([]);
+  const [name, setName] = useState('');
+  const [made, setMade] = useState<{ name: string; password: string } | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const load = async () => {
+    const res = await fetch('/api/account/app-passwords');
+    if (res.ok) setItems((await res.json()).appPasswords);
+  };
+  useEffect(() => { load(); }, []);
+
+  const create = async () => {
+    setMsg(null);
+    const r = await post('/api/account/app-passwords', { name });
+    if (r.status === 200) {
+      setMade({ name: r.body.name, password: r.body.password });
+      setName('');
+      load();
+    } else setMsg(r.body.message ?? 'Could not make an app password.');
+  };
+
+  const revoke = async (p: AppPw) => {
+    if (!confirm(`Revoke "${p.name}"? Apps using it stop syncing within a minute.`)) return;
+    await fetch(`/api/account/app-passwords/${p.id}`, { method: 'DELETE' });
+    if (made) setMade(null);
+    load();
+  };
+
+  const host = (app: string) => (suiteDomain ? `${app}.${suiteDomain}` : `the ${app} app's address`);
+  const when = (ms: number) => (ms ? new Date(ms).toLocaleString() : 'never');
+
+  return (
+    <div className="panel" id="app-passwords">
+      <h2>App passwords</h2>
+      <p className="sub">
+        For phone and desktop apps that sync your calendar and contacts: iPhone and Mac (CalDAV and CardDAV
+        accounts), Android with DAVx5, Thunderbird. They can&apos;t use this sign-in page, so make a password for
+        each device here and revoke it when you stop using that device. App passwords skip two-step verification.
+      </p>
+      {msg && <div className="error">{msg}</div>}
+      {made && (
+        <div className="notice" role="status">
+          <p style={{ fontSize: 13 }}>Password for <b>{made.name}</b>. Copy it now; it isn&apos;t shown again.</p>
+          <p><code className="k app-pw">{made.password}</code></p>
+          <table className="kv">
+            <tbody>
+              <tr><td>User name</td><td><code className="k">{email}</code></td></tr>
+              <tr><td>Calendar server</td><td><code className="k">{host('calendar')}</code></td></tr>
+              <tr><td>Contacts server</td><td><code className="k">{host('contacts')}</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <label htmlFor="app-pw-name">Device or app</label>
+          <input id="app-pw-name" value={name} maxLength={60} placeholder="e.g. iPhone, Pixel, Thunderbird"
+            onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) create(); }} />
+        </div>
+        <button className="inline" disabled={!name.trim()} onClick={create}>Create</button>
       </div>
+      {items.length > 0 && (
+        <table style={{ marginTop: 14 }}>
+          <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th /></tr></thead>
+          <tbody>
+            {items.map((p) => (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+                <td>{when(p.created_ms)}</td>
+                <td>{when(p.last_used_ms)}{p.last_used_ms && p.last_used_app ? ` (${p.last_used_app})` : ''}</td>
+                <td><button className="inline secondary" onClick={() => revoke(p)}>Revoke</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

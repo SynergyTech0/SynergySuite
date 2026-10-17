@@ -23,3 +23,14 @@ export async function formBody(req: Request): Promise<URLSearchParams> {
   const text = await req.text();
   return new URLSearchParams(text);
 }
+
+/** Changes come only from the account page itself, not from another suite app's origin. */
+export function sameOrigin(req: Request): boolean {
+  const origin = req.headers.get('origin');
+  if (!origin) return req.headers.get('sec-fetch-site') !== 'cross-site' && req.headers.get('sec-fetch-site') !== 'same-site';
+  try {
+    return new URL(origin).host === (req.headers.get('x-forwarded-host') ?? req.headers.get('host'));
+  } catch {
+    return false;
+  }
+}

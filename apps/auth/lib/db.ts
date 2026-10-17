@@ -232,6 +232,18 @@ CREATE TABLE IF NOT EXISTS sa_saml_cert (
   created_ms BIGINT
 );
 
+CREATE TABLE IF NOT EXISTS sa_app_passwords (
+  id            BIGSERIAL PRIMARY KEY, -- per-device passwords for CalDAV/CardDAV (lib/app-passwords.ts)
+  user_id       BIGINT,
+  name          TEXT,
+  token_hash    TEXT,                  -- sha256 of the normalized password
+  created_ms    BIGINT,
+  last_used_ms  BIGINT DEFAULT 0,
+  last_used_app TEXT,
+  revoked       BIGINT DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS sa_app_passwords_user_idx ON sa_app_passwords(user_id);
+
 CREATE TABLE IF NOT EXISTS sa_audit (
   id         BIGSERIAL PRIMARY KEY,
   at_ms      BIGINT,
