@@ -6,8 +6,12 @@ blocks, layouts and PDF plotting, with DWG and DXF drawings. The editor is
 Rust compiled to WebAssembly. It runs entirely in the browser; this app adds the suite header,
 sign-in, and a library where drawings are opened from and saved to.
 
-CADCraft is early (pre-alpha upstream). Opening drawings, markup and everyday 2D drafting work;
-entities it doesn't model yet are dropped when a drawing is saved.
+CADCraft is early (pre-alpha upstream). Opening drawings, markup and everyday 2D drafting work.
+DXF saves keep entities the editor doesn't model as they were read; `cadcraft-save-fidelity.patch`
+also keeps polyface and polygon meshes as meshes (upstream splits them into loose 3D faces) and the
+standard arrowhead blocks leaders name. Still lost on save: in a DWG, object types the DWG library
+can't write (OLE objects, proxy entities, lights, section planes); some dimension associativity
+(arc, ordinate and angular); multileaders saved below AutoCAD 2007 become a leader and text.
 
 3D models open in [Chili3D](https://github.com/xiangechen/chili3d) (AGPL-3.0, its WebAssembly kernel
 LGPL-3.0): sketches, extrude, revolve, sweep, loft, booleans, fillets and chamfers on Open CASCADE,
