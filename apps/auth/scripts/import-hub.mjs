@@ -26,7 +26,7 @@ const COVERED = {
   boards: 'planner', clm: 'contracts', cadence: 'bookings', drive: 'drive',
   docs: 'office', sheets: 'office', slides: 'office', forms: 'forms', notes: 'notes', meet: 'meet',
   desk: 'desk', time: 'projects', stock: 'commerce', sign: 'sign', people: 'hr', synergytrust: 'trust',
-  books: 'books', invoice: 'books', bills: 'books', billing: 'books', budget: 'books', expense: 'books',
+  law: 'law', books: 'books', invoice: 'books', bills: 'books', billing: 'books', budget: 'books', expense: 'books',
 };
 
 async function readStdin() {

@@ -40,5 +40,6 @@
   {"id":"commerce","name":"Commerce","port":3730,"category":"Sales"},
   {"id":"sign","name":"Sign","port":3300,"category":"Work"},
   {"id":"campaigns","name":"Campaigns","port":3400,"category":"Sales"},
-  {"id":"portal","name":"Portal","port":3155,"category":"Sales"}
+  {"id":"portal","name":"Portal","port":3155,"category":"Sales"},
+  {"id":"law","name":"Law","port":3870,"category":"Legal"}
 ]
