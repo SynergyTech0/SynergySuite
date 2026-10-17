@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { cameThroughGateway, identify, optionsFromEnv } from "@synergy/identity";
 
 /**
@@ -59,6 +59,17 @@ export async function getCurrentUserOrNull(): Promise<SessionUser | null> {
 
   const existing = await db.query.users.findFirst({ where: eq(users.authSub, sub) });
   if (existing) return existing;
+  // People brought over from an older Synergy Hub (scripts/import-hub.mjs) arrive with their email
+  // and no subject, since the old install's subjects mean nothing here. Their first sign-in claims
+  // that row, so their boards, cards and history are theirs rather than an orphan's.
+  const [claimed] = await db
+    .update(users)
+    .set({ authSub: sub })
+    .where(and(isNull(users.authSub), sql`${users.id} = (
+      select id from users where auth_sub is null and not is_mind and lower(email) = ${email.toLowerCase()}
+      order by created_at limit 1)`))
+    .returning();
+  if (claimed) return claimed;
   // A first page load resolves identity from several requests at once, and every one of them can
   // miss the lookup above. Let the unique constraint pick a winner rather than throwing a 500 at a
   // new user's first visit; the losers read back the row the winner wrote.

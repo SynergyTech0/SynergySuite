@@ -171,6 +171,8 @@ deploy/hub-import/run.sh auth root@your-hub-server
 
 It reads the hub's database over your own SSH access (container `saauth-db`, or set `HUB_DB_CONTAINER`). People keep their passwords. Anyone who already has an account here keeps it unchanged unless you add `--overwrite-passwords`. Two-step sign-in has to be set up again, because the hub encrypted those secrets with its own key. Hub apps the suite now covers (Boards, Docs, Cal, Books and so on; the list is `COVERED` in `apps/auth/scripts/import-hub.mjs`) are replaced by their suite apps. Every other hub app becomes a linked app at its old address, with its grants. Running it again only adds what is missing.
 
+- `planner` (container `sboards-db`): SynergyBoards workspaces, boards, members, lists, cards (issue keys, sprints, assignees, labels, checklists, comments, links, custom fields, work logs), activity history and automations, into Planner as they were. People are matched by email; anyone not yet in Planner gets their boards when they first sign in. Uploaded attachment files stay on the hub (link and Drive attachments come across), as do pending invites and notifications.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.
