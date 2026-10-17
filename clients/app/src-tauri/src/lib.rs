@@ -105,6 +105,8 @@ pub(crate) fn open_window(app: &AppHandle, url: WebviewUrl) -> tauri::Result<Web
     let nav_app = app.clone();
     let popup_app = app.clone();
     let download_app = app.clone();
+    #[cfg(mobile)]
+    let popup_label = label.clone();
 
     let builder = WebviewWindowBuilder::new(app, label, url)
         .title("Synergy")
@@ -116,11 +118,19 @@ pub(crate) fn open_window(app: &AppHandle, url: WebviewUrl) -> tauri::Result<Web
         .on_navigation(move |url| allow_navigation(&nav_app, url))
         .on_new_window(move |url, _features| {
             if allow_navigation(&popup_app, &url) {
-                let app = popup_app.clone();
-                // Window creation must not block the webview's event handler.
-                let _ = popup_app.run_on_main_thread(move || {
-                    let _ = open_window(&app, WebviewUrl::External(url));
-                });
+                // Phones have one window, so a suite link meant for a new window opens in place.
+                #[cfg(mobile)]
+                if let Some(window) = popup_app.get_webview_window(&popup_label) {
+                    let _ = window.navigate(url);
+                }
+                #[cfg(desktop)]
+                {
+                    let app = popup_app.clone();
+                    // Window creation must not block the webview's event handler.
+                    let _ = popup_app.run_on_main_thread(move || {
+                        let _ = open_window(&app, WebviewUrl::External(url));
+                    });
+                }
             }
             NewWindowResponse::Deny
         })
@@ -165,7 +175,13 @@ fn allow_navigation(app: &AppHandle, url: &Url) -> bool {
         return true;
     }
     if matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
-        let _ = app.opener().open_url(url.as_str(), None::<&str>);
+        // On Android this handler runs on the UI thread, and the opener waits for an answer
+        // from that same thread, so calling it here would freeze the app. Hand it off instead.
+        let app = app.clone();
+        let url = url.to_string();
+        std::thread::spawn(move || {
+            let _ = app.opener().open_url(url, None::<&str>);
+        });
     }
     false
 }
@@ -190,8 +206,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![get_state, set_server, open_app])
         .setup(|app| {
             let handle = app.handle().clone();
-            let settings = Settings::load(&handle);
+            let mut settings = Settings::load(&handle);
             let apps = suite::launchable_apps();
+            // A build made for one company's suite (SYNERGY_SERVER at build time) starts on it.
+            // People can still connect elsewhere from the launcher.
+            if settings.server.is_none() {
+                settings.server = option_env!("SYNERGY_SERVER")
+                    .filter(|s| !s.is_empty())
+                    .and_then(|s| Server::parse(s, &apps).ok());
+            }
             // Reopen the app the person was last in; otherwise start on the launcher.
             let start = match (&settings.server, &settings.last_app) {
                 (Some(server), Some(id)) => apps

@@ -23,6 +23,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # The suite the official builds open on. Set the SYNERGY_SERVER repository variable to change
+  # it; a build without one asks for an address on first launch.
+  SYNERGY_SERVER: ${{ vars.SYNERGY_SERVER || 'suite.synergytech.cloud' }}
   LINUX_DEPS: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
 
 jobs:
