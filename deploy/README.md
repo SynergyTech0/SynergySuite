@@ -166,7 +166,7 @@ Not included:
 
 ## The Hub and linked apps
 
-Account's Hub (`https://auth.<SUITE_DOMAIN>/hub`, also "All apps" at the bottom of every app's launcher) lists the suite apps plus any **linked apps**: tools the company runs somewhere else. Add, hide, restrict and grant them in Account > Admin > Apps. A restricted app shows only to the people granted it.
+Account's Hub (`https://auth.<SUITE_DOMAIN>/hub`, also "All apps" at the bottom of every app's launcher) lists the suite apps plus any **linked apps**: tools the company runs somewhere else. Add, hide, restrict and grant them in Account > Admin > Apps. A restricted app shows only to the people granted it. The launcher in every app's header shows the same list, grouped by category, from `https://auth.<SUITE_DOMAIN>/api/launcher`; when it can't get it (signed out, Account down) it lists the suite apps instead.
 
 ### Moving from an older Synergy Hub
 

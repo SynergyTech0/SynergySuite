@@ -17,6 +17,10 @@ type App = (typeof apps)[number];
  * app the person is in and what they have open: the `context` attribute when the app sets one
  * (e.g. Mail sets "account=…&folder=…&uid=…" for the open message), else the page's path and query.
  * Changing `context` while the panel is open tells the panel without reloading it.
+ *
+ * The launcher shows what Account's Hub shows the signed-in person: it reads Account's
+ * /api/launcher (with the sign-in cookie) after rendering, keeps the answer in sessionStorage for a
+ * few minutes, and until then, or when that fails (signed out, Account down), lists the suite apps.
  */
 const ICONS: Record<string, string> = {
   grid: "M4 4h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4zM4 16h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z",
@@ -43,6 +47,42 @@ function urlFor(app: App, domain: string | null): string {
   return domain ? `https://${app.id}.${domain}` : `http://localhost:${app.port}`;
 }
 
+/** One launcher group as Account's /api/launcher sends it. */
+export type LauncherGroup = { category: string; apps: { slug: string; name: string; url: string; suite: boolean }[] };
+type Link = { id: string; name: string; href: string };
+
+const LAUNCHER_TTL = 5 * 60_000;
+
+/** The launcher's links: Account's groups when it answered, else the suite apps as one group. */
+export function launcherLinks(groups: LauncherGroup[] | null, domain: string | null): { category: string; links: Link[] }[] {
+  if (!groups) {
+    const launchable = apps.filter((a) => a.core && !("planned" in a && a.planned));
+    return [{ category: "", links: launchable.map((a) => ({ id: a.id, name: a.name, href: urlFor(a, domain) })) }];
+  }
+  return groups
+    .map((g) => ({
+      category: g.category,
+      links: g.apps.flatMap((a): Link[] => {
+        // A suite app opens where this bar says suite apps live; a linked app at its own http(s) address.
+        const suite = a.suite ? apps.find((x) => x.id === a.slug) : undefined;
+        const href = suite ? urlFor(suite, domain) : /^https?:\/\//i.test(a.url) ? a.url : "";
+        return href ? [{ id: a.slug, name: a.name || a.slug, href }] : [];
+      }),
+    }))
+    .filter((g) => g.links.length);
+}
+
+function validGroups(v: unknown): v is LauncherGroup[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (g) =>
+        g && typeof g.category === "string" && Array.isArray(g.apps) &&
+        g.apps.every((a: any) => a && typeof a.slug === "string" && typeof a.name === "string" && typeof a.url === "string"),
+    )
+  );
+}
+
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 type Ring = { id: string; fromName: string; via: string | null };
@@ -56,13 +96,17 @@ export class SynergyAppBar extends HTMLElement {
   private retry: ReturnType<typeof setTimeout> | null = null;
   private backoff = 15_000;
   private rings = new Map<string, Ring>();
+  private groups: LauncherGroup[] | null = null;
+  private loading = 0;
 
   connectedCallback() {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.groups = this.cachedGroups();
     this.render();
     document.addEventListener("keydown", this.onKeydown);
     document.addEventListener("click", this.onDocumentClick);
     this.listenForCalls();
+    this.loadGroups();
   }
 
   disconnectedCallback() {
@@ -78,6 +122,77 @@ export class SynergyAppBar extends HTMLElement {
     if (!domain || !phone || !this.getAttribute("user")) return null;
     if (this.getAttribute("app") === "phone" || this.getAttribute("calls") === "off") return null;
     return urlFor(phone, domain);
+  }
+
+  private launcherUrl(): string {
+    const authApp = apps.find((a) => a.id === "auth");
+    return authApp ? `${urlFor(authApp, this.getAttribute("domain"))}/api/launcher` : "";
+  }
+
+  private cacheKey(): string {
+    return `synergy-launcher:${this.launcherUrl()}:${this.getAttribute("user") ?? ""}`;
+  }
+
+  private cachedGroups(): LauncherGroup[] | null {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(this.cacheKey()) ?? "null");
+      return c && Date.now() - c.at < LAUNCHER_TTL && validGroups(c.groups) ? c.groups : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The person's apps from Account, swapped into the launcher; the suite list stays on any failure. */
+  private async loadGroups() {
+    const url = this.launcherUrl();
+    const token = ++this.loading;
+    const cached = this.cachedGroups();
+    if (cached || !url || typeof fetch === "undefined") return this.setGroups(cached);
+    // Someone else's list (the user changed) never stays up while this one loads.
+    if (this.groups) this.setGroups(null);
+    let groups: LauncherGroup[] | null = null;
+    try {
+      const res = await fetch(url, { credentials: "include", headers: { accept: "application/json" } });
+      const body = res.ok ? await res.json() : null;
+      if (validGroups(body?.groups) && body.groups.length) groups = body.groups;
+    } catch {
+      /* Account unreachable or not allowed from here */
+    }
+    if (token !== this.loading) return;
+    if (groups) {
+      try {
+        sessionStorage.setItem(this.cacheKey(), JSON.stringify({ at: Date.now(), groups }));
+      } catch {
+        /* storage full or blocked */
+      }
+    }
+    this.setGroups(groups);
+  }
+
+  private setGroups(groups: LauncherGroup[] | null) {
+    this.groups = groups;
+    // Don't swap the links out from under someone moving through them; it happens on close instead.
+    if (!(this.open && this.shadowRoot?.activeElement?.closest("nav"))) this.renderNav();
+  }
+
+  private renderNav() {
+    const nav = this.shadowRoot?.querySelector("nav");
+    if (!nav) return;
+    const current = this.getAttribute("app") ?? "";
+    const domain = this.getAttribute("domain");
+    // The Hub (in Account) is the full-page view of the same list.
+    const authApp = apps.find((a) => a.id === "auth");
+    const hubUrl = authApp ? `${urlFor(authApp, domain)}/hub` : "";
+    const groups = launcherLinks(this.groups, domain);
+    nav.innerHTML = `${groups
+      .map(
+        (g) =>
+          `${groups.length > 1 ? `<h2>${esc(g.category)}</h2>` : ""}${g.links
+            .map((l) => `<a href="${esc(l.href)}" ${l.id === current ? 'aria-current="page"' : ""}>${esc(l.name)}</a>`)
+            .join("")}`,
+      )
+      .join("")}
+      ${hubUrl ? `<a class="all" href="${esc(hubUrl)}">All apps</a>` : ""}`;
   }
 
   private stopListening() {
@@ -145,11 +260,14 @@ export class SynergyAppBar extends HTMLElement {
     if (name === "context") return this.sendContext();
     this.render();
     if (name !== "calls" && name !== "domain" && name !== "user" && name !== "app") return;
-    if (this.isConnected) this.listenForCalls();
+    if (!this.isConnected) return;
+    this.listenForCalls();
+    if (name === "domain" || name === "user") this.loadGroups();
   }
 
   /** Show or hide the launcher without re-rendering, so focus stays on the launcher button. */
   private setOpen(open: boolean) {
+    if (!open && this.open) this.renderNav();
     this.open = open;
     this.shadowRoot?.querySelector("button")?.setAttribute("aria-expanded", String(open));
     this.shadowRoot?.querySelector("nav")?.toggleAttribute("hidden", !open);
@@ -235,13 +353,9 @@ export class SynergyAppBar extends HTMLElement {
     const user = this.getAttribute("user") ?? "";
     const domain = this.getAttribute("domain");
     const here = apps.find((a) => a.id === current);
-    const launchable = apps.filter((a) => a.core && !("planned" in a && a.planned));
     // The Search app has its own big box, so the bar's box is left out there.
     const searchApp = current === "search" ? undefined : apps.find((a) => a.id === "search");
     const searchUrl = searchApp ? urlFor(searchApp, domain) : "";
-    // The Hub (in Account) also lists the company's linked apps that run outside the suite.
-    const authApp = apps.find((a) => a.id === "auth");
-    const hubUrl = authApp ? `${urlFor(authApp, domain)}/hub` : "";
 
     // The bar lives in its own box so re-rendering it never moves (and so reloads) the panel's frame.
     let root = this.shadowRoot!.querySelector<HTMLElement>(".bar-root");
@@ -276,11 +390,14 @@ export class SynergyAppBar extends HTMLElement {
         form input:focus { outline: 2px solid var(--bar-focus); outline-offset: 0; }
         @media (max-width: 640px) { form { display: none; } form + .user { margin-left: auto; } }
         nav { position: absolute; top: 52px; left: 8px; z-index: 1000; display: grid; grid-template-columns: repeat(3, 96px); gap: 4px;
+              max-height: calc(100vh - 64px); overflow-y: auto;
               padding: 12px; background: #fff; color: #111827; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
         nav[hidden] { display: none; }
         nav a { padding: 10px 4px; text-align: center; color: inherit; text-decoration: none; border-radius: 6px; }
         nav a:hover, nav a:focus-visible { background: #f3f4f6; }
         nav a[aria-current] { font-weight: 600; }
+        nav h2 { grid-column: 1 / -1; margin: 8px 4px 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+        nav h2:first-child { margin-top: 0; }
         nav a.all { grid-column: 1 / -1; border-top: 1px solid #e5e7eb; border-radius: 0 0 6px 6px; color: #2b4fe0; font-weight: 600; }
         svg { width: 20px; height: 20px; fill: currentColor; }
         .rings { position: fixed; top: 56px; right: 12px; z-index: 1001; display: flex; flex-direction: column; gap: 8px; }
@@ -307,14 +424,10 @@ export class SynergyAppBar extends HTMLElement {
         ${this.hasCopilot() ? `<button class="cp-btn" aria-label="Copilot" aria-expanded="${this.copilotOpen}" title="Copilot"><svg viewBox="0 0 24 24"><path d="${ICONS.spark}"/></svg><span>Copilot</span></button>` : ""}
         <span class="user">${esc(user)}</span>
       </header>
-      <nav aria-label="Apps" ${this.open ? "" : "hidden"}>
-        ${launchable
-          .map((a) => `<a href="${esc(urlFor(a, domain))}" ${a.id === current ? 'aria-current="page"' : ""}>${esc(a.name)}</a>`)
-          .join("")}
-        ${hubUrl ? `<a class="all" href="${esc(hubUrl)}">All apps</a>` : ""}
-      </nav>
+      <nav aria-label="Apps" ${this.open ? "" : "hidden"}></nav>
       <div class="rings"></div>`;
 
+    this.renderNav();
     this.shadowRoot!.querySelector("button")!.addEventListener("click", () => this.setOpen(!this.open));
     this.shadowRoot!.querySelector(".cp-btn")?.addEventListener("click", () => this.toggleCopilot());
     // The panel survives a re-render, so a conversation isn't lost when the bar's attributes change.
