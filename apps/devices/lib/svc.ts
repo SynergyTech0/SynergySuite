@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { q } from "./db";
 import { recomputeStale } from "./state";
+import { RULES, type RuleResult } from "./rules";
 
 /**
  * Service API for other suite apps, Bearer DEVICES_SVC_TOKEN over the internal network. Trust's
@@ -78,5 +79,42 @@ export async function posture(activeDays = 30): Promise<Posture> {
     alerts_open: { critical: a("critical")?.n ?? 0, high: a("high")?.n ?? 0, medium: a("medium")?.n ?? 0, low: a("low")?.n ?? 0 },
     oldest_open_days: { critical: a("critical")?.oldest ?? null, high: a("high")?.oldest ?? null },
     vulnerabilities: { critical_devices: v.critical_devices, high_devices: v.high_devices, critical_advisories: v.critical_advisories, checked_devices: d.checked },
+  };
+}
+
+export type AccessDevice = {
+  id: string;
+  name: string;
+  platform: string;
+  compliance: "compliant" | "noncompliant" | "unknown";
+  failing: { label: string; detail: string }[];
+  last_seen: string;
+};
+
+/**
+ * One person's devices and whether each meets the compliance policies, for Auth's sign-in check
+ * (conditional access). Retired devices don't count.
+ */
+export async function access(email: string): Promise<{ email: string; devices: AccessDevice[] }> {
+  await recomputeStale();
+  const e = email.trim().toLowerCase();
+  const rows = await q<{ id: string; hostname: string; hardware_model: string; platform: string; compliance: AccessDevice["compliance"]; compliance_detail: RuleResult[]; last_seen: Date }>(
+    `SELECT id, hostname, hardware_model, platform, compliance, compliance_detail, last_seen
+     FROM devices WHERE retired_at IS NULL AND lower(owner) = $1 ORDER BY hostname, id`,
+    [e],
+  );
+  const label = (check: string) => RULES.find((r) => r.check === check)?.label ?? check;
+  return {
+    email: e,
+    devices: rows.map((d) => ({
+      id: d.id,
+      name: d.hostname || d.hardware_model || "Unnamed device",
+      platform: d.platform,
+      compliance: d.compliance,
+      failing: (Array.isArray(d.compliance_detail) ? d.compliance_detail : [])
+        .filter((r) => r.outcome === "fail")
+        .map((r) => ({ label: label(r.check), detail: r.detail })),
+      last_seen: new Date(d.last_seen).toISOString(),
+    })),
   };
 }

@@ -54,6 +54,12 @@ patterns, running on Next.js with SynergyDB storage.
 - **Production guards**: fail-closed at startup if `NODE_ENV=production` and
   `ISSUER_URL` is missing/http/localhost, or `SA_ENCRYPTION_KEY` is unset
   (skipped during `next build`, enforced when serving).
+- **Device compliance (conditional access)**: with Devices connected, sign-in
+  (OIDC authorize, SAML SSO) and session renewal (refresh grant) are refused
+  while one of the person's devices fails its compliance policies; they land on
+  `/login/device-blocked`, which lists each device and what to fix. Off,
+  report-only or block, an exempt list, and whether people with no device may
+  sign in are set in `/admin` → Settings. Fails open, audited, if Devices is down.
 - **Hosted pages**: `/login`, `/login/mfa`, `/consent`, `/forgot`, `/reset`,
   `/account` (MFA, passkeys, password, sessions), `/admin` (users, clients,
   audit, settings).
@@ -82,6 +88,9 @@ single-use, enumeration resistance), key rotation (old tokens still verify),
 a full WebAuthn ceremony against a software P-256 authenticator (including
 assertion replay rejection), SCIM CRUD, and a SAML round-trip where the test
 acts as the SP and validates the response signature against the IdP metadata.
+With `E2E_DEVICES_PORT` and `E2E_DEVICES_TOKEN` set (and the server started with
+`DEVICES_INTERNAL_URL=http://localhost:<port>` and `DEVICES_SVC_TOKEN=<token>`),
+the test also plays Devices and checks device compliance at sign-in.
 
 ## Wire up an app (any OIDC client library)
 
@@ -103,6 +112,7 @@ Works with `next-auth` (OIDC provider), `openid-client`, Spring, etc.
 | `ISSUER_URL` | prod | Public https origin; drives OIDC issuer, WebAuthn origin, reset links |
 | `SA_ENCRYPTION_KEY` | prod | 32-byte hex/base64 key for secrets-at-rest (dev auto-generates `.sa-dev-key`) |
 | `SA_RP_ID` | no | WebAuthn Relying Party ID; defaults to `ISSUER_URL` host |
+| `DEVICES_INTERNAL_URL`/`DEVICES_SVC_TOKEN` | no | Devices' internal address and service token, for device compliance at sign-in |
 | `SMTP_HOST`/`SMTP_PORT`/`MAIL_FROM` | no | Password-reset email (dev falls back to `./dev-mail/*.eml`) |
 
 ## Notes / not yet done

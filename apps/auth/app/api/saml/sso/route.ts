@@ -3,6 +3,7 @@ import { redirect } from '@/lib/http';
 import { currentUser } from '@/lib/session';
 import { samlIdp, findSp, spInstance, issuerFromSamlRequest } from '@/lib/saml';
 import { audit } from '@/lib/audit';
+import { checkDeviceAccess, blockedPage } from '@/lib/device-access';
 
 /*
  * SAML SSO endpoint (HTTP-Redirect binding in, HTTP-POST binding out).
@@ -24,6 +25,9 @@ export async function GET(req: NextRequest) {
     const returnTo = encodeURIComponent(req.nextUrl.pathname + '?' + req.nextUrl.searchParams.toString());
     return redirect(`/login?return_to=${returnTo}`);
   }
+
+  const access = await checkDeviceAccess(auth.user, `saml:${spEntityId}`, req);
+  if (!access.allowed) return redirect(blockedPage(req.nextUrl.pathname + '?' + req.nextUrl.searchParams.toString()));
 
   const idp = await samlIdp();
   const sp = spInstance(spRow);

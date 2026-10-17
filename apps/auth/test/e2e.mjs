@@ -4,10 +4,13 @@
  * PKCE code flow, tokens, userinfo, refresh rotation + reuse detection,
  * introspection, revocation, client_credentials, logout, app passwords (set
  * PROXY_SHARED_SECRET for the server and this test to check them end to end).
+ * With E2E_DEVICES_PORT set (the server started with DEVICES_INTERNAL_URL=http://localhost:<port>
+ * and DEVICES_SVC_TOKEN=$E2E_DEVICES_TOKEN), it also plays Devices to check device compliance.
  */
 import { createHmac, createHash, randomBytes, generateKeyPairSync, createSign } from 'crypto';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
+import { createServer } from 'http';
 
 const BASE = process.env.ISSUER_URL ?? 'http://localhost:3500';
 let pass = 0, fail = 0;
@@ -324,6 +327,62 @@ async function main() {
   ok('client_credentials issues access token', r.status === 200 && !!cc.access_token && !cc.refresh_token);
   r = await req('POST', '/api/oidc/token', { body: { grant_type: 'client_credentials', client_id: conf.client_id, client_secret: 'nope' } });
   ok('bad client secret rejected', r.status === 401);
+
+  if (process.env.E2E_DEVICES_PORT) {
+    console.log('== 12b. Device compliance at sign-in ==');
+    // Plays Devices: `fleet` is what /api/svc/access answers for the test user; null = Devices is down.
+    let fleet = [];
+    const fake = createServer((rq, rs) => {
+      const u = new URL(rq.url, 'http://x');
+      if (rq.headers.authorization !== `Bearer ${process.env.E2E_DEVICES_TOKEN}` || u.pathname !== '/api/svc/access') { rs.writeHead(401).end(); return; }
+      if (fleet === null) { rs.writeHead(500).end(); return; }
+      rs.writeHead(200, { 'content-type': 'application/json' });
+      rs.end(JSON.stringify({ email: u.searchParams.get('email'), devices: u.searchParams.get('email') === userEmail ? fleet : [] }));
+    });
+    await new Promise((res) => fake.listen(Number(process.env.E2E_DEVICES_PORT), res));
+    const mac = { id: 'd1', name: 'E2E-MacBook', platform: 'darwin', compliance: 'noncompliant', failing: [{ label: 'Disk encryption', detail: 'The system disk is not encrypted' }], last_seen: new Date().toISOString() };
+    const setMode = (mode, extra = {}) => req('POST', '/api/admin/settings', {
+      body: JSON.stringify({ action: 'set_device_compliance', mode, no_device: 'allow', exempt: '', ...extra }),
+      cookies: adminJar, headers: { 'content-type': 'application/json' },
+    });
+    const authz = '/api/oidc/authorize?' + form({ client_id: conf.client_id, redirect_uri: 'http://localhost:4000/callback', response_type: 'code', scope: 'openid offline_access' });
+    const signIn = async () => (await req('GET', authz, { cookies: mfaJar })).headers.get('location') ?? '';
+
+    r = await req('GET', authz, { cookies: mfaJar });
+    const rc = new URL(r.headers.get('location')).searchParams.get('code');
+    const fam = await (await req('POST', '/api/oidc/token', { body: { grant_type: 'authorization_code', code: rc, redirect_uri: 'http://localhost:4000/callback' }, headers: { authorization: basic } })).json();
+
+    fleet = [mac];
+    r = await setMode('enforce');
+    ok('admin turns on blocking', r.status === 200);
+    loc = await signIn();
+    ok('non-compliant device blocks sign-in', loc.startsWith('/login/device-blocked?return_to='), loc);
+    r = await req('GET', loc, { cookies: mfaJar });
+    const page = await r.text();
+    ok('blocked page names the device and the failing setting', r.status === 200 && page.includes('E2E-MacBook') && page.includes('The system disk is not encrypted'));
+    r = await req('POST', '/api/oidc/token', { body: { grant_type: 'refresh_token', refresh_token: fam.refresh_token }, headers: { authorization: basic } });
+    ok('session renewal is refused too', r.status === 400);
+    r = await req('GET', '/api/admin/audit', { cookies: adminJar });
+    ok('block is audited', JSON.stringify(await r.json()).includes('device_access.blocked'));
+
+    await setMode('report');
+    ok('report mode lets them in', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    await setMode('enforce', { exempt: userEmail.toUpperCase() });
+    ok('exempt people are let in', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    await setMode('enforce');
+    fleet = [{ ...mac, compliance: 'unknown', failing: [] }];
+    ok('a device that has not reported yet does not block', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    fleet = null;
+    ok('Devices down lets them in', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    fleet = [];
+    ok('no device is allowed by default', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    await setMode('enforce', { no_device: 'block' });
+    ok('no device blocks when required', (await signIn()).startsWith('/login/device-blocked'));
+    fleet = [{ ...mac, compliance: 'compliant', failing: [] }];
+    ok('fixed device lets them in', (await signIn()).startsWith('http://localhost:4000/callback?'));
+    await setMode('off');
+    fake.close();
+  }
 
   console.log('== 13. SSO logout ==');
   r = await req('GET', '/api/oidc/logout', { cookies: mfaJar });

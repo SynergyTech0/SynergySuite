@@ -4,6 +4,7 @@ import {
 } from '@/lib/oauth';
 import { findById, b } from '@/lib/users';
 import { audit } from '@/lib/audit';
+import { checkDeviceAccess } from '@/lib/device-access';
 
 export async function POST(req: Request) {
   const body = await formBody(req);
@@ -45,6 +46,11 @@ export async function POST(req: Request) {
     }
     const user = await findById(result.row.user_id);
     if (!user || b(user.disabled)) return oauthError('invalid_grant', 'User no longer valid');
+    // A device that fell out of policy ends the session at its next renewal; signing in again
+    // lands on the blocked page.
+    if (!(await checkDeviceAccess(user, `oidc:${client.client_id}`, req)).allowed) {
+      return oauthError('invalid_grant', 'A device of yours does not meet your organization\'s policies');
+    }
     const tokens = await mintTokens({
       user, client, scope: result.row.scope, sessionSid: result.row.session_sid, includeRefresh: false,
     });

@@ -24,6 +24,7 @@ export function About() {
           <li>Android management: a work profile on personal phones or full management of company phones, remote lock, erase (or removing just the work profile) and restart, passcode, Wi-Fi and restriction settings, and Google Play apps installed by admins or by people on their own phones.</li>
           <li>Windows management: restart and reset (optionally keeping user files), password, BitLocker, firewall, update, Wi-Fi and camera settings, and MSI apps installed by admins or by people on their own PCs. PCs report BitLocker, firewall and antivirus status for compliance.</li>
           <li>Compliance policies for disk encryption, firewall, antivirus, screen lock, system protection, automatic updates, OS version, check-ins, administrators, vulnerabilities and open threats.</li>
+          <li>Blocking sign-in to the suite while a person&apos;s device is non-compliant, turned on in Auth&apos;s admin console.</li>
           <li>Threat detections for new network listeners, persistence, programs running from temporary folders, deleted binaries, new SSH keys, new administrators, security settings turned off, and known-bad file hashes.</li>
           <li>Live queries across the fleet, alert triage with notes and an optional AI explanation through the suite&apos;s own model.</li>
           <li>Evidence for Synergy Trust (endpoint compliance and endpoint threats), suite search, and eDiscovery through the Admin center.</li>
@@ -31,7 +32,7 @@ export function About() {
       </section>
       <section className="panel">
         <h3>Not yet</h3>
-        <p style={{ marginTop: 0 }}>Blocking sign-in from non-compliant devices is coming next. Windows has no remote lock for PCs, and commands reach a PC at its next hourly check-in (there&apos;s no instant wake-up without Microsoft&apos;s push service); Windows identity certificates last five years and aren&apos;t renewed automatically yet. Automated Device Enrollment through Apple Business Manager and app licenses from it aren&apos;t supported yet; devices enroll with a profile. Retiring a computer stops it reporting; it doesn&apos;t uninstall osquery.</p>
+        <p style={{ marginTop: 0 }}>Windows has no remote lock for PCs, and commands reach a PC at its next hourly check-in (there&apos;s no instant wake-up without Microsoft&apos;s push service); Windows identity certificates last five years and aren&apos;t renewed automatically yet. Automated Device Enrollment through Apple Business Manager and app licenses from it aren&apos;t supported yet; devices enroll with a profile. Retiring a computer stops it reporting; it doesn&apos;t uninstall osquery.</p>
       </section>
     </div>
   );

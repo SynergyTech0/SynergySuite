@@ -5,8 +5,9 @@ import { q, now } from '@/lib/db';
 import { rotateKey } from '@/lib/keys';
 import { sha256hex } from '@/lib/oauth';
 import { audit } from '@/lib/audit';
+import { getCompliance, parseCompliance, setCompliance } from '@/lib/device-access';
 
-/* Admin settings: signing-key rotation, SCIM API tokens, SAML SP registry. */
+/* Admin settings: signing-key rotation, SCIM API tokens, SAML SP registry, device compliance. */
 
 async function requireAdmin(req: Request) {
   const auth = await currentUser(req);
@@ -30,6 +31,8 @@ export async function GET(req: Request) {
     keys: keys.map((k) => ({ kid: k.kid, active: Number(k.active) !== 0, created_ms: Number(k.created_ms) })),
     api_tokens: tokens.map((t) => ({ hash8: t.token_hash.slice(0, 8), name: t.name, revoked: Number(t.revoked) !== 0 })),
     saml_sps: sps.map((s) => ({ id: String(s.id), entity_id: s.entity_id, acs_url: s.acs_url, slo_url: s.slo_url, name: s.name })),
+    device_compliance: await getCompliance(),
+    devices_connected: Boolean(process.env.DEVICES_INTERNAL_URL && process.env.DEVICES_SVC_TOKEN),
   });
 }
 
@@ -88,6 +91,13 @@ export async function POST(req: Request) {
     await q(`DELETE FROM sa_saml_sps WHERE id + 0 = $1::bigint`, [body.get('sp_id') ?? '0']);
     await audit('admin.saml_sp_deleted', auth.user.email, { id: body.get('sp_id') }, req);
     return json({ ok: true });
+  }
+
+  if (action === 'set_device_compliance') {
+    const c = parseCompliance({ mode: body.get('mode'), no_device: body.get('no_device'), exempt: body.get('exempt') });
+    await setCompliance(c);
+    await audit('admin.device_compliance_set', auth.user.email, c, req);
+    return json({ ok: true, device_compliance: c });
   }
 
   return json({ error: 'unknown_action' }, 400);

@@ -34,6 +34,8 @@ type SettingsData = {
   keys: { kid: string; active: boolean; created_ms: number }[];
   api_tokens: { hash8: string; name: string; revoked: boolean }[];
   saml_sps: { id: string; entity_id: string; acs_url: string; slo_url: string | null; name: string }[];
+  device_compliance: { mode: 'off' | 'report' | 'enforce'; no_device: 'allow' | 'block'; exempt: string[] };
+  devices_connected: boolean;
 };
 
 function Settings() {
@@ -59,6 +61,8 @@ function Settings() {
   return (
     <>
       {msg && <div className="error">{msg}</div>}
+      <DeviceCompliance key={JSON.stringify(data.device_compliance)} data={data} save={(p) => act({ action: 'set_device_compliance', ...p })} />
+
       <div className="panel">
         <h2>Token signing keys</h2>
         <p className="sub">The newest key signs new tokens; older keys stay published in the JWKS so outstanding tokens keep verifying.</p>
@@ -338,6 +342,47 @@ function Audit() {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+const MODES = [
+  ['off', 'Off', 'Devices are not checked at sign-in.'],
+  ['report', 'Report only', 'Sign-in is allowed, and the audit log records who would have been blocked.'],
+  ['enforce', 'Block', 'Sign-in to every app is refused while any of the person\u2019s devices is non-compliant.'],
+] as const;
+
+function DeviceCompliance({ data, save }: { data: SettingsData; save: (p: Record<string, string>) => void }) {
+  const [c, setC] = useState({ ...data.device_compliance, exempt: data.device_compliance.exempt.join('\n') });
+  return (
+    <div className="panel">
+      <h2>Device compliance</h2>
+      <p className="sub">
+        Block sign-in while a person&apos;s device fails the compliance policies in Devices. It&apos;s checked when they
+        sign in and when their session renews, about every hour. A device that hasn&apos;t reported yet doesn&apos;t block.
+        If Devices can&apos;t be reached, sign-in is allowed and the audit log notes it. This console never checks
+        devices, so you can always turn this off here.
+      </p>
+      {!data.devices_connected && (
+        <div className="error">Auth isn&apos;t connected to Devices. Set DEVICES_INTERNAL_URL and DEVICES_SVC_TOKEN for Auth (deploy/README.md).</div>
+      )}
+      <label>When a device isn&apos;t compliant</label>
+      {MODES.map(([value, label, help]) => (
+        <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'baseline', color: 'var(--text)', margin: '6px 0' }}>
+          <input type="radio" name="mode" style={{ width: 'auto' }} checked={c.mode === value} onChange={() => setC({ ...c, mode: value })} />
+          <span><strong>{label}</strong> <span className="sub">{help}</span></span>
+        </label>
+      ))}
+      <label>People with no device in Devices</label>
+      <select value={c.no_device} onChange={(e) => setC({ ...c, no_device: e.target.value as 'allow' | 'block' })}>
+        <option value="allow">Can sign in</option>
+        <option value="block">Can&apos;t sign in until a device is enrolled</option>
+      </select>
+      <label>Never checked (one email per line)</label>
+      <textarea rows={3} value={c.exempt} onChange={(e) => setC({ ...c, exempt: e.target.value })} placeholder="breakglass@example.com" />
+      <button className="inline" style={{ marginTop: 12 }} onClick={() => save({ mode: c.mode, no_device: c.no_device, exempt: c.exempt })}>
+        Save
+      </button>
     </div>
   );
 }

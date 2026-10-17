@@ -81,6 +81,9 @@ services:
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       # Calendar and Contacts check app passwords here with it (phone sync).
       PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+      # Blocking sign-in from non-compliant devices (admin console > Settings) asks Devices.
+      DEVICES_INTERNAL_URL: http://devices:3810
+      DEVICES_SVC_TOKEN: ${DEVICES_SVC_TOKEN:-}
       <<: *demo-env
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3500/api/oidc/jwks').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

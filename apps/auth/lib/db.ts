@@ -253,6 +253,12 @@ CREATE TABLE IF NOT EXISTS sa_audit (
   ip         TEXT
 );
 CREATE INDEX IF NOT EXISTS sa_audit_at_idx ON sa_audit(at_ms);
+
+CREATE TABLE IF NOT EXISTS sa_settings (
+  key        TEXT PRIMARY KEY, -- device_compliance
+  value      JSONB,
+  updated_ms BIGINT
+);
 `;
 
 export function ensureSchema(): Promise<void> {
