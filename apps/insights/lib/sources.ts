@@ -1,5 +1,6 @@
 import { Client } from "pg";
 import { type InsightsConfig, SOURCE_NAMES, readerPassword } from "./config";
+import { type ExecutiveResult, provisionExecutive } from "./executive";
 import type { Metabase } from "./metabase";
 
 /**
@@ -38,6 +39,8 @@ export interface SyncReport {
   ok: boolean;
   error?: string;
   sources: SourceResult[];
+  /** How setting up the Executive overview went. */
+  executive?: ExecutiveResult;
 }
 
 /** Gives the reader role exactly the safe columns of one database. Returns what it can now see. */
@@ -168,7 +171,10 @@ export function lastSync(): SyncReport | null {
   return state.last;
 }
 
-/** Sets Metabase up if needed and brings every source's grants and connection up to date. */
+/**
+ * Sets Metabase up if needed, brings every source's grants and connection up to date, then
+ * makes sure the Executive overview exists over the sources that are connected.
+ */
 export function syncAll(mb: Metabase): Promise<SyncReport> {
   if (state.running) return state.running;
   state.running = (async (): Promise<SyncReport> => {
@@ -192,7 +198,16 @@ export function syncAll(mb: Metabase): Promise<SyncReport> {
           sources.push({ source, name, status: "error", tables: 0, hiddenColumns: [], detail: (err as Error).message });
         }
       }
-      state.last = { at: new Date().toISOString(), ok: sources.every((s) => s.status !== "error"), sources };
+      const databases = Object.fromEntries(sources.filter((s) => s.metabaseId).map((s) => [s.source, s.metabaseId!]));
+      const executive = await provisionExecutive(mb, databases).catch(
+        (err): ExecutiveResult => ({ status: "error", cards: 0, detail: (err as Error).message }),
+      );
+      state.last = {
+        at: new Date().toISOString(),
+        ok: sources.every((s) => s.status !== "error") && executive.status !== "error",
+        sources,
+        executive,
+      };
     } catch (err) {
       state.last = { at: new Date().toISOString(), ok: false, error: (err as Error).message, sources };
     }

@@ -14,6 +14,7 @@ export async function register() {
     const r = await syncAll(mb);
     if (r.error) console.error("[insights] sync:", r.error);
     for (const s of r.sources) if (s.status === "error") console.error(`[insights] source ${s.source}:`, s.detail);
+    if (r.executive?.status === "error") console.error("[insights] executive overview:", r.executive.detail);
     const ok = r.sources.filter((s) => s.status === "ok").map((s) => s.source);
     if (!r.error) console.log(`[insights] synced: ${ok.join(", ") || "no sources"}`);
     return r;
