@@ -527,6 +527,11 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+shifts.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app shifts:3930
+}
+
 sms.{$SUITE_DOMAIN} {
 	# Twilio posts incoming texts and delivery updates here without a suite account; the app checks
 	# each request's X-Twilio-Signature and refuses any it can't verify.

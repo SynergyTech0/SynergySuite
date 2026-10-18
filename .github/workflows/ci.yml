@@ -103,6 +103,7 @@ jobs:
           npx tsc --noEmit -p apps/field
           npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/contracts
+          npx tsc --noEmit -p apps/shifts
           npx tsc --noEmit -p apps/sms
           npx tsc --noEmit -p apps/vault
           npx tsc --noEmit -p apps/builder
@@ -229,6 +230,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
           npm test --workspace apps/contracts
+      - name: Shifts tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/shifts_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE shifts_test"
+          npm test --workspace apps/shifts
       - name: SMS tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/sms_test

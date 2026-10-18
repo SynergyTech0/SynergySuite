@@ -65,6 +65,7 @@ COPY apps/whiteboard/package.json apps/whiteboard/
 COPY apps/groups/package.json apps/groups/
 COPY apps/vault/package.json apps/vault/
 COPY apps/sms/package.json apps/sms/
+COPY apps/shifts/package.json apps/shifts/
 COPY addons/portal/package.json addons/portal/
 COPY addons/campaigns/package.json addons/campaigns/
 COPY addons/law/package.json addons/law/
