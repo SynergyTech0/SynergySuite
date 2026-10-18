@@ -527,6 +527,99 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+status.{$SUITE_DOMAIN} {
+	# The public status page, its JSON and the build assets it loads need no suite account. The
+	# provisioning API (bearer STATUS_API_TOKEN) is for the internal network only.
+	handle /api/svc/* {
+		respond 404
+	}
+	@public path /status /api/public/* /_next/* /favicon.ico /icon.svg /app-icon.svg
+	handle @public {
+		import maybe_signed_in
+		import to_app status:3880
+	}
+	handle {
+		import signed_in
+		import to_app status:3880
+	}
+}
+
+analytics.{$SUITE_DOMAIN} {
+	# Websites load the tracking script and post beacons without a suite account (/sy.js is the
+	# earlier tool's script address). The dashboard needs a sign-in.
+	@public path /script.js /sy.js /api/collect
+	handle @public {
+		import maybe_signed_in
+		import to_app analytics:3890
+	}
+	handle {
+		import signed_in
+		import to_app analytics:3890
+	}
+}
+
+livechat.{$SUITE_DOMAIN} {
+	# Visitors on other websites load the widget and chat through /api/wc/* (checked against each
+	# widget's domain in the app) without a suite account. The agent inbox needs a sign-in.
+	@public path /widget.js /api/wc/*
+	handle @public {
+		import maybe_signed_in
+		import to_app livechat:3900
+	}
+	handle {
+		import signed_in
+		import to_app livechat:3900
+	}
+}
+
+shifts.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app shifts:3930
+}
+
+sms.{$SUITE_DOMAIN} {
+	# Twilio posts incoming texts and delivery updates here without a suite account; the app checks
+	# each request's X-Twilio-Signature and refuses any it can't verify.
+	handle /api/webhooks/twilio/* {
+		request_header -X-Auth-Request-Email
+		request_header -X-Auth-Request-User
+		request_header -X-Auth-Request-Preferred-Username
+		request_header -X-Forwarded-Email
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Preferred-Username
+		request_header -X-Dev-User
+		import to_app sms:3920
+	}
+	handle {
+		import signed_in
+		import to_app sms:3920
+	}
+}
+
+vault.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app vault:3910
+}
+
+learn.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app learn:3950
+}
+
+hire.{$SUITE_DOMAIN} {
+	# Anyone can read the careers page and apply without a suite account: the careers pages, the
+	# application API and the build assets they load. Everything else is for recruiters.
+	@public path /careers /careers/* /api/public/* /_next/* /favicon.ico /icon.svg /app-icon.svg
+	handle @public {
+		import maybe_signed_in
+		import to_app hire:3940
+	}
+	handle {
+		import signed_in
+		import to_app hire:3940
+	}
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870

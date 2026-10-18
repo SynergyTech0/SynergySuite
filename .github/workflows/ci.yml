@@ -103,6 +103,14 @@ jobs:
           npx tsc --noEmit -p apps/field
           npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/contracts
+          npx tsc --noEmit -p apps/status
+          npx tsc --noEmit -p apps/analytics
+          npx tsc --noEmit -p apps/livechat
+          npx tsc --noEmit -p apps/shifts
+          npx tsc --noEmit -p apps/sms
+          npx tsc --noEmit -p apps/vault
+          npx tsc --noEmit -p apps/learn
+          npx tsc --noEmit -p apps/hire
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -227,6 +235,54 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
           npm test --workspace apps/contracts
+      - name: Status tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/status_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE status_test"
+          npm test --workspace apps/status
+      - name: Analytics tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/analytics_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE analytics_test"
+          npm test --workspace apps/analytics
+      - name: LiveChat tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/livechat_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE livechat_test"
+          npm test --workspace apps/livechat
+      - name: Shifts tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/shifts_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE shifts_test"
+          npm test --workspace apps/shifts
+      - name: SMS tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/sms_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE sms_test"
+          npm test --workspace apps/sms
+      - name: Vault tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/vault_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE vault_test"
+          npm test --workspace apps/vault
+      - name: Learn tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/learn_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE learn_test"
+          npm test --workspace apps/learn
+      - name: Hire tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hire_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE hire_test"
+          npm test --workspace apps/hire
       - name: Law tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/law_test

@@ -300,7 +300,7 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sites
       # The Booking block embeds pages from Bookings.
       SITES_BOOKING_URL: ${SITES_BOOKING_URL:-https://bookings.${SUITE_DOMAIN}}
-      SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
+      SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-https://livechat.${SUITE_DOMAIN}}
       # Each site's document library is a Drive library whose people Sites keeps (DRIVE_SVC_TOKEN on both).
       SITES_DRIVE_URL: http://drive:3180
       DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
@@ -986,6 +986,115 @@ services:
       CONTRACTS_AI_BASE_URL: ${CONTRACTS_AI_BASE_URL:-}
       CONTRACTS_AI_API_KEY: ${CONTRACTS_AI_API_KEY:-}
       CONTRACTS_AI_MODEL: ${CONTRACTS_AI_MODEL:-}
+
+  # Uptime monitors, incidents and a public status page (status.<domain>/status). Monitors can't
+  # reach private or internal addresses unless STATUS_ALLOW_HOSTS names them.
+  status:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-status:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: status } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/status
+      STATUS_ADMIN_EMAILS: ${STATUS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      STATUS_ALLOW_HOSTS: ${STATUS_ALLOW_HOSTS:-}
+      STATUS_RETENTION_DAYS: ${STATUS_RETENTION_DAYS:-}
+      STATUS_API_TOKEN: ${STATUS_API_TOKEN:-}
+
+  # Privacy-friendly website analytics: a cookie-free tracking script and a dashboard per site.
+  analytics:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-analytics:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: analytics } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/analytics
+      ANALYTICS_ADMIN_EMAILS: ${ANALYTICS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-}
+
+  # A chat widget for websites and an agent inbox; Send to Desk opens a ticket through Desk's intake.
+  livechat:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-livechat:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: livechat } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/livechat
+      LIVECHAT_ADMIN_EMAILS: ${LIVECHAT_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
+      DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
+
+  # Microsoft Shifts equivalent: weekly schedules by position and location, open shifts people
+  # claim, and publishing per week. It keeps its own roster of the people it schedules.
+  shifts:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-shifts:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: shifts } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/shifts
+      SHIFTS_ADMIN_EMAILS: ${SHIFTS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+
+  # Business texting: conversations, contacts and campaigns sent through Twilio. Twilio posts
+  # incoming texts and delivery updates to /api/webhooks/twilio/*, which check Twilio's signature.
+  sms:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-sms:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: sms } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sms
+      SMS_ALLOWED_EMAILS: ${SMS_ALLOWED_EMAILS:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-twilio}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      SMS_PUBLIC_URL: ${SMS_PUBLIC_URL:-}
+      SMS_DEFAULT_COUNTRY_CODE: ${SMS_DEFAULT_COUNTRY_CODE:-1}
+
+  # A shared team password vault. Entries are encrypted and decrypted in the browser with a key
+  # derived from the vault passphrase; the server and its database only ever hold ciphertext.
+  vault:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-vault:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: vault } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/vault
+      VAULT_ALLOWED_EMAILS: ${VAULT_ALLOWED_EMAILS:-}
+      VAULT_ACCESS_CONTACT: ${VAULT_ACCESS_CONTACT:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+
+  # Training (Viva Learning equivalent): courses, lessons and quizzes, assignments with due dates,
+  # progress and certificates.
+  learn:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-learn:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: learn } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/learn
+      LEARN_AUTHOR_EMAILS: ${LEARN_AUTHOR_EMAILS:-${ADMIN_EMAILS:-}}
+      LEARN_PASS_MARK: ${LEARN_PASS_MARK:-}
+      LEARN_ORG_NAME: ${LEARN_ORG_NAME:-}
+
+  # Recruiting (Dynamics 365 Human Resources recruiting equivalent): jobs, a public careers page,
+  # applications and a hiring pipeline. Hired candidates go to HR through HR's own API.
+  hire:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-hire:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: hire } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/hire
+      HIRE_ADMIN_EMAILS: ${HIRE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      HIRE_COMPANY_NAME: ${HIRE_COMPANY_NAME:-}
+      HIRE_AI_PROVIDER: ${HIRE_AI_PROVIDER:-}
+      HIRE_AI_BASE_URL: ${HIRE_AI_BASE_URL:-}
+      HIRE_AI_API_KEY: ${HIRE_AI_API_KEY:-}
+      HIRE_AI_MODEL: ${HIRE_AI_MODEL:-}
 
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.

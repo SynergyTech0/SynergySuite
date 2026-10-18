@@ -1,0 +1,28 @@
+{
+  "name": "synergy-analytics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy Analytics - privacy-friendly website analytics with a tracking script and dashboard",
+  "scripts": {
+    "dev": "next dev -p 3890",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3890",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/shell": "*",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}
