@@ -1001,6 +1001,17 @@ services:
       STATUS_RETENTION_DAYS: ${STATUS_RETENTION_DAYS:-}
       STATUS_API_TOKEN: ${STATUS_API_TOKEN:-}
 
+  # Privacy-friendly website analytics: a cookie-free tracking script and a dashboard per site.
+  analytics:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-analytics:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: analytics } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/analytics
+      ANALYTICS_ADMIN_EMAILS: ${ANALYTICS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:

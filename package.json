@@ -39,6 +39,7 @@
     "apps/groups",
     "apps/contracts",
     "apps/status",
+    "apps/analytics",
     "apps/photo",
     "apps/sites",
     "apps/stream",

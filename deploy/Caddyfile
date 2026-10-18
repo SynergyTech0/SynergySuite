@@ -544,6 +544,20 @@ status.{$SUITE_DOMAIN} {
 	}
 }
 
+analytics.{$SUITE_DOMAIN} {
+	# Websites load the tracking script and post beacons without a suite account (/sy.js is the
+	# earlier tool's script address). The dashboard needs a sign-in.
+	@public path /script.js /sy.js /api/collect
+	handle @public {
+		import maybe_signed_in
+		import to_app analytics:3890
+	}
+	handle {
+		import signed_in
+		import to_app analytics:3890
+	}
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870

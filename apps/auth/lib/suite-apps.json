@@ -35,6 +35,7 @@
   {"id":"desk","name":"Desk","port":3105,"category":"Work"},
   {"id":"contracts","name":"Contracts","port":3860,"category":"Legal"},
   {"id":"status","name":"Status","port":3880,"category":"Admin"},
+  {"id":"analytics","name":"Analytics","port":3890,"category":"Sales"},
   {"id":"projects","name":"Projects","port":3820,"category":"Work"},
   {"id":"field","name":"Field Service","port":3850,"category":"Work"},
   {"id":"ops","name":"Ops","port":3760,"category":"Work"},
