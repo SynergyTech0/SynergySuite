@@ -38,6 +38,7 @@
     "apps/field",
     "apps/groups",
     "apps/contracts",
+    "apps/status",
     "apps/photo",
     "apps/sites",
     "apps/stream",

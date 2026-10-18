@@ -527,6 +527,23 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+status.{$SUITE_DOMAIN} {
+	# The public status page, its JSON and the build assets it loads need no suite account. The
+	# provisioning API (bearer STATUS_API_TOKEN) is for the internal network only.
+	handle /api/svc/* {
+		respond 404
+	}
+	@public path /status /api/public/* /_next/* /favicon.ico /icon.svg /app-icon.svg
+	handle @public {
+		import maybe_signed_in
+		import to_app status:3880
+	}
+	handle {
+		import signed_in
+		import to_app status:3880
+	}
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870

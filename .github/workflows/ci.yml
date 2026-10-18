@@ -103,6 +103,7 @@ jobs:
           npx tsc --noEmit -p apps/field
           npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/contracts
+          npx tsc --noEmit -p apps/status
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -227,6 +228,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
           npm test --workspace apps/contracts
+      - name: Status tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/status_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE status_test"
+          npm test --workspace apps/status
       - name: Law tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/law_test
