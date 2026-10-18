@@ -527,6 +527,11 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+vault.{$SUITE_DOMAIN} {
+	import signed_in
+	import to_app vault:3910
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870

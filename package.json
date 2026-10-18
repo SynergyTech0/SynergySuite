@@ -45,6 +45,7 @@
     "apps/phone",
     "apps/trust",
     "apps/whiteboard",
+    "apps/vault",
     "addons/portal",
     "addons/campaigns",
     "addons/law"

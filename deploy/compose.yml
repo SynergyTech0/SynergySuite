@@ -987,6 +987,19 @@ services:
       CONTRACTS_AI_API_KEY: ${CONTRACTS_AI_API_KEY:-}
       CONTRACTS_AI_MODEL: ${CONTRACTS_AI_MODEL:-}
 
+  # A shared team password vault. Entries are encrypted and decrypted in the browser with a key
+  # derived from the vault passphrase; the server and its database only ever hold ciphertext.
+  vault:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-vault:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: vault } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/vault
+      VAULT_ALLOWED_EMAILS: ${VAULT_ALLOWED_EMAILS:-}
+      VAULT_ACCESS_CONTACT: ${VAULT_ACCESS_CONTACT:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:

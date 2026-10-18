@@ -78,6 +78,7 @@ jobs:
             {"name":"hr","file":"deploy/next-app.Dockerfile","context":".","args":"APP=hr","paths":["apps/hr/"]},
             {"name":"todo","file":"deploy/next-app.Dockerfile","context":".","args":"APP=todo","paths":["apps/todo/"]},
             {"name":"contracts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contracts","paths":["apps/contracts/"]},
+            {"name":"vault","file":"deploy/next-app.Dockerfile","context":".","args":"APP=vault","paths":["apps/vault/"]},
             {"name":"projects","file":"deploy/next-app.Dockerfile","context":".","args":"APP=projects","paths":["apps/projects/"]},
             {"name":"field","file":"deploy/next-app.Dockerfile","context":".","args":"APP=field","paths":["apps/field/"]},
             {"name":"groups","file":"deploy/next-app.Dockerfile","context":".","args":"APP=groups","paths":["apps/groups/"]},
