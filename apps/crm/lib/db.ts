@@ -213,6 +213,41 @@ CREATE TABLE IF NOT EXISTS held_records (
   deleted_by TEXT,
   deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Where an account is, and whatever else is known about it that has no column of its own
+-- (details: label -> text, shown as facts on the account page). Imports fill these
+-- (scripts/import-hub.mjs brings SynergyRoutes' 160,000 healthcare accounts), so the list's
+-- sort, filters and search have indexes that hold up at that size.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS city        TEXT NOT NULL DEFAULT '';
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS state       TEXT NOT NULL DEFAULT '';
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT '';
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS lat         DOUBLE PRECISION;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS lng         DOUBLE PRECISION;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS details     JSONB NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS accounts_owner_idx ON accounts (owner);
+CREATE INDEX IF NOT EXISTS accounts_industry_name_idx ON accounts (industry, lower(name));
+CREATE INDEX IF NOT EXISTS accounts_state_name_idx ON accounts (state, lower(name));
+CREATE INDEX IF NOT EXISTS contacts_name_idx ON contacts (lower(name));
+-- What the list search and suite search look in, kept by Postgres, with trigram indexes so a
+-- search doesn't read every row. Without pg_trgm (no rights to add it) search still works, slower.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS search_text TEXT GENERATED ALWAYS AS (
+  name || ' ' || industry || ' ' || website || ' ' || phone || ' ' || address || ' ' || city || ' ' || state || ' ' || postal_code || ' ' || type
+) STORED;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS search_text TEXT GENERATED ALWAYS AS (
+  name || ' ' || email || ' ' || phone || ' ' || title
+) STORED;
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'crm: pg_trgm is not available (%), so search runs without its indexes', SQLERRM;
+END $$;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS accounts_search_trgm_idx ON accounts USING gin (search_text gin_trgm_ops)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS accounts_name_trgm_idx ON accounts USING gin (name gin_trgm_ops)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS contacts_search_trgm_idx ON contacts USING gin (search_text gin_trgm_ops)';
+  END IF;
+END $$;
 `;
 
 type Db = ReturnType<typeof createDb>;
@@ -225,6 +260,10 @@ export function db(): Db {
       connectionString: process.env.CRM_DATABASE_URL || undefined,
       devUrl: "postgres://postgres@127.0.0.1:5499/crm",
       max: 10,
+      // Postgres' JIT compiles any plan that touches a large table (an imported 160,000
+      // accounts), which adds a third of a second to list, count and search queries that
+      // themselves take less; the CRM's queries are short, so it is off for its connections.
+      options: "-c jit=off",
     });
   }
   return g.__crmDb;

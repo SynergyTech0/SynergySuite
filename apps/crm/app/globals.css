@@ -224,6 +224,8 @@ button.link { border: 0; background: none; padding: 0; font: inherit; }
 .form fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .form legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.grid3 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; }
+.accountpick { display: grid; gap: 6px; }
 .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
 
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 9px 16px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.2); z-index: 60; }
@@ -244,7 +246,7 @@ button.link { border: 0; background: none; padding: 0; font: inherit; }
   .split:not(.withdetail) .detail { display: none; }
   .cardtools .back { display: inline-grid; }
   .card, .page { padding-left: 16px; padding-right: 16px; }
-  .cols, .grid2 { grid-template-columns: 1fr; }
+  .cols, .grid2, .grid3 { grid-template-columns: 1fr; }
 }
 .mini a { color: var(--accent); text-decoration: none; }
 .mini a:hover { text-decoration: underline; }

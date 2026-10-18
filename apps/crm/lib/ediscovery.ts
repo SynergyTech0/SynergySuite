@@ -10,7 +10,7 @@ export type Kind = (typeof KINDS)[number];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const RELATED_NAME = `CASE t.related_type
+export const RELATED_NAME = `CASE t.related_type
     WHEN 'account' THEN (SELECT name FROM accounts WHERE id = t.related_id)
     WHEN 'contact' THEN (SELECT name FROM contacts WHERE id = t.related_id)
     WHEN 'lead' THEN (SELECT name FROM leads WHERE id = t.related_id)
@@ -19,13 +19,13 @@ const RELATED_NAME = `CASE t.related_type
   END`;
 
 /** The partner that referred a lead or deal, by name. */
-const REFERRED_BY = (col: "lead_id" | "opportunity_id") =>
+export const REFERRED_BY = (col: "lead_id" | "opportunity_id") =>
   `(SELECT p.name FROM referrals rf JOIN referral_partners p ON p.id = rf.partner_id WHERE rf.${col} = t.id)`;
 
 /** Each kind's rows as JSON (`r`), with the names a reader needs alongside. */
 export const SOURCE: Record<Kind, string> = {
-  account: `SELECT to_jsonb(t) AS r FROM accounts t`,
-  contact: `SELECT to_jsonb(t) || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id)) AS r FROM contacts t`,
+  account: `SELECT to_jsonb(t) - 'search_text' AS r FROM accounts t`,
+  contact: `SELECT to_jsonb(t) - 'search_text' || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id)) AS r FROM contacts t`,
   opportunity: `SELECT to_jsonb(t) || jsonb_build_object('account_name', (SELECT name FROM accounts WHERE id = t.account_id), 'referred_by', ${REFERRED_BY("opportunity_id")}) AS r FROM opportunities t`,
   lead: `SELECT to_jsonb(t) || jsonb_build_object('referred_by', ${REFERRED_BY("lead_id")}) AS r FROM leads t`,
   partner: `SELECT to_jsonb(t) AS r FROM referral_partners t`,
@@ -41,7 +41,7 @@ export const OWNER = (kind: Kind) => (kind === "activity" ? "assignee" : "owner"
 
 /** What each kind says, as plain text, for keywords and snippets. */
 export const TEXT_KEYS: Record<Kind, string[]> = {
-  account: ["name", "industry", "website", "phone", "address", "type"],
+  account: ["name", "industry", "website", "phone", "address", "city", "state", "postal_code", "type"],
   contact: ["name", "email", "phone", "title", "account_name"],
   opportunity: ["name", "stage", "amount", "close_date", "account_name", "referred_by"],
   lead: ["name", "company", "email", "phone", "status", "source", "score_rationale", "referred_by"],
