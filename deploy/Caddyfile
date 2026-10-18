@@ -558,6 +558,20 @@ analytics.{$SUITE_DOMAIN} {
 	}
 }
 
+livechat.{$SUITE_DOMAIN} {
+	# Visitors on other websites load the widget and chat through /api/wc/* (checked against each
+	# widget's domain in the app) without a suite account. The agent inbox needs a sign-in.
+	@public path /widget.js /api/wc/*
+	handle @public {
+		import maybe_signed_in
+		import to_app livechat:3900
+	}
+	handle {
+		import signed_in
+		import to_app livechat:3900
+	}
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870

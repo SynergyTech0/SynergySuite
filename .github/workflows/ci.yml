@@ -105,6 +105,7 @@ jobs:
           npx tsc --noEmit -p apps/contracts
           npx tsc --noEmit -p apps/status
           npx tsc --noEmit -p apps/analytics
+          npx tsc --noEmit -p apps/livechat
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -241,6 +242,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE analytics_test"
           npm test --workspace apps/analytics
+      - name: LiveChat tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/livechat_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE livechat_test"
+          npm test --workspace apps/livechat
       - name: Law tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/law_test

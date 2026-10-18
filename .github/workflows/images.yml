@@ -80,6 +80,7 @@ jobs:
             {"name":"contracts","file":"deploy/next-app.Dockerfile","context":".","args":"APP=contracts","paths":["apps/contracts/"]},
             {"name":"status","file":"deploy/next-app.Dockerfile","context":".","args":"APP=status","paths":["apps/status/"]},
             {"name":"analytics","file":"deploy/next-app.Dockerfile","context":".","args":"APP=analytics","paths":["apps/analytics/"]},
+            {"name":"livechat","file":"deploy/next-app.Dockerfile","context":".","args":"APP=livechat","paths":["apps/livechat/"]},
             {"name":"projects","file":"deploy/next-app.Dockerfile","context":".","args":"APP=projects","paths":["apps/projects/"]},
             {"name":"field","file":"deploy/next-app.Dockerfile","context":".","args":"APP=field","paths":["apps/field/"]},
             {"name":"groups","file":"deploy/next-app.Dockerfile","context":".","args":"APP=groups","paths":["apps/groups/"]},

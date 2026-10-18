@@ -300,7 +300,7 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sites
       # The Booking block embeds pages from Bookings.
       SITES_BOOKING_URL: ${SITES_BOOKING_URL:-https://bookings.${SUITE_DOMAIN}}
-      SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-}
+      SITES_LIVECHAT_URL: ${SITES_LIVECHAT_URL:-https://livechat.${SUITE_DOMAIN}}
       # Each site's document library is a Drive library whose people Sites keeps (DRIVE_SVC_TOKEN on both).
       SITES_DRIVE_URL: http://drive:3180
       DRIVE_SVC_TOKEN: ${DRIVE_SVC_TOKEN:-}
@@ -1011,6 +1011,18 @@ services:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/analytics
       ANALYTICS_ADMIN_EMAILS: ${ANALYTICS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
       ANALYTICS_RETENTION_DAYS: ${ANALYTICS_RETENTION_DAYS:-}
+
+  # A chat widget for websites and an agent inbox; Send to Desk opens a ticket through Desk's intake.
+  livechat:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-livechat:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: livechat } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/livechat
+      LIVECHAT_ADMIN_EMAILS: ${LIVECHAT_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
+      DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.

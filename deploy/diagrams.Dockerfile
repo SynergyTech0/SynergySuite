@@ -57,6 +57,7 @@ COPY apps/field/package.json apps/field/
 COPY apps/contracts/package.json apps/contracts/
 COPY apps/status/package.json apps/status/
 COPY apps/analytics/package.json apps/analytics/
+COPY apps/livechat/package.json apps/livechat/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/
 COPY apps/stream/package.json apps/stream/

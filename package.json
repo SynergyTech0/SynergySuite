@@ -40,6 +40,7 @@
     "apps/contracts",
     "apps/status",
     "apps/analytics",
+    "apps/livechat",
     "apps/photo",
     "apps/sites",
     "apps/stream",
