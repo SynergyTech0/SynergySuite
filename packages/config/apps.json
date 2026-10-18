@@ -33,6 +33,8 @@
   { "id": "books",     "name": "Books",     "m365": "Dynamics 365 Business Central", "port": 3055, "icon": "ledger", "dir": "apps/books",     "core": true },
   { "id": "crm",       "name": "CRM",       "m365": "Dynamics 365 Sales",   "port": 3095, "icon": "target",   "dir": "apps/crm",       "core": true },
   { "id": "hr",        "name": "HR",        "m365": "Dynamics 365 Human Resources, payroll", "port": 3145, "icon": "users", "dir": "apps/hr", "core": true },
+  { "id": "hire",      "name": "Hire",      "m365": "Dynamics 365 Human Resources recruiting", "port": 3940, "icon": "target", "dir": "apps/hire", "core": true },
+  { "id": "learn",     "name": "Learn",     "m365": "Viva Learning",        "port": 3950, "icon": "easel",    "dir": "apps/learn",     "core": true },
   { "id": "desk",      "name": "Desk",      "m365": "Dynamics 365 Customer Service", "port": 3105, "icon": "lifebuoy", "dir": "apps/desk", "core": true },
   { "id": "contracts", "name": "Contracts", "m365": "Dynamics 365 contract management, Syntex contract management", "port": 3860, "icon": "contract", "dir": "apps/contracts", "core": true },
   { "id": "status",    "name": "Status",    "m365": "Microsoft 365 Service health (public status page)", "port": 3880, "icon": "server", "dir": "apps/status", "core": true },

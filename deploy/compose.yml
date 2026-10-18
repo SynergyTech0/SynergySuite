@@ -1067,6 +1067,35 @@ services:
       VAULT_ACCESS_CONTACT: ${VAULT_ACCESS_CONTACT:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
 
+  # Training (Viva Learning equivalent): courses, lessons and quizzes, assignments with due dates,
+  # progress and certificates.
+  learn:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-learn:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: learn } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/learn
+      LEARN_AUTHOR_EMAILS: ${LEARN_AUTHOR_EMAILS:-${ADMIN_EMAILS:-}}
+      LEARN_PASS_MARK: ${LEARN_PASS_MARK:-}
+      LEARN_ORG_NAME: ${LEARN_ORG_NAME:-}
+
+  # Recruiting (Dynamics 365 Human Resources recruiting equivalent): jobs, a public careers page,
+  # applications and a hiring pipeline. Hired candidates go to HR through HR's own API.
+  hire:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-hire:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: hire } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/hire
+      HIRE_ADMIN_EMAILS: ${HIRE_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+      HIRE_COMPANY_NAME: ${HIRE_COMPANY_NAME:-}
+      HIRE_AI_PROVIDER: ${HIRE_AI_PROVIDER:-}
+      HIRE_AI_BASE_URL: ${HIRE_AI_BASE_URL:-}
+      HIRE_AI_API_KEY: ${HIRE_AI_API_KEY:-}
+      HIRE_AI_MODEL: ${HIRE_AI_MODEL:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:

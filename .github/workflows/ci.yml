@@ -109,6 +109,8 @@ jobs:
           npx tsc --noEmit -p apps/shifts
           npx tsc --noEmit -p apps/sms
           npx tsc --noEmit -p apps/vault
+          npx tsc --noEmit -p apps/learn
+          npx tsc --noEmit -p apps/hire
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
       - name: Admin tests
@@ -269,6 +271,18 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE vault_test"
           npm test --workspace apps/vault
+      - name: Learn tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/learn_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE learn_test"
+          npm test --workspace apps/learn
+      - name: Hire tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hire_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE hire_test"
+          npm test --workspace apps/hire
       - name: Law tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/law_test

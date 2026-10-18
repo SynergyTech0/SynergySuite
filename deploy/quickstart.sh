@@ -124,7 +124,7 @@ if [ "$addr" != "127.0.0.1" ]; then
   say "(C:\\Windows\\System32\\drivers\\etc\\hosts on Windows) and run this again if sign-in fails:"
   say ""
   hosts="127.0.0.1 $domain"
-  for h in auth sso admin analytics base books builder bookings campaigns calendar chat commerce contacts contracts crm desk devices diagrams drive engage field flow flow-studio forms groups insights law livechat loop mail meet notes office ops people hr phone planner portal projects search sign sites status stream todo trust whiteboard vault sms shifts; do hosts="$hosts $h.$domain"; done
+  for h in auth sso admin analytics base books builder bookings campaigns calendar chat commerce contacts contracts crm desk devices diagrams drive engage field flow flow-studio forms groups hire insights law learn livechat loop mail meet notes office ops people hr phone planner portal projects search sign sites status stream todo trust whiteboard vault sms shifts; do hosts="$hosts $h.$domain"; done
   say "  $hosts"
   say ""
 fi
@@ -297,7 +297,7 @@ say "Starting the suite ..."
 # visitor of an app to the sign-in gateway.
 probe_host=calendar
 if [ ${#services[@]} -gt 0 ]; then
-  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|analytics|base|books|builder|bookings|campaigns|calendar|chat|commerce|contacts|contracts|crm|desk|devices|diagrams|drive|engage|field|flow|forms|groups|insights|law|livechat|loop|mail|meet|notes|office|ops|hr|phone|planner|portal|projects|search|sign|sites|status|todo|trust|whiteboard|vault|sms|shifts)$' || echo auth)
+  probe_host=$(printf '%s\n' "$@" | grep -E -m1 '^(admin|analytics|base|books|builder|bookings|campaigns|calendar|chat|commerce|contacts|contracts|crm|desk|devices|diagrams|drive|engage|field|flow|forms|groups|hire|insights|law|learn|livechat|loop|mail|meet|notes|office|ops|hr|phone|planner|portal|projects|search|sign|sites|status|todo|trust|whiteboard|vault|sms|shifts)$' || echo auth)
 fi
 say "Waiting for sign-in to be ready ..."
 ready=""

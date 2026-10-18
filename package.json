@@ -41,6 +41,8 @@
     "apps/status",
     "apps/analytics",
     "apps/livechat",
+    "apps/hire",
+    "apps/learn",
     "apps/photo",
     "apps/sites",
     "apps/stream",
