@@ -32,6 +32,7 @@
   {"id":"books","name":"Books","port":3055,"category":"Finance"},
   {"id":"crm","name":"CRM","port":3095,"category":"Sales"},
   {"id":"hr","name":"HR","port":3145,"category":"Admin"},
+  {"id":"hire","name":"Hire","port":3940,"category":"Admin"},
   {"id":"desk","name":"Desk","port":3105,"category":"Work"},
   {"id":"contracts","name":"Contracts","port":3860,"category":"Legal"},
   {"id":"projects","name":"Projects","port":3820,"category":"Work"},

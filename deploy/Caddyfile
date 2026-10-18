@@ -527,6 +527,20 @@ contracts.{$SUITE_DOMAIN} {
 	import to_app contracts:3860
 }
 
+hire.{$SUITE_DOMAIN} {
+	# Anyone can read the careers page and apply without a suite account: the careers pages, the
+	# application API and the build assets they load. Everything else is for recruiters.
+	@public path /careers /careers/* /api/public/* /_next/* /favicon.ico /icon.svg /app-icon.svg
+	handle @public {
+		import maybe_signed_in
+		import to_app hire:3940
+	}
+	handle {
+		import signed_in
+		import to_app hire:3940
+	}
+}
+
 law.{$SUITE_DOMAIN} {
 	import signed_in
 	import to_app law:3870
