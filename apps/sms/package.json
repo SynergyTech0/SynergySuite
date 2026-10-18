@@ -1,0 +1,30 @@
+{
+  "name": "synergy-sms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synergy SMS - two-way business texting through Twilio: conversations, contacts and campaigns",
+  "scripts": {
+    "dev": "next dev -p 3920",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3920",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@synergy/config": "*",
+    "@synergy/db": "*",
+    "@synergy/identity": "*",
+    "@synergy/search": "*",
+    "@synergy/shell": "*",
+    "lucide-react": "^0.475.0",
+    "next": "16.3.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1024,6 +1024,49 @@ services:
       DESK_SVC_URL: ${DESK_SVC_URL:-http://desk:3105}
       DESK_SVC_TOKEN: ${DESK_SVC_TOKEN:-${DESK_API_TOKEN:-}}
 
+  # Microsoft Shifts equivalent: weekly schedules by position and location, open shifts people
+  # claim, and publishing per week. It keeps its own roster of the people it schedules.
+  shifts:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-shifts:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: shifts } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/shifts
+      SHIFTS_ADMIN_EMAILS: ${SHIFTS_ADMIN_EMAILS:-${ADMIN_EMAILS:-}}
+
+  # Business texting: conversations, contacts and campaigns sent through Twilio. Twilio posts
+  # incoming texts and delivery updates to /api/webhooks/twilio/*, which check Twilio's signature.
+  sms:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-sms:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: sms } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/sms
+      SMS_ALLOWED_EMAILS: ${SMS_ALLOWED_EMAILS:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-twilio}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      SMS_PUBLIC_URL: ${SMS_PUBLIC_URL:-}
+      SMS_DEFAULT_COUNTRY_CODE: ${SMS_DEFAULT_COUNTRY_CODE:-1}
+
+  # A shared team password vault. Entries are encrypted and decrypted in the browser with a key
+  # derived from the vault passphrase; the server and its database only ever hold ciphertext.
+  vault:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-vault:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: vault } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/vault
+      VAULT_ALLOWED_EMAILS: ${VAULT_ALLOWED_EMAILS:-}
+      VAULT_ACCESS_CONTACT: ${VAULT_ACCESS_CONTACT:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+
   # Dynamics 365 Human Resources and payroll equivalent: people, org chart, time off, onboarding,
   # pay runs and pay stubs. It took over the People add-on's database, so its records carry over.
   hr:
