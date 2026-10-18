@@ -206,6 +206,8 @@ describe.skipIf(!url)("bookings", async () => {
 
   it("sends each reminder once, and not one that was due before the booking", async () => {
     // Carol booked on Friday for Monday 9:00: the 24-hour reminder is due Sunday 9:00.
+    // created_at comes from the real clock, so pin it to the test's Friday.
+    await q("UPDATE appointments SET created_at = $1", [new Date(now)]);
     sent.length = 0;
     const sunday = Date.parse(at("09:30")) - 24 * 3_600_000;
     expect(await appts.sendDueReminders(sunday)).toBe(1);
