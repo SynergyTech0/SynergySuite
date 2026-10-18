@@ -196,6 +196,30 @@ deploy/hub-import/run.sh planner root@your-apps-server --dry-run
 
 Each part keeps the hub's ids, so running it again skips what is already here, and something deleted here after an import comes back if you import again. The files of `sign` and `drive` travel inside the same SSH stream as the rows (base64, about a third larger) and are never written to disk on the way.
 
+## Adding your own apps
+
+Apps you don't want in this repository (your own products, paid add-ons) can run inside the same deploy, behind the same sign-in and in the same launcher, from a repository of your own. Nothing in this repository changes; you add a second compose file next to `compose.yml`:
+
+```bash
+docker compose -f deploy/compose.yml -f /path/to/your/compose.extra.yml --env-file deploy/.env up -d
+```
+
+- **Services.** The extra file adds your apps as services. They join the suite's network, so they reach `postgres`, `auth` and the other apps by name, and can use the shared settings (`PROXY_SHARED_SECRET`, `SUITE_DOMAIN`, `AUTH_INTERNAL_URL`). Create their databases with a one-off service of your own; the suite's `postgres-dbs` only knows the suite's.
+- **Addresses.** Mount a folder of Caddy site files at `/etc/caddy/sites.d` on the `caddy` service. The Caddyfile reads every `*.caddy` file in it and they can use its snippets, so a signed-in app is:
+
+  ```
+  myapp.{$SUITE_DOMAIN} {
+  	import signed_in
+  	import to_app myapp:4000
+  }
+  ```
+
+  Behind the gateway your app gets the person's identity in the `X-Auth-Request-Email` header and the proxy secret in `X-Proxy-Auth-Secret`, exactly as the suite's apps do (`@synergy/identity` checks both). Add the host to DNS like the others.
+- **Launcher.** Add a tile for each app in Account > Admin > Apps (or insert it into `sa_apps` from a one-off service); it then shows in the Hub and in every app's launcher.
+- **Look.** Build the app on the shared packages (`@synergy/shell` for the header and launcher, `@synergy/identity`, `@synergy/db`) and it looks and signs in like the rest of the suite. A git submodule of this repository is the simplest way to get them.
+
+When you update the suite, pull or bump this repository and run the same command again: your apps stay as they are.
+
 ## Moving from Microsoft 365
 
 The Admin center's **Move from Microsoft 365** page (`admin.<domain>`, global admins only) copies a Microsoft 365 tenant into the suite: each person's mail (every folder, read and flag state, received dates, as the original MIME), OneDrive (with file dates), calendar, contacts and To Do, and SharePoint document libraries into Drive shared libraries. It only reads from Microsoft 365; nothing there is changed. It is early: see "What is not copied" below.

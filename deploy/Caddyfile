@@ -674,3 +674,8 @@ insights.{$SUITE_DOMAIN} {
 		import to_app insights:3720
 	}
 }
+
+# Your own apps next to the suite's: every *.caddy file mounted at /etc/caddy/sites.d is read
+# here, and can use the snippets above (signed_in, maybe_signed_in, to_app). Nothing is mounted
+# by default, so this adds nothing. See "Adding your own apps" in deploy/README.md.
+import /etc/caddy/sites.d/*.caddy
