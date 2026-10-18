@@ -103,6 +103,7 @@ jobs:
           npx tsc --noEmit -p apps/field
           npx tsc --noEmit -p apps/groups
           npx tsc --noEmit -p apps/contracts
+          npx tsc --noEmit -p apps/learn
           npx tsc --noEmit -p apps/hire
           npx tsc --noEmit -p apps/builder
           npx tsc --noEmit -p apps/whiteboard
@@ -228,6 +229,12 @@ jobs:
         run: |
           psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE contracts_test"
           npm test --workspace apps/contracts
+      - name: Learn tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/learn_test
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -qc "CREATE DATABASE learn_test"
+          npm test --workspace apps/learn
       - name: Hire tests
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/hire_test

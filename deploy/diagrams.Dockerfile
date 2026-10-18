@@ -55,6 +55,7 @@ COPY apps/planner/package.json apps/planner/
 COPY apps/projects/package.json apps/projects/
 COPY apps/field/package.json apps/field/
 COPY apps/contracts/package.json apps/contracts/
+COPY apps/learn/package.json apps/learn/
 COPY apps/hire/package.json apps/hire/
 COPY apps/photo/package.json apps/photo/
 COPY apps/sites/package.json apps/sites/

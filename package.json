@@ -39,6 +39,7 @@
     "apps/groups",
     "apps/contracts",
     "apps/hire",
+    "apps/learn",
     "apps/photo",
     "apps/sites",
     "apps/stream",

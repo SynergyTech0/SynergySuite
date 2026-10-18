@@ -987,6 +987,19 @@ services:
       CONTRACTS_AI_API_KEY: ${CONTRACTS_AI_API_KEY:-}
       CONTRACTS_AI_MODEL: ${CONTRACTS_AI_MODEL:-}
 
+  # Training (Viva Learning equivalent): courses, lessons and quizzes, assignments with due dates,
+  # progress and certificates.
+  learn:
+    image: ${SYNERGY_REGISTRY:-ghcr.io/synergytech0}/synergysuite-learn:${SYNERGY_IMAGE_TAG:-latest}
+    <<: *next
+    build: { <<: *next-build, args: { APP: learn } }
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/learn
+      LEARN_AUTHOR_EMAILS: ${LEARN_AUTHOR_EMAILS:-${ADMIN_EMAILS:-}}
+      LEARN_PASS_MARK: ${LEARN_PASS_MARK:-}
+      LEARN_ORG_NAME: ${LEARN_ORG_NAME:-}
+
   # Recruiting (Dynamics 365 Human Resources recruiting equivalent): jobs, a public careers page,
   # applications and a hiring pipeline. Hired candidates go to HR through HR's own API.
   hire:
