@@ -200,7 +200,7 @@ describe.skipIf(!url)("bookings", async () => {
     const mine = await appts.list(alice, { from: at("00:00"), to: at("23:59"), status: "confirmed" });
     expect(mine.map((a) => a.customerName)).toContain("Carol Customer");
     expect(await appts.list(eve, {})).toEqual([]);
-    const people = await appts.customers(bob, page.id);
+    const people = await appts.customers(bob, page.id, now);
     expect(people.find((p) => p.email === "carol@example.org")).toMatchObject({ name: "Carol Customer", phone: "555 0100", upcoming: 1 });
   });
 

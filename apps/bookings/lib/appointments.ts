@@ -418,17 +418,17 @@ export async function getForStaff(me: Me, id: string): Promise<Appointment> {
 export type Customer = { email: string; name: string; phone: string; visits: number; upcoming: number; last: string };
 
 /** Everyone who has booked on a page, most recent first. */
-export async function customers(me: Me, pageId: string): Promise<Customer[]> {
+export async function customers(me: Me, pageId: string, now = Date.now()): Promise<Customer[]> {
   await pageFor(me, pageId);
   const rows = await q<{ email: string; name: string; phone: string; visits: string; upcoming: string; last: Date }>(
     `SELECT customer_email AS email,
        (array_agg(customer_name ORDER BY created_at DESC))[1] AS name,
        (array_agg(customer_phone ORDER BY created_at DESC) FILTER (WHERE customer_phone <> ''))[1] AS phone,
-       count(*) FILTER (WHERE status = 'confirmed' AND start_at <= now()) AS visits,
-       count(*) FILTER (WHERE status = 'confirmed' AND start_at > now()) AS upcoming,
+       count(*) FILTER (WHERE status = 'confirmed' AND start_at <= $2) AS visits,
+       count(*) FILTER (WHERE status = 'confirmed' AND start_at > $2) AS upcoming,
        max(start_at) AS last
      FROM appointments WHERE page_id = $1 GROUP BY customer_email ORDER BY max(start_at) DESC LIMIT 5000`,
-    [pageId],
+    [pageId, new Date(now)],
   );
   return rows.map((r) => ({ email: r.email, name: r.name, phone: r.phone ?? "", visits: Number(r.visits), upcoming: Number(r.upcoming), last: r.last.toISOString() }));
 }
