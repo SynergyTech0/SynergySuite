@@ -136,6 +136,11 @@ if [ $# -gt 0 ]; then
   for s in "$@"; do
     case "$s" in meet|phone) services+=(livekit); break ;; esac
   done
+  # Apps with live co-editing (Office, Notes, Loop, Whiteboard) need their <app>-collab server.
+  all_services=$("${COMPOSE[@]}" config --services)
+  for s in "$@"; do
+    if printf '%s\n' "$all_services" | grep -qxF "$s-collab"; then services+=("$s-collab"); fi
+  done
 fi
 
 # The suite's images are built by .github/workflows/images.yml and published to the GitHub

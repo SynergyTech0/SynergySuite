@@ -66,7 +66,9 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # Over TCP: on a new volume the image first runs a setup server on the Unix socket only, so a
+      # socket check would report ready before the real server is up (postgres-dbs then fails).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -1237,7 +1239,7 @@ services:
     volumes:
       - flow-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 20
