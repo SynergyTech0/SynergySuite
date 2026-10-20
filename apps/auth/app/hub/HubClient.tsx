@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import AppIcon from '../AppIcon';
+import type { HomeFeed } from '@/lib/home-feed';
 
 /*
  * Client half of the Hub launcher. The server resolves the session and the
@@ -36,6 +37,7 @@ type Props = {
   name: string;
   email: string;
   isAdmin: boolean;
+  feed: HomeFeed;
 };
 
 type Theme = 'system' | 'light' | 'dark';
@@ -76,8 +78,76 @@ const shortName = (n: string) => {
   return s || n;
 };
 
-export default function HubClient({ apps, name, email, isAdmin }: Props) {
+/* The apps pinned to the top of Home until the person picks their own (star on an app card). */
+const DEFAULT_PINS = ['mail', 'calendar', 'chat', 'office', 'drive', 'notes', 'planner', 'todo'];
+const PIN_KEY = 'sh-home-pins';
+
+/* Quick create: one button per everyday thing to start, each opening the app that makes it. */
+const CREATE: Array<{ slug: string; label: string }> = [
+  { slug: 'office', label: 'Document' },
+  { slug: 'mail', label: 'Email' },
+  { slug: 'calendar', label: 'Event' },
+  { slug: 'todo', label: 'Task' },
+  { slug: 'planner', label: 'Board' },
+  { slug: 'forms', label: 'Form' },
+];
+
+/* Office's own letter marks for its three kinds, the way a file list tells them apart at a glance. */
+const KIND_MARK: Record<string, string> = { doc: 'W', sheet: 'X', slide: 'P' };
+const KIND_NAME: Record<string, string> = { doc: 'Document', sheet: 'Spreadsheet', slide: 'Presentation' };
+
+const greeting = (now: Date | null) => {
+  if (!now) return 'Welcome';
+  const h = now.getHours();
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+};
+
+const dayLabel = (now: Date | null) =>
+  now ? `Today, ${now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Today';
+
+const time = (iso: string) =>
+  new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/* "5m", "3h", "Yesterday", then a short date: what a list column has room for. */
+const ago = (iso: string | null, now: Date | null) => {
+  if (!iso || !now) return '';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const mins = Math.max(0, Math.round((now.getTime() - t) / 60_000));
+  if (mins < 1) return 'Now';
+  if (mins < 60) return `${mins}m`;
+  if (mins < 24 * 60) return `${Math.round(mins / 60)}h`;
+  if (mins < 48 * 60) return 'Yesterday';
+  return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
+/* One line under the greeting: what is left today and what is waiting in the inbox. */
+const summary = (feed: HomeFeed, now: Date | null) => {
+  const parts: string[] = [];
+  if (now && feed.events) {
+    const end = new Date(now); end.setHours(24, 0, 0, 0);
+    const left = feed.events.filter((e) => {
+      const s = Date.parse(e.start);
+      return !e.allDay && s >= now.getTime() && s < end.getTime();
+    }).length;
+    parts.push(left === 0 ? 'No more meetings today' : `${left} more ${left === 1 ? 'meeting' : 'meetings'} today`);
+  }
+  if (feed.mail) {
+    const n = feed.mail.unread;
+    parts.push(n === 0 ? 'inbox all read' : `${n} unread ${n === 1 ? 'email' : 'emails'}`);
+  }
+  if (parts.length === 0) return 'Everything you work with, in one place.';
+  const line = parts.join(', ');
+  return line.charAt(0).toUpperCase() + line.slice(1) + '.';
+};
+
+export default function HubClient({ apps, name, email, isAdmin, feed }: Props) {
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<string>('All');
+  const [pins, setPins] = useState<string[]>(DEFAULT_PINS);
+  /* The clock is read after mount: the server doesn't know the person's time zone, and a
+     greeting or "today" rendered on the server would disagree with the browser's. */
+  const [now, setNow] = useState<Date | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [waffleOpen, setWaffleOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('system');
@@ -97,6 +167,25 @@ export default function HubClient({ apps, name, email, isAdmin }: Props) {
   const closingKind = useRef<'menu' | 'waffle' | null>(null);
   const searchToggleRef = useRef<HTMLButtonElement>(null);
   const waffleRef = useRef<HTMLDivElement>(null);
+
+  // ---- home --------------------------------------------------------------
+  useEffect(() => {
+    setNow(new Date());
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    try {
+      const saved = JSON.parse(localStorage.getItem(PIN_KEY) || 'null');
+      if (Array.isArray(saved) && saved.every((x) => typeof x === 'string')) setPins(saved);
+    } catch { /* storage can be blocked; the default pins stand */ }
+    return () => window.clearInterval(t);
+  }, []);
+
+  const togglePin = (slug: string) => {
+    setPins((cur) => {
+      const next = cur.includes(slug) ? cur.filter((x) => x !== slug) : [...cur, slug];
+      try { localStorage.setItem(PIN_KEY, JSON.stringify(next)); } catch { /* per-device only */ }
+      return next;
+    });
+  };
 
   // ---- theme -------------------------------------------------------------
   useEffect(() => {
@@ -146,11 +235,11 @@ export default function HubClient({ apps, name, email, isAdmin }: Props) {
   // ---- filtering ---------------------------------------------------------
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return apps;
+    if (!q) return category === 'All' ? apps : apps.filter((a) => (a.category || 'Apps') === category);
     return apps.filter((a) =>
       `${a.name} ${a.description} ${a.category} ${a.slug}`.toLowerCase().includes(q),
     );
-  }, [apps, query]);
+  }, [apps, query, category]);
 
   const groups = useMemo(() => {
     const map = new Map<string, HubApp[]>();
@@ -467,6 +556,18 @@ export default function HubClient({ apps, name, email, isAdmin }: Props) {
   const rawFirst = (name || email).split(/[\s@]/)[0] || '';
   const first = rawFirst.charAt(0).toUpperCase() + rawFirst.slice(1);
   const showCategories = groups.length > 1 && !query;
+  const bySlug = useMemo(() => new Map(apps.map((a) => [a.slug, a])), [apps]);
+  const urlOf = (slug: string) => (bySlug.get(slug)?.url ?? '').replace(/\/+$/, '');
+  const categories = useMemo(() => Array.from(new Set(apps.map((a) => a.category || 'Apps'))), [apps]);
+  const pinned = pins.map((p) => bySlug.get(p)).filter((a): a is HubApp => !!a);
+  const createLinks = CREATE.filter((c) => bySlug.has(c.slug)).map((c) => ({ ...c, url: urlOf(c.slug) }));
+  /* Today's events in the browser's own time zone; before mount, nothing (no server guess). */
+  const agenda = useMemo(() => {
+    if (!now || !feed.events) return [];
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return feed.events.filter((e) => Date.parse(e.start) < end.getTime() && Date.parse(e.end || e.start) >= start.getTime()).slice(0, 6);
+  }, [feed.events, now]);
 
   return (
     <div className="sh-root">
@@ -681,60 +782,194 @@ ${email}`}
         )}
 
       <main className="sh-page" id="sh-main" tabIndex={-1}>
-        <div className="sh-hello">
-          <h1>Hi, {first}</h1>
-          <p>
-            {query
-              ? `${filtered.length} of ${apps.length} ${apps.length === 1 ? 'app' : 'apps'} match “${query}”`
-              : `${apps.length} ${apps.length === 1 ? 'app is' : 'apps are'} available to you`}
-          </p>
-        </div>
-
         <div aria-live="polite" aria-atomic="true" style={{
           position: 'absolute', width: 1, height: 1, overflow: 'hidden',
           clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap',
         }}>{announced}</div>
 
-        {filtered.length === 0 ? (
-          <div className="sh-empty">
-            <div className="sh-empty-mark" aria-hidden="true">
-              {query ? <SearchIcon /> : <WaffleIcon />}
-            </div>
-            <h3>{query ? 'No apps match that' : 'No apps assigned yet'}</h3>
-            <p>
-              {query
-                ? 'Try a different word, or clear the search to see everything you have access to.'
-                : 'Ask an administrator to grant you access, and your apps will appear here.'}
-            </p>
-          </div>
-        ) : (
-          <div ref={gridsRef}>
-            {groups.map(([category, list]) => (
-              <section key={category} aria-label={category}>
-                {showCategories && (
-                  <div className="sh-cat"><h2>{category}</h2></div>
+        {!query && (
+          <>
+            <section className="hm-hero" aria-label="Welcome">
+              <div className="hm-hero-text">
+                <p className="hm-date">{now ? now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) : '\u00a0'}</p>
+                <h1>{greeting(now)}, {first}</h1>
+                <p className="hm-sub">{summary(feed, now)}</p>
+              </div>
+              {createLinks.length > 0 && (
+                <div className="hm-create" role="group" aria-label="Create new">
+                  {createLinks.map((c) => (
+                    <a key={c.slug} className="hm-create-btn" href={c.url}>
+                      <span className="hm-plus" aria-hidden="true">+</span>{c.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {pinned.length > 0 && (
+              <section className="hm-section" aria-label="Pinned apps">
+                <div className="hm-head"><h2>Pinned</h2></div>
+                <div className="hm-pins">
+                  {pinned.map((a) => (
+                    <a key={a.slug} className="hm-pin" href={a.url || '#'} title={a.name} data-slug={a.slug}>
+                      <AppIcon slug={a.slug} name={a.name} color={a.color} size={48} />
+                      <span>{shortName(a.name)}</span>
+                    </a>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(feed.events || feed.mail || feed.docs) && (
+              <section className="hm-feed" aria-label="Your day">
+                {feed.events && (
+                  <article className="hm-card">
+                    <header>
+                      <h2>{dayLabel(now)}</h2>
+                      {urlOf('calendar') && <a href={urlOf('calendar')}>Open Calendar</a>}
+                    </header>
+                    {agenda.length === 0 ? (
+                      <p className="hm-empty">Nothing else on your calendar today.</p>
+                    ) : (
+                      <ul>
+                        {agenda.map((e) => (
+                          <li key={e.id + e.start} className={now && Date.parse(e.end) < now.getTime() ? 'hm-past' : undefined}>
+                            <a href={urlOf('calendar')}>
+                              <span className="hm-time">{e.allDay ? 'All day' : time(e.start)}</span>
+                              <span className="hm-main">
+                                <span className="hm-title">{e.title}</span>
+                                {e.location && <span className="hm-meta">{e.location}</span>}
+                              </span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
                 )}
-                <div className="sh-grid" style={showCategories ? undefined : { marginTop: 20 }}>
-                  {list.map((a) => (
+                {feed.mail && (
+                  <article className="hm-card">
+                    <header>
+                      <h2>Inbox{feed.mail.unread > 0 && <span className="hm-badge">{feed.mail.unread} unread</span>}</h2>
+                      {urlOf('mail') && <a href={urlOf('mail')}>Open Mail</a>}
+                    </header>
+                    {feed.mail.messages.length === 0 ? (
+                      <p className="hm-empty">Your inbox is empty.</p>
+                    ) : (
+                      <ul>
+                        {feed.mail.messages.map((m) => (
+                          <li key={m.uid} className={m.unread ? 'hm-unread' : undefined}>
+                            <a href={urlOf('mail')}>
+                              <span className="hm-avatar" aria-hidden="true">{initials(m.from, m.from)}</span>
+                              <span className="hm-main">
+                                <span className="hm-title">{m.from}</span>
+                                <span className="hm-meta">{m.subject}</span>
+                              </span>
+                              <span className="hm-when">{ago(m.date, now)}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+                )}
+                {feed.docs && (
+                  <article className="hm-card">
+                    <header>
+                      <h2>Recent files</h2>
+                      {urlOf('office') && <a href={urlOf('office')}>Open Office</a>}
+                    </header>
+                    {feed.docs.length === 0 ? (
+                      <p className="hm-empty">Documents you open or share show up here.</p>
+                    ) : (
+                      <ul>
+                        {feed.docs.map((d) => (
+                          <li key={d.id}>
+                            <a href={`${urlOf('office')}/doc/${encodeURIComponent(d.id)}`}>
+                              <span className={`hm-kind hm-kind-${d.kind}`} aria-hidden="true">{KIND_MARK[d.kind] ?? 'D'}</span>
+                              <span className="hm-main">
+                                <span className="hm-title">{d.title}</span>
+                                <span className="hm-meta">{KIND_NAME[d.kind] ?? 'Document'}</span>
+                              </span>
+                              <span className="hm-when">{ago(d.updated, now)}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </article>
+                )}
+              </section>
+            )}
+          </>
+        )}
+
+        <section className="hm-section" aria-label="All apps">
+          <div className="hm-head">
+            <h2>{query ? `${filtered.length} of ${apps.length} apps match “${query}”` : 'All apps'}</h2>
+            {!query && <span className="hm-count">{apps.length}</span>}
+          </div>
+          {!query && categories.length > 1 && (
+            <div className="hm-chips" role="tablist" aria-label="Filter apps by category">
+              {['All', ...categories].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  role="tab"
+                  aria-selected={category === c}
+                  className="hm-chip"
+                  onClick={() => setCategory(c)}
+                >{c}</button>
+              ))}
+            </div>
+          )}
+
+          {filtered.length === 0 ? (
+            <div className="sh-empty">
+              <div className="sh-empty-mark" aria-hidden="true">
+                {query ? <SearchIcon /> : <WaffleIcon />}
+              </div>
+              <h3>{query ? 'No apps match that' : 'No apps assigned yet'}</h3>
+              <p>
+                {query
+                  ? 'Try a different word, or clear the search to see everything you have access to.'
+                  : 'Ask an administrator to grant you access, and your apps will appear here.'}
+              </p>
+            </div>
+          ) : (
+            <div ref={gridsRef}>
+              <div className="sh-grid hm-grid">
+                {filtered.map((a) => (
+                  <div key={a.slug} className="hm-app">
                     <a
-                      key={a.slug}
                       data-slug={a.slug}
-                      className="sh-tile"
+                      className="sh-tile hm-app-link"
                       href={a.url || '#'}
                       title={a.name}
                       tabIndex={a.slug === tabbableSlug ? 0 : -1}
                       onFocus={() => setFocusSlug(a.slug)}
                       aria-label={`${a.name}${a.description ? ` — ${a.description}` : ''}`}
                     >
-                      <AppIcon slug={a.slug} name={a.name} color={a.color} size={56} />
-                      <span className="sh-tile-name">{shortName(a.name)}</span>
+                      <AppIcon slug={a.slug} name={a.name} color={a.color} size={40} />
+                      <span className="hm-app-text">
+                        <span className="sh-tile-name">{shortName(a.name)}</span>
+                        {a.description && <span className="hm-app-desc">{a.description}</span>}
+                      </span>
                     </a>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+                    <button
+                      type="button"
+                      className="hm-star"
+                      aria-pressed={pins.includes(a.slug)}
+                      aria-label={pins.includes(a.slug) ? `Unpin ${a.name}` : `Pin ${a.name} to Home`}
+                      title={pins.includes(a.slug) ? 'Unpin' : 'Pin to Home'}
+                      onClick={() => togglePin(a.slug)}
+                    >{pins.includes(a.slug) ? '★' : '☆'}</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

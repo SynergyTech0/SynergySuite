@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { pageUser } from '@/lib/server-session';
 import { appsForUser } from '@/lib/apps';
+import { homeFeed } from '@/lib/home-feed';
 import HubClient, { type HubApp } from './HubClient';
 import '../hub.css';
 
@@ -45,6 +46,13 @@ export default async function HubPage() {
     category: a.category ?? 'Apps',
   }));
 
+  /* Today's calendar, the inbox and recent files, asked of each app as this person. A slow or
+     missing app leaves its card out rather than holding the page. */
+  const feed = await homeFeed(
+    { email: user.email, name: user.name ?? '' },
+    (slug) => apps.some((a) => a.slug === slug),
+  );
+
   return (
     <>
       {/* font-display: swap without a preload paints Arial first and reflows. */}
@@ -55,6 +63,7 @@ export default async function HubPage() {
         name={user.name ?? ''}
         email={user.email}
         isAdmin={user.role === 'admin' || user.role === 'superadmin'}
+        feed={feed}
       />
     </>
   );
