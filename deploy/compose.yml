@@ -560,6 +560,11 @@ services:
       # "always": every meeting is transcribed and saved, with the speech model below (see apps/meet/README.md).
       MEET_TRANSCRIBE: ${MEET_TRANSCRIBE:-}
       MEET_AI_SPEECH_MODEL: ${MEET_AI_SPEECH_MODEL:-${AI_SPEECH_MODEL:-}}
+      # A speech server of its own (e.g. a local Whisper server), when the suite's AI server has no
+      # /audio/transcriptions. Setting the address alone is enough: it is then spoken to as OpenAI.
+      MEET_AI_PROVIDER: ${MEET_AI_PROVIDER:-${MEET_AI_BASE_URL:+openai}}
+      MEET_AI_BASE_URL: ${MEET_AI_BASE_URL:-}
+      MEET_AI_API_KEY: ${MEET_AI_API_KEY:-}
 
   # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
   # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through
