@@ -1412,6 +1412,12 @@ services:
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${SUITE_DOMAIN}}
       # Encrypts the passwords of outside accounts users connect. openssl rand -base64 32
       MAIL_ENCRYPTION_KEY: ${MAIL_ENCRYPTION_KEY:?set MAIL_ENCRYPTION_KEY}
+      # Sign in with Microsoft for Microsoft 365 (GoDaddy's included) and Outlook.com accounts.
+      # Redirect URI to register: https://mail.SUITE_DOMAIN/api/oauth/microsoft/callback
+      MAIL_MICROSOFT_CLIENT_ID: ${MAIL_MICROSOFT_CLIENT_ID:-}
+      MAIL_MICROSOFT_CLIENT_SECRET: ${MAIL_MICROSOFT_CLIENT_SECRET:-}
+      MAIL_MICROSOFT_TENANT: ${MAIL_MICROSOFT_TENANT:-common}
+      MAIL_PUBLIC_URL: ${MAIL_PUBLIC_URL:-}
       MAIL_IMAP_HOST: stalwart
       MAIL_IMAP_PORT: "993"
       MAIL_SMTP_HOST: stalwart

@@ -104,6 +104,18 @@ export function MailApp({ me, aiOn = false }: { me: string; aiOn?: boolean }) {
   }, [loadFolders, me]);
 
   useEffect(() => { loadAccounts().catch((e) => flash(e.message)); }, [loadAccounts]);
+
+  // Back from Sign in with Microsoft (/api/oauth/microsoft/callback): say how it went, once.
+  useEffect(() => {
+    const url = new URL(location.href);
+    const connected = url.searchParams.get("connected");
+    const error = url.searchParams.get("connectError");
+    if (!connected && !error) return;
+    flash(connected ? `Connected ${connected}` : error!);
+    url.searchParams.delete("connected");
+    url.searchParams.delete("connectError");
+    history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, []);
   // Sensitivity labels for the composer; without them it simply offers none.
   useEffect(() => { api<{ labels: Label[]; defaultLabelId: string | null }>("/api/labels").then(setLabels, () => undefined); }, []);
 

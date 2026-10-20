@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   smtp_port    INTEGER NOT NULL,
   smtp_secure  BOOLEAN NOT NULL,
   username     TEXT NOT NULL,
-  secret       TEXT NOT NULL,            -- password, encrypted with MAIL_ENCRYPTION_KEY
+  secret       TEXT NOT NULL,            -- password (or Microsoft refresh token), encrypted with MAIL_ENCRYPTION_KEY
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS accounts_owner_idx ON accounts (owner_email);
@@ -101,6 +101,10 @@ CREATE INDEX IF NOT EXISTS preserved_account_idx ON preserved_messages (mailbox,
 ALTER TABLE preserve_folders ADD COLUMN IF NOT EXISTS account TEXT NOT NULL DEFAULT 'suite';
 ALTER TABLE preserve_folders DROP CONSTRAINT IF EXISTS preserve_folders_pkey;
 CREATE UNIQUE INDEX IF NOT EXISTS preserve_folders_key ON preserve_folders (mailbox, account, folder);
+
+-- password: IMAP/SMTP with the saved password. microsoft: Sign in with Microsoft (XOAUTH2), secret
+-- holds the refresh token.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_kind TEXT NOT NULL DEFAULT 'password';
 `;
 
 type Db = ReturnType<typeof createDb>;

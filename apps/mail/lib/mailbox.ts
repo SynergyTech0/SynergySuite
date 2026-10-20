@@ -37,7 +37,9 @@ export async function withImap<T>(acct: Account, fn: (c: ImapFlow) => Promise<T>
     await client.connect();
   } catch (err) {
     const e = err as Error & { authenticationFailed?: boolean };
-    const why = e.authenticationFailed ? "the server rejected the username or password" : e.message;
+    const why = !e.authenticationFailed ? e.message
+      : "accessToken" in acct.auth ? "Microsoft refused IMAP access (IMAP may be turned off for this mailbox in the Microsoft 365 admin center)"
+      : "the server rejected the username or password";
     throw Object.assign(new UserError(`Couldn't sign in to ${acct.address}: ${why}`, 502), { authFailed: Boolean(e.authenticationFailed) });
   }
   try {
@@ -397,7 +399,11 @@ export async function sendMessage(acct: Account, m: Outgoing): Promise<{ message
   try {
     info = await transport.sendMail(mail);
   } catch (err) {
-    throw new UserError(`Sending failed: ${(err as Error).message}`, 502);
+    const why = (err as Error).message;
+    // Microsoft 365 turns SMTP sign-in off per tenant or mailbox ("Authenticated SMTP").
+    const hint = "accessToken" in acct.auth && /SmtpClientAuthentication|5\.7\.139|5\.7\.3/i.test(why)
+      ? " Turn on Authenticated SMTP for this mailbox in the Microsoft 365 admin center (Users, Mail, Manage email apps)." : "";
+    throw new UserError(`Sending failed: ${why}${hint}`, 502);
   }
   if (!SAVES_SENT_ITSELF.some((r) => r.test(acct.smtp.host))) {
     // Keep a copy in Sent. Bcc stays in our copy so the sender can see who was included.
