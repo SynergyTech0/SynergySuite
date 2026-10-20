@@ -70,6 +70,7 @@ export default function DevPreview() {
         name="Shane Sipe"
         email="admin@example.com"
         isAdmin
+        feed={{ events: null, mail: null, docs: null }}
       />
     </>
   );

@@ -555,8 +555,11 @@ body:not(:has(.sh-root)):has(.shw-root) { background: var(--sh-surface-elev); ma
   position: relative; height: 32px; padding: 0 14px; border-radius: var(--sh-r-sm);
   border: 1px solid var(--sh-outline); background: transparent; color: var(--sh-on-variant);
   font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; overflow: hidden;
+  width: auto; margin: 0;
 }
-.hm-chip[aria-selected='true'] {
+/* globals.css styles every bare button as a full-width blue form button; Home's are not. */
+.hm-chip:hover { background: transparent; }
+.hm-chip[aria-selected='true'], .hm-chip[aria-selected='true']:hover {
   border-color: transparent;
   background: var(--sh-secondary-container); color: var(--sh-on-secondary-container);
 }
@@ -580,8 +583,9 @@ body:not(:has(.sh-root)):has(.shw-root) { background: var(--sh-surface-elev); ma
   position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
   width: 32px; height: 32px; border-radius: var(--sh-r-full); border: 0;
   background: transparent; color: var(--sh-on-variant); font-size: 18px; cursor: pointer;
-  opacity: 0; overflow: hidden;
+  opacity: 0; overflow: hidden; margin: 0; padding: 0; font-weight: 400;
 }
+.hm-star:hover { background: transparent; }
 .hm-app:hover .hm-star, .hm-star:focus-visible, .hm-star[aria-pressed='true'] { opacity: 1; }
 .hm-star[aria-pressed='true'] { color: var(--sh-primary); }
 
