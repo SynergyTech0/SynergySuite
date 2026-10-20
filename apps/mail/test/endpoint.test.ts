@@ -18,4 +18,11 @@ describe("outside account servers", () => {
   it("pins a public server to the checked address", async () => {
     expect(await vetEndpoint({ host: "8.8.8.8", port: 993, secure: true })).toEqual({ host: "8.8.8.8", port: 993, secure: true, servername: undefined });
   });
+
+  it("keeps the server name when an already pinned endpoint is checked again", async () => {
+    // Add account vets the servers, then the IMAP connection vets them again: the certificate
+    // must still be checked against outlook.office365.com, not the address it was pinned to.
+    const pinned = { host: "8.8.8.8", port: 993, secure: true, servername: "outlook.office365.com" };
+    expect(await vetEndpoint(pinned)).toEqual(pinned);
+  });
 });

@@ -249,7 +249,8 @@ export async function vetEndpoint(e: Endpoint): Promise<Endpoint> {
     throw new UserError(`Can't find the server ${e.host}`);
   });
   if (isPrivate(address)) throw new UserError(`${e.host} is not a public mail server`);
-  return { ...e, host: address, servername: isIP(e.host) ? undefined : e.host };
+  // An endpoint vetted before (host already the pinned address) keeps the name its certificate is checked against.
+  return { ...e, host: address, servername: isIP(e.host) ? e.servername : e.host };
 }
 
 export function isPrivate(ip: string): boolean {
