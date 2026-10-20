@@ -811,6 +811,14 @@ for (const [label, src, token] of [
     ['desk', 'SynergyDesk'], ['time', 'SynergyTime'],
     ['shifts', 'SynergyShifts'], ['stock', 'SynergyStock'],
     ['synapse', 'Synapse'], ['hire', 'SynergyHire'],
+    /* The suite's own tiles (lib/suite-apps.json) that had no mark until the
+       new home page put them all on one screen as lettered circles. */
+    ['search', 'Search'], ['groups', 'Groups'], ['office', 'Office'],
+    ['todo', 'To Do'], ['planner', 'Planner'], ['flow', 'Flow'],
+    ['photo', 'Photo'], ['cad', 'CAD'], ['trust', 'Trust'],
+    ['devices', 'Devices'], ['base', 'Base'], ['engage', 'Engage'],
+    ['builder', 'Builder'], ['diagrams', 'Diagrams'], ['whiteboard', 'Whiteboard'],
+    ['loop', 'Loop'], ['commerce', 'Commerce'],
   ];
   check('the fleet fixture covers the whole registry', FLEET.length >= 55,
     `${FLEET.length} apps — a short list is the table marking its own homework`);
