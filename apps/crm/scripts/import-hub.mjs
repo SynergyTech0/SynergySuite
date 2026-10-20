@@ -407,7 +407,9 @@ async function main() {
 
     if (DRY) await db('ROLLBACK');
     // Fresh statistics (and no dead rows from the phone pass) so the lists plan well straight away.
-    else if (counts.accounts || counts.contacts) await db('VACUUM (ANALYZE) accounts, contacts');
+    // PARALLEL 0: a parallel vacuum needs shared memory the size of maintenance_work_mem, more
+    // than Docker's default 64 MB /dev/shm, so it fails there after every row is in.
+    else if (counts.accounts || counts.contacts) await db('VACUUM (ANALYZE, PARALLEL 0) accounts, contacts');
 
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const line = (k) => {
