@@ -6,7 +6,8 @@ import { parseMsipHeader } from "@synergy/compliance";
 import { type Account, type Endpoint, UserError, onSuiteServer, vetEndpoint } from "./accounts";
 import { cleanHtml } from "./sanitize";
 import { policy } from "./policy";
-import { preserveUids } from "./preserved";
+import { preserveRaw, preserveUids } from "./preserved";
+import * as g from "./graph";
 
 // ---------- connections ----------
 
@@ -21,6 +22,7 @@ function tlsOptions(e: Endpoint) {
 }
 
 export async function withImap<T>(acct: Account, fn: (c: ImapFlow) => Promise<T>): Promise<T> {
+  if (acct.graph) throw new UserError(`${acct.address} is opened through Microsoft Graph, which this doesn't support yet`, 501);
   const e = await endpoint(acct, acct.imap);
   const client = new ImapFlow({
     host: e.host,
@@ -56,6 +58,7 @@ export type Folder = { path: string; name: string; role: string | null; unread: 
 const ROLE_ORDER = ["\\Inbox", "\\Drafts", "\\Sent", "\\Archive", "\\Junk", "\\Trash"];
 
 export async function listFolders(acct: Account): Promise<Folder[]> {
+  if (acct.graph) return graphCall(() => g.listGraphFolders(acct.graph!.mailbox).then((f) => sortFolders(f, true)));
   return withImap(acct, async (c) => {
     const boxes = scopeBoxes(acct, await c.list({ statusQuery: { messages: true, unseen: true } }));
     const folders = boxes
@@ -68,9 +71,20 @@ export async function listFolders(acct: Account): Promise<Folder[]> {
         total: b.status?.messages ?? 0,
         depth: b.depth,
       }));
-    const rank = (f: Folder) => (f.role && ROLE_ORDER.includes(f.role) ? ROLE_ORDER.indexOf(f.role) : ROLE_ORDER.length);
-    return folders.sort((a, b) => rank(a) - rank(b) || a.path.localeCompare(b.path));
+    return sortFolders(folders);
   });
+}
+
+/** tree: folders come parent before children (Graph), so each subtree moves with its top folder. */
+function sortFolders(folders: Folder[], tree = false): Folder[] {
+  const rank = (f: Folder) => (f.role && ROLE_ORDER.includes(f.role) ? ROLE_ORDER.indexOf(f.role) : ROLE_ORDER.length);
+  // Top-level folders by role then name; a subfolder stays right under its parent (Graph lists them in tree order).
+  if (tree) {
+    const tops: Folder[][] = [];
+    for (const f of folders) (f.depth === 0 || !tops.length ? tops.push([f]) : tops[tops.length - 1].push(f));
+    return tops.sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].name.localeCompare(b[0].name)).flat();
+  }
+  return folders.sort((a, b) => rank(a) - rank(b) || a.path.localeCompare(b.path));
 }
 
 async function folderByRole(c: ImapFlow, acct: Account, role: string): Promise<string | null> {
@@ -173,6 +187,7 @@ export async function listMessages(
 ): Promise<{ total: number; messages: MessageSummary[] }> {
   const pageSize = Math.min(Math.max(opts.pageSize ?? 50, 1), 200);
   const page = Math.max(opts.page ?? 0, 0);
+  if (acct.graph) return graphCall(() => graphMessages(acct.graph!.mailbox, folder, page, pageSize, opts.search?.trim()));
   return withImap(acct, async (c) => {
     const lock = await c.getMailboxLock(await realPath(c, acct, folder), { readOnly: true });
     try {
@@ -232,6 +247,7 @@ export async function getMessage(
   uid: number,
   opts: { allowRemoteImages?: boolean; attachmentUrl: (index: number) => string },
 ): Promise<MessageDetail> {
+  if (acct.graph) return graphCall(() => graphDetail(acct.graph!.mailbox, uid, opts));
   return withImap(acct, async (c) => {
     const lock = await c.getMailboxLock(await realPath(c, acct, folder));
     try {
@@ -240,32 +256,37 @@ export async function getMessage(
         await c.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
         meta.flags?.add("\\Seen");
       }
-      const attachments: Attachment[] = parsed.attachments.map((a, index) => ({
-        index,
-        filename: a.filename || `attachment-${index + 1}`,
-        contentType: a.contentType,
-        size: a.size,
-        inline: a.contentDisposition === "inline" && Boolean(a.cid),
-        cid: a.cid,
-      }));
-      const cids = new Map(attachments.filter((a) => a.cid).map((a) => [a.cid!, opts.attachmentUrl(a.index)]));
-      const cleaned = parsed.html ? cleanHtml(parsed.html, { allowRemoteImages: Boolean(opts.allowRemoteImages), cids }) : null;
-      return {
-        ...summarize(meta),
-        cc: people(parsed.cc),
-        replyTo: people(parsed.replyTo),
-        html: cleaned?.html ?? null,
-        remoteImages: cleaned?.blockedRemote ?? false,
-        text: parsed.text ?? "",
-        attachments: attachments.filter((a) => !(a.cid && cleaned?.usedCids.has(a.cid))),
-        messageId: parsed.messageId ?? null,
-        references: ([] as string[]).concat(parsed.references ?? []),
-        msipLabel: msipLabelOf(parsed),
-      };
+      return detailOf(summarize(meta), parsed, opts);
     } finally {
       lock.release();
     }
   });
+}
+
+/** What the reading pane shows of a parsed message: sanitized HTML, inline images, attachments, label. */
+function detailOf(summary: MessageSummary, parsed: ParsedMail, opts: { allowRemoteImages?: boolean; attachmentUrl: (index: number) => string }): MessageDetail {
+  const attachments: Attachment[] = parsed.attachments.map((a, index) => ({
+    index,
+    filename: a.filename || `attachment-${index + 1}`,
+    contentType: a.contentType,
+    size: a.size,
+    inline: a.contentDisposition === "inline" && Boolean(a.cid),
+    cid: a.cid,
+  }));
+  const cids = new Map(attachments.filter((a) => a.cid).map((a) => [a.cid!, opts.attachmentUrl(a.index)]));
+  const cleaned = parsed.html ? cleanHtml(parsed.html, { allowRemoteImages: Boolean(opts.allowRemoteImages), cids }) : null;
+  return {
+    ...summary,
+    cc: people(parsed.cc),
+    replyTo: people(parsed.replyTo),
+    html: cleaned?.html ?? null,
+    remoteImages: cleaned?.blockedRemote ?? false,
+    text: parsed.text ?? "",
+    attachments: attachments.filter((a) => !(a.cid && cleaned?.usedCids.has(a.cid))),
+    messageId: parsed.messageId ?? null,
+    references: ([] as string[]).concat(parsed.references ?? []),
+    msipLabel: msipLabelOf(parsed),
+  };
 }
 
 /** The sensitivity label a message's msip_labels header names (Outlook and Mail write it). */
@@ -277,17 +298,24 @@ export function msipLabelOf(parsed: ParsedMail): { id: string; name?: string } |
 }
 
 export async function getAttachment(acct: Account, folder: string, uid: number, index: number) {
+  if (acct.graph) {
+    const mailbox = acct.graph.mailbox;
+    return graphCall(async () => pickAttachment(await simpleParser(await g.getGraphMime(mailbox, await g.idFor(mailbox, uid))), index));
+  }
   return withImap(acct, async (c) => {
     const lock = await c.getMailboxLock(await realPath(c, acct, folder), { readOnly: true });
     try {
-      const { parsed } = await fetchParsed(c, uid);
-      const a = parsed.attachments[index];
-      if (!a) throw new UserError("No such attachment", 404);
-      return { filename: a.filename || `attachment-${index + 1}`, contentType: a.contentType, content: a.content };
+      return pickAttachment((await fetchParsed(c, uid)).parsed, index);
     } finally {
       lock.release();
     }
   });
+}
+
+function pickAttachment(parsed: ParsedMail, index: number) {
+  const a = parsed.attachments[index];
+  if (!a) throw new UserError("No such attachment", 404);
+  return { filename: a.filename || `attachment-${index + 1}`, contentType: a.contentType, content: a.content };
 }
 
 // ---------- changes ----------
@@ -301,6 +329,7 @@ export type Change =
 
 export async function changeMessages(acct: Account, folder: string, uids: number[], change: Change): Promise<void> {
   if (!uids.length) return;
+  if (acct.graph) return graphCall(() => graphChange(acct, folder, uids, change));
   const range = uids.join(",");
   await withImap(acct, async (c) => {
     const boxes = acct.folderRoot ? scopeBoxes(acct, await c.list()) : [];
@@ -349,6 +378,7 @@ async function ensureFolder(c: ImapFlow, acct: Account, name: string): Promise<s
 export async function createFolder(acct: Account, name: string): Promise<string> {
   const clean = name.trim();
   if (!clean || clean.length > 100) throw new UserError("Folder name must be 1 to 100 characters");
+  if (acct.graph) return graphCall(() => g.createGraphFolder(acct.graph!.mailbox, clean));
   return withImap(acct, async (c) => {
     const path = (await c.mailboxCreate(await realPath(c, acct, clean))).path;
     return acct.folderRoot ? clean : path;
@@ -384,6 +414,12 @@ export async function sendMessage(acct: Account, m: Outgoing): Promise<{ message
     attachments: m.attachments,
     headers: m.headers,
   };
+  if (acct.graph) {
+    // Graph sends the MIME as composed (headers such as msip_labels included) and files it in Sent Items.
+    const raw = await new MailComposer(mail).compile().build();
+    await graphCall(() => g.sendGraphMime(acct.graph!.mailbox, raw), "Sending failed: ");
+    return { messageId: (await simpleParser(raw)).messageId ?? "" };
+  }
   const e = await endpoint(acct, acct.smtp);
   const transport = nodemailer.createTransport({
     host: e.host,
@@ -414,4 +450,75 @@ export async function sendMessage(acct: Account, m: Outgoing): Promise<{ message
     }).catch(() => { /* the mail went out; a missing Sent copy is not worth failing the send */ });
   }
   return { messageId: info.messageId };
+}
+
+// ---------- Microsoft Graph mailboxes ----------
+
+/** Graph's errors as errors the user can read. */
+async function graphCall<T>(fn: () => Promise<T>, prefix = ""): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof g.GraphError) throw new UserError(prefix + err.message, err.status);
+    throw err;
+  }
+}
+
+function graphSummary(m: g.GraphMessage, uid: number): MessageSummary {
+  return {
+    uid,
+    subject: m.subject || "",
+    from: m.from ? g.toPerson(m.from) : null,
+    to: (m.toRecipients ?? []).map(g.toPerson),
+    date: m.receivedDateTime ?? null,
+    seen: Boolean(m.isRead),
+    flagged: m.flag?.flagStatus === "flagged",
+    answered: false, // Graph doesn't say without an extended property
+    hasAttachments: Boolean(m.hasAttachments),
+    size: 0,
+  };
+}
+
+async function graphMessages(mailbox: string, folder: string, page: number, pageSize: number, search?: string) {
+  const { total, messages } = await g.listGraphMessages(mailbox, folder, page, pageSize, search);
+  const uids = await g.uidsFor(mailbox, messages.map((m) => m.id));
+  return { total, messages: messages.map((m, i) => graphSummary(m, uids[i])) };
+}
+
+async function graphDetail(mailbox: string, uid: number, opts: { allowRemoteImages?: boolean; attachmentUrl: (index: number) => string }): Promise<MessageDetail> {
+  const id = await g.idFor(mailbox, uid);
+  const [meta, raw] = await Promise.all([g.getGraphMessage(mailbox, id), g.getGraphMime(mailbox, id)]);
+  if (!meta.isRead) {
+    await g.patchGraphMessage(mailbox, id, { isRead: true });
+    meta.isRead = true;
+  }
+  return detailOf(graphSummary(meta, uid), await simpleParser(raw), opts);
+}
+
+async function graphChange(acct: Account, folder: string, uids: number[], change: Change): Promise<void> {
+  const mailbox = acct.graph!.mailbox;
+  const ids = await g.idsFor(mailbox, uids);
+  const each = (fn: (id: string) => Promise<void>) => Promise.all(ids.map(fn)).then(() => undefined);
+  switch (change.action) {
+    case "read": case "unread":
+      return each((id) => g.patchGraphMessage(mailbox, id, { isRead: change.action === "read" }));
+    case "flag": case "unflag":
+      return each((id) => g.patchGraphMessage(mailbox, id, { flag: { flagStatus: change.action === "flag" ? "flagged" : "notFlagged" } }));
+    case "move":
+      return each((id) => g.moveGraphMessage(mailbox, id, change.to));
+    case "archive": case "junk":
+      // Graph's well-known names work as move destinations.
+      return each((id) => g.moveGraphMessage(mailbox, id, change.action === "archive" ? "archive" : "junkemail"));
+    case "delete": {
+      const trash = (await g.roleIds(mailbox)).get("\\Trash");
+      const forGood = !trash || trash === folder;
+      // Legal hold: keep a copy first, as for IMAP accounts.
+      if (await policy().onHold(acct.owner)) {
+        for (const id of ids) {
+          await preserveRaw(acct.owner, await g.getGraphMime(mailbox, id), { account: acct.id, folder, uidValidity: null, uid: null }, { deleted: forGood });
+        }
+      }
+      return each((id) => (forGood ? g.deleteGraphMessage(mailbox, id) : g.moveGraphMessage(mailbox, id, "deleteditems")));
+    }
+  }
 }

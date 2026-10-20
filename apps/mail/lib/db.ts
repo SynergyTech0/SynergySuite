@@ -105,6 +105,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS preserve_folders_key ON preserve_folders (mail
 -- password: IMAP/SMTP with the saved password. microsoft: Sign in with Microsoft (XOAUTH2), secret
 -- holds the refresh token.
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_kind TEXT NOT NULL DEFAULT 'password';
+
+-- Microsoft Graph mailboxes (graph.ts): the numeric uid the browser uses for each Graph message id.
+CREATE TABLE IF NOT EXISTS graph_uids (
+  uid          BIGSERIAL PRIMARY KEY,
+  mailbox      TEXT NOT NULL,
+  graph_id     TEXT NOT NULL,            -- immutable id, unchanged by moves
+  UNIQUE (mailbox, graph_id)
+);
 `;
 
 type Db = ReturnType<typeof createDb>;

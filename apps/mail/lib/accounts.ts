@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import { q } from "./db";
 import { open, seal } from "./secret";
 import { isSharedMailboxMember, sharedMailboxesOf } from "./memberships";
+import { graphMailboxesOf } from "./graph";
 import { MICROSOFT_IMAP, MICROSOFT_SMTP, OAuthError, accessToken, forgetToken, type SignedIn } from "./oauth";
 
 /**
@@ -28,10 +29,12 @@ export type Account = {
   auth: Auth;
   /** Shared mailboxes: the folder tree, inside the member's own login, that is this account. */
   folderRoot?: string;
+  /** A Microsoft 365 mailbox opened through Microsoft Graph (graph.ts) instead of IMAP/SMTP. */
+  graph?: { mailbox: string };
 };
 
 /** What the browser is allowed to see about an account. */
-export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "shared" | "imap" };
+export type AccountSummary = { id: string; label: string; address: string; kind: "suite" | "shared" | "imap" | "graph" };
 
 const bool = (v: string | undefined, d: boolean) => (v === undefined || v === "" ? d : v === "true" || v === "1");
 
@@ -78,6 +81,19 @@ function sharedAccount(email: string, name: string, shared: { address: string; n
     address: shared.address,
     fromName: shared.name === shared.address ? "" : shared.name,
     folderRoot: `${process.env.MAIL_SHARED_FOLDERS || "Shared Folders"}/${shared.address}`,
+  };
+}
+
+/**
+ * A company Microsoft 365 mailbox the admin gave this person (graph.ts decides which). Opened with
+ * the organization's app through Microsoft Graph, so imap/smtp/auth are placeholders never used.
+ */
+function graphAccount(owner: string, name: string, mailbox: string): Account {
+  const none = { host: "graph.microsoft.com", port: 443, secure: true };
+  return {
+    id: `graph:${mailbox}`, owner, label: mailbox, address: mailbox,
+    fromName: mailbox === owner.toLowerCase() ? name : "",
+    imap: none, smtp: none, auth: { user: mailbox, pass: "" }, graph: { mailbox },
   };
 }
 
@@ -149,6 +165,7 @@ export async function listAccounts(owner: string): Promise<AccountSummary[]> {
     out.push({ id: suite.id, label: suite.label, address: suite.address, kind: "suite" });
     for (const m of await sharedMailboxesOf(owner)) out.push({ id: `shared:${m.address}`, label: m.name, address: m.address, kind: "shared" });
   }
+  for (const m of graphMailboxesOf(owner)) out.push({ id: `graph:${m}`, label: m, address: m, kind: "graph" });
   const rows = await q<Row>("SELECT * FROM accounts WHERE owner_email = $1 ORDER BY id", [owner]);
   for (const r of rows) out.push({ id: String(r.id), label: r.label, address: r.address, kind: "imap" });
   return out;
@@ -160,6 +177,10 @@ export async function getAccount(owner: string, id: string, ownerName = ""): Pro
   if (id.startsWith("shared:")) {
     const shared = await isSharedMailboxMember(owner, id.slice("shared:".length));
     return shared ? sharedAccount(owner, ownerName, shared) : null;
+  }
+  if (id.startsWith("graph:")) {
+    const mailbox = id.slice("graph:".length);
+    return graphMailboxesOf(owner).includes(mailbox) ? graphAccount(owner, ownerName, mailbox) : null;
   }
   if (!/^\d+$/.test(id)) return null;
   const rows = await q<Row>("SELECT * FROM accounts WHERE id = $1 AND owner_email = $2", [id, owner]);
