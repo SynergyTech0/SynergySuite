@@ -119,8 +119,25 @@ const BY_SLUG: Record<string, string> = {
   calendar: 'calendar', cal: 'calendar', schedule: 'calendar',
   forms: 'form', surveys: 'form',
   people: 'person', contacts: 'person', team: 'person', hr: 'person',
+  /* The suite's own apps. Seventeen of the 51 suite tiles fell through to a
+     monogram, so the home page showed a column of lettered circles. */
+  search: 'magnifier', find: 'magnifier',
+  groups: 'people', communities: 'people',
+  office: 'pages', todo: 'checkbox', planner: 'clipboard',
+  flow: 'flow', workflows: 'flow',
+  photo: 'photo', photos: 'photo', images: 'photo',
+  cad: 'setsquare', drafting: 'setsquare',
+  trust: 'keyshield', grc: 'keyshield',
+  devices: 'devices', endpoints: 'devices', mdm: 'devices',
+  base: 'rows', lists: 'rows',
+  engage: 'bubbles', community: 'bubbles',
+  builder: 'blocks', lowcode: 'blocks',
+  diagrams: 'diagram', diagram: 'diagram', visio: 'diagram',
+  whiteboard: 'easel', whiteboards: 'easel',
+  loop: 'loop', commerce: 'bag', shop: 'bag', store: 'bag',
 };
 const BY_WORD: Array<[RegExp, string]> = [
+  [/\bto[\s-]?dos?\b/i, 'checkbox'],
   [/\b(?:drive|files?|storage)\b/i, 'folder'],
   [/\b(?:docs?|documents?)\b/i, 'doc'],
   [/\b(?:meet|video)\b|\b(?:conferenc)/i, 'camera'],
@@ -238,7 +255,10 @@ const OPTICAL: Record<string, number> = {
   gear: 0.93, mask: 0.93, personplus: 0.93, piechart: 0.93, wave: 0.93, form: 0.91,
   headset: 0.91, share: 0.91, spark: 0.91, book: 0.90, globe: 0.90, scales: 0.90, server: 0.90,
   contract: 0.88, cloud: 0.87, door: 0.85, house: 0.85, slidedeck: 0.85, sms: 0.85, chip: 0.84,
-  plane: 0.84, roster: 0.84, lifebuoy: 0.83, sheet: 0.83, crate: 0.81, booking: 0.79
+  plane: 0.84, roster: 0.84, lifebuoy: 0.83, sheet: 0.83, crate: 0.81, booking: 0.79,
+  bag: 1.02, photo: 1.00, checkbox: 1.00, keyshield: 0.99, people: 0.98, clipboard: 0.97, rows: 0.96,
+  magnifier: 0.95, setsquare: 0.94, flow: 0.93, bubbles: 0.93, blocks: 0.93, pages: 0.91, loop: 0.95,
+  diagram: 0.89, easel: 0.88, devices: 0.87
 };
 
 function Shape({ shape }: { shape: string }) {
@@ -692,6 +712,117 @@ function Shape({ shape }: { shape: string }) {
         <path d="M25 5l7 7h-7V5Z" fill={deep} />
         <path d="M14 19l2 2 4-4M14 28l2 2 4-4" stroke={pale} strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M23 20h6M23 29h6" stroke={pale} strokeWidth="2.8" strokeLinecap="round" />
+      </>);
+    case 'magnifier':
+      return (<>
+        <circle cx="18" cy="18" r="10" fill={fill} />
+        <circle cx="18" cy="18" r="5" fill={pale} />
+        <path d="M25.5 25.5L33 33" stroke={deep} strokeWidth="4.5" strokeLinecap="round" />
+      </>);
+    case 'people':
+      return (<>
+        <circle cx="27" cy="14" r="4.5" fill={deep} />
+        <path d="M19 30c0-5 3.6-8 8-8s8 3 8 8H19Z" fill={deep} />
+        <circle cx="16" cy="16" r="5.5" fill={fill} />
+        <path d="M6 34c0-5.8 4.5-9.5 10-9.5S26 28.2 26 34H6Z" fill={fill} />
+      </>);
+    case 'pages':
+      return (<>
+        <rect x="15" y="6" width="20" height="25" rx="2.5" fill={deep} />
+        <rect x="8" y="11" width="20" height="25" rx="2.5" fill={fill} />
+        <path d="M12.5 19h11M12.5 24h11M12.5 29h7" stroke={pale} strokeWidth="2.6" strokeLinecap="round" />
+      </>);
+    case 'checkbox':
+      return (<>
+        <rect x="8" y="8" width="26" height="26" rx="7" fill={fill} />
+        <path d="M14 21.5l5 5 9-10" stroke={pale} strokeWidth="3.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </>);
+    case 'clipboard':
+      return (<>
+        <rect x="9" y="9" width="24" height="27" rx="3" fill={fill} />
+        <rect x="15" y="6" width="12" height="6" rx="2" fill={deep} />
+        <rect x="13.5" y="17" width="4" height="4" rx="1" fill={pale} />
+        <rect x="13.5" y="26" width="4" height="4" rx="1" fill={pale} />
+        <path d="M21 19h7M21 28h7" stroke={pale} strokeWidth="2.6" strokeLinecap="round" />
+      </>);
+    case 'flow':
+      return (<>
+        <rect x="6" y="8" width="13" height="10" rx="2.5" fill={fill} />
+        <rect x="23" y="24" width="13" height="10" rx="2.5" fill={fill} />
+        <path d="M12.5 18v6a5 5 0 0 0 5 5h4" stroke={deep} strokeWidth="2.8" fill="none" strokeLinecap="round" />
+        <path d="M19 25.5l3.5 3.5-3.5 3.5" stroke={deep} strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M23 13h8a3 3 0 0 1 3 3v3" stroke={deep} strokeWidth="2.8" fill="none" strokeLinecap="round" />
+      </>);
+    case 'photo':
+      return (<>
+        <rect x="7" y="9" width="28" height="24" rx="3" fill={fill} />
+        <circle cx="27" cy="16.5" r="3" fill={pale} />
+        <path d="M7 29l8.5-9 6 6.5 4-4 9.5 9.5V30a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V29Z" fill={deep} />
+      </>);
+    case 'setsquare':
+      return (<>
+        <path d="M9 35V8l27 27H9Z" fill={fill} />
+        <path d="M14.5 29.5v-8.5l8.5 8.5h-8.5Z" fill={pale} />
+        <path d="M9 14h4.5M9 19h3M9 24h4.5" stroke={deep} strokeWidth="2.2" strokeLinecap="round" />
+      </>);
+    case 'keyshield':
+      return (<>
+        <path d="M21 7l12 5v9c0 8-5.2 13.4-12 15V7Z" fill={deep} />
+        <path d="M21 7L9 12v9c0 8 5.2 13.4 12 15V7Z" fill={fill} />
+        <circle cx="21" cy="19" r="3.5" fill={pale} />
+        <path d="M19.3 21h3.4l1 7h-5.4l1-7Z" fill={pale} />
+      </>);
+    case 'devices':
+      return (<>
+        <rect x="6" y="9" width="23" height="16" rx="2" fill={fill} />
+        <path d="M4 28h24v1.5a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 4 29.5V28Z" fill={fill} />
+        <rect x="26" y="15" width="12" height="20" rx="2.5" fill={deep} />
+        <rect x="28.5" y="18" width="7" height="13" rx="1" fill={fill} />
+      </>);
+    case 'rows':
+      return (<>
+        <rect x="8" y="7" width="26" height="8" rx="2.5" fill={deep} />
+        <rect x="8" y="17" width="26" height="8" rx="2.5" fill={fill} />
+        <rect x="8" y="27" width="26" height="8" rx="2.5" fill={fill} />
+        <path d="M12.5 21h2M12.5 31h2M18 21h11M18 31h11" stroke={pale} strokeWidth="2.4" strokeLinecap="round" />
+      </>);
+    case 'bubbles':
+      return (<>
+        <path d="M18 6h14a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-1v5l-6-5h-7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z" fill={deep} />
+        <path d="M10 14h14a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-8l-6 5v-5a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z" fill={fill} />
+        <path d="M12 20.5h10M12 25h6" stroke={pale} strokeWidth="2.6" strokeLinecap="round" />
+      </>);
+    case 'blocks':
+      return (<>
+        <rect x="14.5" y="6" width="13" height="13" rx="2.5" fill={deep} />
+        <rect x="7" y="21" width="13" height="13" rx="2.5" fill={fill} />
+        <rect x="22" y="21" width="13" height="13" rx="2.5" fill={fill} />
+      </>);
+    case 'diagram':
+      return (<>
+        <path d="M13 19v10h9" stroke={deep} strokeWidth="2.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M19 13h9" stroke={deep} strokeWidth="2.8" strokeLinecap="round" />
+        <rect x="7" y="7" width="12" height="12" rx="2.5" fill={fill} />
+        <path d="M29.5 6.5l6.5 11H23l6.5-11Z" fill={fill} />
+        <circle cx="29" cy="29" r="7" fill={fill} />
+      </>);
+    case 'easel':
+      return (<>
+        <path d="M14 27l-3.5 8M28 27l3.5 8" stroke={deep} strokeWidth="2.8" strokeLinecap="round" />
+        <rect x="6" y="7" width="30" height="21" rx="2.5" fill={fill} />
+        <path d="M11 21c3-5 5.5-6 7.5-2.5s4.5 3.5 7-0.5 4.5-4 6-2.5" stroke={pale} strokeWidth="2.8" fill="none" strokeLinecap="round" />
+      </>);
+    case 'loop':
+      return (<>
+        <path d="M21 21c-2.5-4-4.6-7-8-7a7 7 0 0 0 0 14c3.4 0 5.5-3 8-7Z" stroke={deep} strokeWidth="4.2" fill="none" strokeLinejoin="round" />
+        <path d="M21 21c2.5 4 4.6 7 8 7a7 7 0 0 0 0-14c-3.4 0-5.5 3-8 7Z" stroke={fill} strokeWidth="4.2" fill="none" strokeLinejoin="round" />
+      </>);
+    case 'bag':
+      return (<>
+        <path d="M16 17v-4a5 5 0 0 1 10 0v4" stroke={deep} strokeWidth="2.8" fill="none" strokeLinecap="round" />
+        <path d="M10 15h22l-1.5 19a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2L10 15Z" fill={fill} />
+        <circle cx="16" cy="20.5" r="1.8" fill={pale} />
+        <circle cx="26" cy="20.5" r="1.8" fill={pale} />
       </>);
     case 'person':
       return (<>
