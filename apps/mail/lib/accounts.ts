@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import { q } from "./db";
 import { open, seal } from "./secret";
 import { isSharedMailboxMember, sharedMailboxesOf } from "./memberships";
+import { MICROSOFT_IMAP, MICROSOFT_SMTP, OAuthError, accessToken, forgetToken, type SignedIn } from "./oauth";
 
 /**
  * secure: TLS from the first byte (993/465). Otherwise the connection is upgraded with STARTTLS,
@@ -110,9 +111,10 @@ type Row = {
   imap_host: string; imap_port: number; imap_secure: boolean;
   smtp_host: string; smtp_port: number; smtp_secure: boolean;
   username: string; secret: string;
+  auth_kind: "password" | "microsoft";
 };
 
-function fromRow(r: Row): Account {
+async function fromRow(r: Row): Promise<Account> {
   return {
     id: String(r.id),
     owner: r.owner_email,
@@ -121,8 +123,23 @@ function fromRow(r: Row): Account {
     fromName: r.label === r.address ? "" : r.label,
     imap: { host: r.imap_host, port: r.imap_port, secure: r.imap_secure },
     smtp: { host: r.smtp_host, port: r.smtp_port, secure: r.smtp_secure },
-    auth: { user: r.username, pass: open(r.secret) },
+    auth: r.auth_kind === "microsoft"
+      ? { user: r.username, accessToken: await microsoftToken(r) }
+      : { user: r.username, pass: open(r.secret) },
   };
+}
+
+/** A fresh access token for a Microsoft account; a sign-in Microsoft no longer honours fails like a wrong password. */
+async function microsoftToken(r: Row): Promise<string> {
+  try {
+    return await accessToken(String(r.id), r.secret, async (sealed) => {
+      await q("UPDATE accounts SET secret = $1 WHERE id = $2", [sealed, r.id]);
+    });
+  } catch (err) {
+    if (!(err instanceof OAuthError)) throw err;
+    const why = err.expired ? "the Microsoft sign-in has expired; use Add account to sign in with Microsoft again" : err.message;
+    throw Object.assign(new UserError(`Couldn't sign in to ${r.address}: ${why}`, 502), { authFailed: err.expired });
+  }
 }
 
 export async function listAccounts(owner: string): Promise<AccountSummary[]> {
@@ -146,7 +163,7 @@ export async function getAccount(owner: string, id: string, ownerName = ""): Pro
   }
   if (!/^\d+$/.test(id)) return null;
   const rows = await q<Row>("SELECT * FROM accounts WHERE id = $1 AND owner_email = $2", [id, owner]);
-  return rows[0] ? fromRow(rows[0]) : null;
+  return rows[0] ? await fromRow(rows[0]) : null;
 }
 
 /**
@@ -157,9 +174,9 @@ export async function listOutsideAccounts(owner: string): Promise<Account[]> {
   const out: Account[] = [];
   for (const r of await q<Row>("SELECT * FROM accounts WHERE owner_email = $1 ORDER BY id", [owner])) {
     try {
-      out.push(fromRow(r));
+      out.push(await fromRow(r));
     } catch (err) {
-      console.error(`[mail] can't open the saved password of ${r.address}:`, (err as Error).message);
+      console.error(`[mail] can't open the saved sign-in of ${r.address}:`, (err as Error).message);
     }
   }
   return out;
@@ -182,10 +199,36 @@ export async function addAccount(owner: string, a: NewAccount): Promise<string> 
   return String(rows[0].id);
 }
 
+/**
+ * Saves a Microsoft 365 / Outlook.com account after Sign in with Microsoft. Signing in again to
+ * an address already connected renews its sign-in instead of adding it twice.
+ */
+export async function saveMicrosoftAccount(owner: string, s: SignedIn): Promise<string> {
+  const label = s.name || s.address;
+  const [found] = await q<{ id: string }>(
+    "SELECT id FROM accounts WHERE owner_email = $1 AND lower(address) = $2 AND auth_kind = 'microsoft' ORDER BY id LIMIT 1",
+    [owner, s.address],
+  );
+  if (found) {
+    await q("UPDATE accounts SET secret = $1, username = $2 WHERE id = $3", [seal(s.refreshToken), s.address, found.id]);
+    forgetToken(String(found.id));
+    return String(found.id);
+  }
+  const rows = await q<{ id: string }>(
+    `INSERT INTO accounts (owner_email, label, address, imap_host, imap_port, imap_secure,
+                           smtp_host, smtp_port, smtp_secure, username, secret, auth_kind)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'microsoft') RETURNING id`,
+    [owner, label, s.address, MICROSOFT_IMAP.host, MICROSOFT_IMAP.port, MICROSOFT_IMAP.secure,
+     MICROSOFT_SMTP.host, MICROSOFT_SMTP.port, MICROSOFT_SMTP.secure, s.address, seal(s.refreshToken)],
+  );
+  return String(rows[0].id);
+}
+
 /** Removes an outside account. Mail preserved from it for a legal hold stays, marked as removed. */
 export async function removeAccount(owner: string, id: string): Promise<boolean> {
   if (!/^\d+$/.test(id)) return false;
   if (!(await q("DELETE FROM accounts WHERE id = $1 AND owner_email = $2 RETURNING id", [id, owner])).length) return false;
+  forgetToken(id);
   await q("UPDATE preserve_accounts SET removed_at = now() WHERE mailbox = $1 AND account = $2", [owner, id]);
   return true;
 }
