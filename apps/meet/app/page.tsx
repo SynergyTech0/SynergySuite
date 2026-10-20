@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn, signOut, useSession } from "@/lib/client-session";
 import { useRouter } from "next/navigation";
-import { Video, ShieldCheck, LogOut, ArrowRight, CalendarPlus, CalendarClock } from "lucide-react";
+import { Video, ShieldCheck, LogOut, ArrowRight, CalendarPlus, CalendarClock, ScrollText } from "lucide-react";
 
 export default function Home() {
   const { data: session, status, ssoAvailable } = useSession();
@@ -75,6 +75,9 @@ export default function Home() {
                 </button>
                 <button className="btn ghost" style={{ width: "auto" }} onClick={() => router.push("/meetings")}>
                   <CalendarClock size={16} /> My meetings
+                </button>
+                <button className="btn ghost" style={{ width: "auto" }} onClick={() => router.push("/transcripts")}>
+                  <ScrollText size={16} /> Transcripts
                 </button>
               </div>
             </>

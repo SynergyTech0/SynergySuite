@@ -518,6 +518,8 @@ export default function Room({
   );
 
   const raisedCount = participants.filter((p) => p.attributes?.handRaised === "1").length;
+  // The company transcribes every meeting (MEET_TRANSCRIBE=always): its transcriber is in the room.
+  const autoTranscribing = participants.some((p) => p.identity === "synergy-captions-transcriber");
 
   return (
     <div className="mroot">
@@ -525,6 +527,12 @@ export default function Room({
         <GridLayout tracks={tracks} style={{ height: "100%" }}>
           <ParticipantTile />
         </GridLayout>
+
+        {autoTranscribing && (
+          <div className="tbadge" title="Everything said in this meeting is written down and saved to its transcript">
+            <ScrollText size={13} /> Transcribing
+          </div>
+        )}
 
         {/* floating reactions */}
         <div className="floats">
@@ -714,7 +722,7 @@ export default function Room({
           <div className="tlist" ref={tlistRef}>
             {transcript.length === 0 ? (
               <p className="sub" style={{ padding: 12 }}>
-                {transcribing ? "Listening… spoken words will appear here, labeled by speaker." : "Start Transcribe (or CC) to build the live transcript."}
+                {transcribing || autoTranscribing ? "Listening… spoken words will appear here, labeled by speaker." : "Start Transcribe (or CC) to build the live transcript."}
               </p>
             ) : (
               transcript.map((l) => (
@@ -809,7 +817,7 @@ export default function Room({
             </button>
           )}
 
-          {isStaff && (
+          {isStaff && !autoTranscribing && (
             <button className={`mbtn ${transcribing ? "on" : ""}`} onClick={toggleTranscribe} disabled={capBusy}
               title={transcribing ? "Stop transcribing (files transcript)" : "Transcribe meeting (silent — records + files transcript)"}>
               <ScrollText size={18} />

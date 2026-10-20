@@ -557,6 +557,9 @@ services:
       TURN_STATIC_SECRET: ${TURN_STATIC_SECRET:-}
       # Hosts call phone numbers into meetings through Phone.
       PHONE_SVC_TOKEN: ${PHONE_SVC_TOKEN:-}
+      # "always": every meeting is transcribed and saved, with the speech model below (see apps/meet/README.md).
+      MEET_TRANSCRIBE: ${MEET_TRANSCRIBE:-}
+      MEET_AI_SPEECH_MODEL: ${MEET_AI_SPEECH_MODEL:-${AI_SPEECH_MODEL:-}}
 
   # Teams Phone equivalent: calls between colleagues and to real numbers, voicemail, call history.
   # Calls run on Meet's LiveKit media server (same keys); real numbers come in and go out through

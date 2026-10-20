@@ -254,3 +254,8 @@ input:focus { outline: none; border-color: var(--accent); }
 body.suite-body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 .suite-main { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .suite-main .shell { min-height: 100%; }
+
+/* "Transcribing" notice, shown to everyone while the company transcriber is in the meeting. */
+.tbadge { position: absolute; top: 12px; left: 12px; z-index: 5; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff;
+  background: rgba(220, 38, 38, .85); pointer-events: auto; }

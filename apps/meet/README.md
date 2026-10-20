@@ -40,9 +40,18 @@ The meetings table is created on first use. Invitations are only emailed when th
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Mail server for invitations. Port defaults to 465; `SMTP_FROM` defaults to `SMTP_USER`. No email is sent unless host, user and password are set, or when `DEMO_MODE=1`. |
 | `TURN_HOST` / `TURN_STATIC_SECRET` | Optional TURN relay for people behind strict firewalls. Give it a different public IP from the LiveKit server. |
 | `CAPTIONS_WORKER_URL` | The transcription and captions worker (default `http://host.docker.internal:9081`). |
+| `MEET_TRANSCRIBE` | `always` transcribes and saves every meeting (see below). Empty: only the host's Transcribe button. |
+| `MEET_AI_SPEECH_MODEL` | Speech model for saved transcripts (default `AI_SPEECH_MODEL`), on the suite's OpenAI-compatible AI server or `MEET_AI_BASE_URL` / `MEET_AI_API_KEY`. |
+| `MEET_WORKER` | `0` stops this copy of the app from transcribing; run only one transcriber per installation. |
 | `PHONE_SVC_TOKEN` | Shared with Synergy Phone. When set, hosts can call a phone number into a meeting from the People panel; the call goes out from their own number. |
 | `PHONE_INTERNAL_URL` | Where Meet reaches Phone (default `http://phone:3440` in production). |
 | `PROXY_SHARED_SECRET` | Shared secret the gateway sends, so the app can't be reached around it. |
+
+## Saved transcripts
+
+With `MEET_TRANSCRIBE=always` and a speech model set, the Meet server joins every meeting that has people in it as a hidden participant, listens to each person's microphone separately, and writes down what they say with the suite's speech model (`@synergy/ai`). Each line is labelled with who said it, appears live in the meeting's Transcript panel, and is saved. Everyone in the meeting sees a **Transcribing** badge. It leaves when the last person does; a meeting where nobody spoke leaves no transcript.
+
+**Transcripts** on Meet's home page lists the transcripts you can read: those of meetings you were in, and of scheduled meetings you host or were invited to. Each can be searched, copied, or downloaded as text with times on your clock. Guests and phone callers are transcribed but can't open transcripts afterwards. The transcripts live in the `transcripts`, `transcript_people` and `transcript_segments` tables of Meet's database.
 
 ## Production
 
