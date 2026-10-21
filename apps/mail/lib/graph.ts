@@ -65,6 +65,41 @@ export class GraphError extends Error {
   }
 }
 
+/* Exchange lets one app have only 4 requests open per mailbox and answers the 5th with 429
+   ("MailboxConcurrency"); a folder list alone asks for 6 at once. So calls to a mailbox wait their
+   turn, keeping one slot free for anything else using the same app, and throttled ones are retried. */
+const PER_MAILBOX = 3;
+const RETRIES = 4;
+const MAX_WAIT_MS = 20_000;
+const turns = new Map<string, { running: number; waiting: (() => void)[] }>();
+
+async function inTurn<T>(mailbox: string, fn: () => Promise<T>): Promise<T> {
+  const key = mailbox.toLowerCase();
+  let t = turns.get(key);
+  if (!t) turns.set(key, (t = { running: 0, waiting: [] }));
+  if (t.running >= PER_MAILBOX) await new Promise<void>((go) => t!.waiting.push(go));
+  else t.running++;
+  try {
+    return await fn();
+  } finally {
+    const next = t.waiting.shift();
+    if (next) next(); // the slot passes straight to the next caller
+    else if (--t.running === 0) turns.delete(key);
+  }
+}
+
+/** fetch, retrying 429 and 503 after the Retry-After Microsoft gives (or a growing pause). */
+async function fetchPatiently(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, init);
+    if ((res.status !== 429 && res.status !== 503) || attempt >= RETRIES) return res;
+    const after = Number(res.headers.get("retry-after"));
+    const wait = Math.min(Number.isFinite(after) && after > 0 ? after * 1000 : 500 * 2 ** attempt, MAX_WAIT_MS);
+    await res.body?.cancel().catch(() => undefined);
+    await new Promise((r) => setTimeout(r, wait));
+  }
+}
+
 type Init = { method?: string; body?: unknown; raw?: string; contentType?: string; search?: boolean };
 
 /** One Graph call for a mailbox. path starts after /users/<mailbox>. */
@@ -80,7 +115,8 @@ export async function graph<T = unknown>(mailbox: string, path: string, init: In
     body = JSON.stringify(init.body);
   }
   if (init.search) headers["consistencylevel"] = "eventual";
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}${path}`, { method: init.method ?? "GET", headers, body });
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}${path}`;
+  const res = await inTurn(mailbox, () => fetchPatiently(url, { method: init.method ?? "GET", headers, body }));
   if (res.status === 204 || res.status === 202) return undefined as T;
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };

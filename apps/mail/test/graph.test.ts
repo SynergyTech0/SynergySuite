@@ -46,6 +46,36 @@ describe("Graph calls", () => {
     expect(init.headers).toMatchObject({ authorization: "Bearer tok", prefer: 'IdType="ImmutableId"' });
   });
 
+  it("keeps at most 3 calls open per mailbox, so Exchange's limit of 4 is never hit", async () => {
+    let open = 0, most = 0, other = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/oauth2/")) return json({ access_token: "tok4", expires_in: 3600 });
+      if (url.includes("bob%40")) { other++; return json({ value: [] }); }
+      most = Math.max(most, ++open);
+      await new Promise((r) => setTimeout(r, 5));
+      open--;
+      return json({ value: [] });
+    }));
+    const c = { tenant: "t4", clientId: "a", clientSecret: "b" };
+    await Promise.all([
+      ...Array.from({ length: 10 }, () => graph("ann@company.com", "/mailFolders", {}, c)),
+      graph("bob@company.com", "/mailFolders", {}, c),
+    ]);
+    expect(most).toBe(3);
+    expect(other).toBe(1);
+  });
+
+  it("waits out Microsoft's throttling and tries again", async () => {
+    let tries = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/oauth2/")) return json({ access_token: "tok5", expires_in: 3600 });
+      if (++tries < 3) return new Response(JSON.stringify({ error: { code: "ApplicationThrottled", message: "Application is over its MailboxConcurrency limit." } }), { status: 429, headers: { "retry-after": "0.01" } });
+      return json({ value: [1] });
+    }));
+    expect(await graph("ann@company.com", "/mailFolders", {}, { tenant: "t5", clientId: "a", clientSecret: "b" })).toEqual({ value: [1] });
+    expect(tries).toBe(3);
+  });
+
   it("explains a refused mailbox", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) =>
       url.includes("/oauth2/") ? json({ access_token: "tok2", expires_in: 3600 }) : json({ error: { code: "ErrorAccessDenied", message: "Access is denied." } }, 403)));
