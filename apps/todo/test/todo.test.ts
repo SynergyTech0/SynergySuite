@@ -112,6 +112,8 @@ describe.skipIf(!url)("to do", async () => {
   });
 
   it("hands out each reminder once, only to the person who set it", async () => {
+    // Earlier tests leave reminders on fixed dates that the clock has since passed: hand those out first.
+    await todo.dueReminders(alice);
     const list = await todo.createList(alice, "Shared");
     await todo.share(alice, list.id, bob);
     const t = await todo.createTask(alice, { listId: list.id, title: "Renew passport", today });
