@@ -108,24 +108,26 @@ export function complianceFromStatus(status: number | null, error = ""): { compl
   return { compliance: "error", detail: `Answered ${status}` };
 }
 
-/** Probes one app: any HTTP answer on / means it is up; POST /api/compliance/search with limit 1 says whether it takes part. */
+/**
+ * Probes one app: any HTTP answer on / means it is up; POST /api/compliance/search with limit 1 says
+ * whether it takes part. The two go one after the other, so a busy app gets one request at a time.
+ * The time limit is generous: on a loaded server an app that was idle can take seconds to wake.
+ */
 export async function probe(app: SuiteApp, opts: { fetch?: Fetch; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): Promise<AppStatus> {
   const env = opts.env ?? process.env;
   const f = opts.fetch ?? fetch;
-  const ms = opts.timeoutMs ?? 2500;
+  const ms = opts.timeoutMs ?? 10_000;
   const base = internalUrl(app.id, env);
   const contentApp = app.id in CONTENT_KINDS || app.id in overrides(env);
   const skip = app.id === "auth" || app.id === "home";
-  const [health, comp] = await Promise.all([
-    timed(f, `${base}/`, { method: "GET" }, ms),
-    skip
-      ? Promise.resolve(null)
-      : timed(f, `${base}/api/compliance/search`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${env.COMPLIANCE_TOKEN ?? ""}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ limit: 1 }),
-        }, ms),
-  ]);
+  const health = await timed(f, `${base}/`, { method: "GET" }, ms);
+  const comp = skip
+    ? null
+    : await timed(f, `${base}/api/compliance/search`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.COMPLIANCE_TOKEN ?? ""}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 1 }),
+      }, ms);
   const up = health.status !== null || (comp?.status ?? null) !== null;
   let c: { compliance: Compliance; detail: string } = { compliance: "n/a", detail: "Keeps no content of its own" };
   if (comp) c = up ? complianceFromStatus(comp.status, comp.error) : { compliance: "unreachable", detail: "The app isn't answering" };
@@ -136,11 +138,28 @@ export async function probe(app: SuiteApp, opts: { fetch?: Fetch; timeoutMs?: nu
   };
 }
 
+/** How many apps are probed at once. All fifty together swamp a server short on memory, and then they all time out. */
+export const PROBE_CONCURRENCY = 6;
+
+/** Runs fn over items with at most `limit` running at a time, keeping the order. */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 const cache: { at: number; list: AppStatus[] | null; inflight: Promise<AppStatus[]> | null } = { at: 0, list: null, inflight: null };
 
 export async function statuses(fresh = false): Promise<AppStatus[]> {
   if (!fresh && cache.list && Date.now() - cache.at < 15_000) return cache.list;
-  cache.inflight ??= Promise.all(suiteApps().map((a) => probe(a)))
+  cache.inflight ??= mapLimit(suiteApps(), PROBE_CONCURRENCY, (a) => probe(a))
     .then((list) => {
       cache.list = list;
       cache.at = Date.now();
