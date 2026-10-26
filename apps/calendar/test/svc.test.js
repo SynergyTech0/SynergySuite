@@ -48,6 +48,21 @@ test('calendar service API', { skip: !url && 'TEST_DATABASE_URL not set' }, asyn
     body: JSON.stringify({ title: 'Mine', startAt: '2027-03-11T15:00:00Z', endAt: '2027-03-11T16:00:00Z' }),
   })).json().then(b => ({ body: b }));
 
+  await t.test('lists what a person\'s calendar shows, without descriptions or attendees', async () => {
+    const r = await svc('GET', `/events?email=${alice}&from=2027-03-10T00:00:00Z&to=2027-03-12T00:00:00Z`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.events.map(e => e.title), ['Check-up: Carol', 'Mine']);
+    assert.equal(r.body.events[0].source, 'booking');
+    assert.equal(r.body.events[0].mine, true);
+    for (const e of r.body.events) {
+      assert.equal(e.description, undefined);
+      assert.equal(e.attendees, undefined);
+    }
+    assert.equal((await svc('GET', `/events?email=${alice}`, undefined, 'wrong')).status, 401);
+    assert.equal((await svc('GET', '/events?email=nobody')).status, 400);
+    assert.equal((await svc('GET', `/events?email=${alice}&from=2027-01-01&to=2027-06-01`)).status, 400, 'at most 62 days');
+  });
+
   await t.test('needs the token', async () => {
     assert.equal((await svc('GET', `/freebusy?email=${alice}`, undefined, 'wrong')).status, 401);
     assert.equal((await svc('DELETE', `/events/${id}?ownerEmail=${alice}&source=booking`, undefined, 'wrong')).status, 401);
