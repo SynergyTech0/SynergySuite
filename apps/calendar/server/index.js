@@ -165,6 +165,21 @@ async function main() {
     const { from, to } = range(req.query, Date.now(), Date.now() + 14 * 86400000);
     res.json({ email, busy: await busyBlocks(email, from, to) });
   }));
+  // What a person's calendar shows in a range, for an assistant reading "what's on today" (Jarvis). Only the
+  // fields a glance needs - descriptions and attendee lists stay out, since every service holding the token
+  // could read them.
+  app.get('/api/svc/events', svcAuth, wrap(async (req, res) => {
+    const email = String(req.query.email || '').toLowerCase();
+    if (!email.includes('@')) return res.status(400).json({ error: 'email required' });
+    const { from, to } = range(req.query, Date.now(), Date.now() + 86400000);
+    if (to - from > 62 * 86400000) return res.status(400).json({ error: 'Ask for at most 62 days at a time' });
+    const rows = await inRange(q, VISIBLE_ROWS, [email], from, to);
+    res.json({ email, events: rows.map(e => ({
+      id: e.id, title: e.title, start_at: e.start_at, end_at: e.end_at, all_day: e.all_day, location: e.location,
+      calendar: e.calendar, mine: e.owner_email === email, source: e.source,
+      ...(e.occurrence ? { occurrence: e.occurrence } : {}),
+    })) });
+  }));
   app.post('/api/svc/events', svcAuth, wrap(async (req, res) => {
     const b = req.body || {};
     const owner = String(b.ownerEmail || '').toLowerCase();
