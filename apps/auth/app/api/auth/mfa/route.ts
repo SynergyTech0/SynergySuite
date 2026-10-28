@@ -1,5 +1,5 @@
 import { redirect, formBody } from '@/lib/http';
-import { pendingMfaSession, markMfaOk } from '@/lib/session';
+import { pendingMfaSession, completeMfa, cookieFor } from '@/lib/session';
 import { verifyTotp, consumeBackupCode } from '@/lib/totp';
 import { q } from '@/lib/db';
 import { decryptSecret } from '@/lib/crypto';
@@ -36,7 +36,8 @@ export async function POST(req: Request) {
     await audit('mfa.fail', user.email, {}, req);
     return redirect(`/login/mfa?error=1&return_to=${enc}`);
   }
-  await markMfaOk(session.sid);
-  await audit('mfa.ok', user.email, {}, req);
-  return redirect(returnTo);
+  const sid = await completeMfa(session.sid, user.id, req);
+  if (!sid) return redirect(`/login?return_to=${enc}`);
+  await audit('mfa.ok', user.email, { method: 'code' }, req);
+  return redirect(returnTo, cookieFor(sid));
 }

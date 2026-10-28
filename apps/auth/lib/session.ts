@@ -66,8 +66,18 @@ export async function pendingMfaSession(req: Request): Promise<{ user: User; ses
   return { user, session: s };
 }
 
-export async function markMfaOk(sid: string): Promise<void> {
-  await q(`UPDATE sa_sessions SET mfa_ok = 1::bigint WHERE sid = $1::text`, [sid]);
+/*
+ * Second factor passed: the pending session is retired and a fresh sid is issued with mfa_ok=1,
+ * so a sid seen before MFA (fixation, a shoulder-surfed cookie) never becomes a signed-in one.
+ * Returns the new sid, or null if the pending session was already used or revoked.
+ */
+export async function completeMfa(pendingSid: string, userId: string | number, req?: Request): Promise<string | null> {
+  const retired = await q<{ sid: string }>(
+    `UPDATE sa_sessions SET revoked = 1::bigint WHERE sid = $1::text AND revoked = 0::bigint AND mfa_ok = 0::bigint RETURNING sid`,
+    [pendingSid],
+  );
+  if (!retired.length) return null;
+  return createSession(userId, true, req);
 }
 
 export async function revokeSession(sid: string): Promise<void> {
