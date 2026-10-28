@@ -8,6 +8,8 @@
  * suite header's launcher list (/api/launcher: who sees which app, CORS for SUITE_DOMAIN's apps only).
  * With E2E_DEVICES_PORT set (the server started with DEVICES_INTERNAL_URL=http://localhost:<port>
  * and DEVICES_SVC_TOKEN=$E2E_DEVICES_TOKEN), it also plays Devices to check device compliance.
+ * With E2E_PAGER_PORT set (see that section for the server env), it plays the Pager to check
+ * "approve on your phone" sign-in.
  */
 import { createHmac, createHash, randomBytes, generateKeyPairSync, createSign } from 'crypto';
 import { readdirSync, readFileSync } from 'fs';
@@ -772,6 +774,100 @@ async function main() {
     console.log('  SKIP  CORS for suite origins (set SUITE_DOMAIN for the server and this test)');
   }
   for (const id of Object.values(made)) await appsPost({ action: 'delete', id });
+
+  if (process.env.E2E_PAGER_PORT) {
+    console.log('== Approve on your phone ==');
+    // Plays the Pager. The server is started with SA_PAGER_URL=http://localhost:<port>,
+    // SA_PAGER_TOKEN=$E2E_PAGER_TOKEN and E2E_PUSH_EMAIL (default e2e-push@example.com) in SA_PUSH_MFA_USERS.
+    const bearer = process.env.E2E_PAGER_TOKEN ?? '';
+    const pushEmail = (process.env.E2E_PUSH_EMAIL ?? 'e2e-push@example.com').toLowerCase();
+    const approvals = new Map();
+    let pagerDown = false;
+    const fakePager = createServer((rq, rs) => {
+      let b = '';
+      rq.on('data', (c) => (b += c));
+      rq.on('end', () => {
+        const send = (code, o) => { rs.writeHead(code, { 'content-type': 'application/json' }); rs.end(JSON.stringify(o)); };
+        if (rq.headers.authorization !== `Bearer ${bearer}`) return send(401, { error: 'unauthorized' });
+        if (pagerDown) return send(503, { error: 'down' });
+        if (rq.method === 'POST' && rq.url === '/v1/approvals') {
+          const id = approvals.size + 1;
+          approvals.set(id, { status: 'pending', body: JSON.parse(b || '{}') });
+          return send(200, { id, status: 'pending', new: true });
+        }
+        const m = (rq.url ?? '').match(/^\/v1\/approvals\/(\d+)\/status/);
+        const a = m && approvals.get(Number(m[1]));
+        if (!a) return send(404, { error: 'not_found' });
+        send(200, { id: Number(m[1]), status: a.status, decided_at: null });
+      });
+    });
+    await new Promise((res) => fakePager.listen(Number(process.env.E2E_PAGER_PORT), res));
+    const answers = [];
+    const pushPost = async (cookies, o) => {
+      const res = await req('POST', '/api/auth/mfa/push', { body: JSON.stringify(o), cookies, headers: { 'content-type': 'application/json' } });
+      const text = await res.text();
+      answers.push(text + JSON.stringify([...res.headers.entries()]));
+      return { status: res.status, body: JSON.parse(text || '{}') };
+    };
+    const signedIn = async (cookies) => (await req('GET', '/api/account/sessions', { cookies })).status === 200;
+
+    r = await req('POST', '/api/admin/users', {
+      body: JSON.stringify({ action: 'create', email: pushEmail, password: userPw, name: 'Push User' }),
+      cookies: adminJar, headers: { 'content-type': 'application/json' },
+    });
+    const pushUser = (await (await req('GET', '/api/admin/users', { cookies: adminJar })).json()).users.find((u) => u.email === pushEmail);
+    await req('POST', '/api/admin/users', {
+      body: JSON.stringify({ action: 'reset_password', user_id: pushUser.id, password: userPw }),
+      cookies: adminJar, headers: { 'content-type': 'application/json' },
+    });
+
+    // This person is reused across runs: clear earlier runs' requests so the per-person limit starts afresh.
+    const pg4 = (await import('pg')).default;
+    const pool4 = new pg4.Pool({ connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@127.0.0.1:5499/synergydb', max: 1 });
+    await pool4.query(`DELETE FROM sa_push_approvals WHERE user_id = ${Number(pushUser.id)}`);
+    await pool4.end();
+
+    const pJar = jar();
+    r = await req('POST', '/api/auth/login', { body: { email: pushEmail, password: userPw, return_to: '/account' }, cookies: pJar });
+    ok('a listed user is sent to the MFA step', (r.headers.get('location') ?? '').startsWith('/login/mfa'));
+    const before = pJar.header();
+    r = await req('GET', '/login/mfa?return_to=%2Faccount', { cookies: pJar });
+    ok('the MFA page offers approval on the phone', r.status === 200 && (await r.text()).includes('Approve on your phone'));
+    let p = await pushPost(pJar, { action: 'start' });
+    ok('the push is sent with a 2-digit number', p.status === 200 && p.body.number >= 10 && p.body.number <= 99);
+    ok('the Pager got that number, the title and a 120 s life', approvals.get(1)?.body.match === p.body.number && approvals.get(1)?.body.title === 'Sign-in to Synergy' && approvals.get(1)?.body.ttl_seconds === 120);
+    p = await pushPost(pJar, { action: 'check', wait: 0 });
+    ok('pending until the phone answers', p.body.status === 'pending' && !(await signedIn(pJar)));
+    approvals.get(1).status = 'approved';
+    p = await pushPost(pJar, { action: 'check', wait: 0, return_to: '/account' });
+    ok('approval signs in', p.body.status === 'approved' && p.body.redirect === '/account' && await signedIn(pJar));
+    ok('with a new session cookie', pJar.header() !== before && pJar.header().includes('sa_sess='));
+
+    const dJar = jar();
+    await req('POST', '/api/auth/login', { body: { email: pushEmail, password: userPw, return_to: '/account' }, cookies: dJar });
+    await pushPost(dJar, { action: 'start' });
+    approvals.get(2).status = 'denied';
+    p = await pushPost(dJar, { action: 'check', wait: 0 });
+    ok('a denial does not sign in', p.body.status === 'denied' && !(await signedIn(dJar)));
+    approvals.get(1).status = 'approved';
+    p = await pushPost(dJar, { action: 'check', wait: 0, approval_id: 1, status: 'approved' });
+    ok('naming another approval does not sign in', p.body.status !== 'approved' && !(await signedIn(dJar)));
+    pagerDown = true;
+    p = await pushPost(dJar, { action: 'start' });
+    ok('Pager down: told to use a code, not signed in', p.status === 503 && p.body.error === 'unavailable' && !(await signedIn(dJar)));
+
+    const totpJar = jar();
+    await req('POST', '/api/auth/login', { body: { email: userEmail, password: newPw, return_to: '/account' }, cookies: totpJar });
+    r = await req('GET', '/login/mfa?return_to=%2Faccount', { cookies: totpJar });
+    ok('people not listed are not offered the push', r.status === 200 && !(await r.text()).includes('Approve on your phone'));
+    ok('the Pager token is in no answer', bearer.length > 0 && answers.every((a) => !a.includes(bearer)));
+    r = await req('GET', '/api/admin/audit', { cookies: adminJar });
+    const pushAudit = await r.text();
+    ok('push sign-ins are audited, without the token', pushAudit.includes('mfa.push_sent') && pushAudit.includes('mfa.push_denied') && pushAudit.includes('mfa.push_unavailable') && !pushAudit.includes(bearer));
+    fakePager.close();
+  } else {
+    console.log('  SKIP  approve on your phone (set E2E_PAGER_PORT/E2E_PAGER_TOKEN for the server and this test)');
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

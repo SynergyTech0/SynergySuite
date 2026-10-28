@@ -255,6 +255,20 @@ CREATE TABLE IF NOT EXISTS sa_audit (
 );
 CREATE INDEX IF NOT EXISTS sa_audit_at_idx ON sa_audit(at_ms);
 
+CREATE TABLE IF NOT EXISTS sa_push_approvals (
+  id          BIGSERIAL PRIMARY KEY, -- "approve on your phone" sign-ins (lib/push-mfa.ts)
+  sid         TEXT,     -- the MFA-pending session this approval can complete, and no other
+  user_id     BIGINT,
+  approval_id BIGINT,   -- the Pager's approval id, null when the Pager never took it
+  match_num   BIGINT,   -- the number shown here and picked on the phone
+  status      TEXT,     -- pending approved denied expired failed
+  ip          TEXT,
+  created_ms  BIGINT,
+  expires_ms  BIGINT
+);
+CREATE INDEX IF NOT EXISTS sa_push_approvals_sid_idx ON sa_push_approvals(sid);
+CREATE INDEX IF NOT EXISTS sa_push_approvals_user_idx ON sa_push_approvals(user_id);
+
 CREATE TABLE IF NOT EXISTS sa_settings (
   key        TEXT PRIMARY KEY, -- device_compliance, ai_model
   value      JSONB,

@@ -16,6 +16,11 @@ patterns, running on Next.js with SynergyDB storage.
   **Synergy Authenticator** so users don't need a third-party app. TOTP engine
   ported from SynergyEMR's HIPAA MFA service; still works with Google
   Authenticator/1Password/Authy too.
+- **Approve on your phone**: for people in `SA_PUSH_MFA_USERS`, the MFA step sends a sign-in
+  approval to the Pager (`lib/push-mfa.ts`) and shows a 2-digit number to pick in Synergy Globe.
+  Only the Pager answering "approved" for the approval bound to that pending session signs in
+  (new sid, audited). Limited per person and per address, one live request per sign-in. Pager
+  down = use a code, never signed in. Codes and backup codes keep working.
 - **Synergy Authenticator** (`/authenticator`): an installable, offline-capable
   PWA that generates codes entirely on-device (Web Crypto, secret never leaves
   the browser), stores accounts in local storage, and adds them by QR scan
@@ -91,8 +96,14 @@ Storage: SynergyDB at `postgres://…:5499/synergydb`, tables prefixed `sa_`
 ## Verify
 
 ```
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/auth_test npm test
 E2E_ADMIN_PASSWORD=<seed password> npm run e2e
 ```
+
+`npm test` runs the route handlers against a real Postgres and a stub Pager (skipped without
+`TEST_DATABASE_URL`). The e2e checks phone approval with `E2E_PAGER_PORT`/`E2E_PAGER_TOKEN` set
+(server started with `SA_PAGER_URL=http://localhost:<port>`, `SA_PAGER_TOKEN=<token>` and
+`e2e-push@example.com` in `SA_PUSH_MFA_USERS`).
 
 71 checks covering login, lockout, MFA enroll/login, backup-code reuse, PKCE
 happy/attack paths, code replay, refresh rotation + family revocation,
@@ -129,6 +140,8 @@ Works with `next-auth` (OIDC provider), `openid-client`, Spring, etc.
 | `SA_ENCRYPTION_KEY` | prod | 32-byte hex/base64 key for secrets-at-rest (dev auto-generates `.sa-dev-key`) |
 | `SA_RP_ID` | no | WebAuthn Relying Party ID; defaults to `ISSUER_URL` host |
 | `PROXY_SHARED_SECRET` | no | The suite's shared secret: other apps present it to check app passwords and read the AI model settings |
+| `SA_PUSH_MFA_USERS` | no | Comma-separated emails offered "Approve on your phone" at the MFA step (they always get the MFA step) |
+| `SA_PAGER_URL`/`SA_PAGER_TOKEN` | no | The Pager (default `https://alerts.synergytech.cloud`) and its source token. Without the token nobody gets the push |
 | `DEVICES_INTERNAL_URL`/`DEVICES_SVC_TOKEN` | no | Devices' internal address and service token, for device compliance at sign-in |
 | `SMTP_HOST`/`SMTP_PORT`/`MAIL_FROM` | no | Password-reset email (dev falls back to `./dev-mail/*.eml`) |
 
